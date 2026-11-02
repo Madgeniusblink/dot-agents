@@ -1,30 +1,41 @@
-# `.agents` base layer
+# Global agent home (`~/.agents`)
 
-This directory is the **project-scoped agent base layer**: skills and small
-notes that belong in-repo, not in a personal Context install.
+Short router. Load detail only when the task needs it.
 
-## Entry routing
+**Foundation:** [context/foundation.md](context/foundation.md) · **Writing:** [ASD-STE100](context/writing-standard.md) · **Standards:** [standards/](standards/) · **Install:** [standards/install.md](standards/install.md)
 
-When this repository has a root [`AGENTS.md`](../AGENTS.md), that file stays the
-**primary router** (bootstrap, safety, links). This file holds **base-layer**
-detail that should not duplicate or inflate the root entry.
+## Smart habits (ranked)
 
-If there is no root `AGENTS.md` yet, treat this file as the starting point and
-add a short root router when the project grows.
+1. **Verification** — [checklists/before-commit.md](checklists/before-commit.md).
+2. **Lessons loop** — [memory/lessons.md](memory/lessons.md); promote repeats to [rules/](rules/) when you add them.
+3. **Short entry** — this file stays small; detail lives in [context/](context/), [standards/](standards/), skill `references/`.
+4. **Decisions** — [decisions/](decisions/) before reopening settled choices.
 
-## Layout
+## Core map (shipped in this template)
 
-| Path | Role |
-|------|------|
-| `skills/<name>/SKILL.md` | Project skills (Cursor/Codex/Claude discovery) |
-| `skills/<name>/references/` | Optional on-demand material for a skill |
+| Path | Purpose |
+|------|---------|
+| [standards/](standards/) | How to add skills, rules, checklists (link-first) |
+| [context/](context/) | Foundation, STE100, glossary, architecture |
+| [checklists/](checklists/) | Done criteria before commit or release |
+| [memory/](memory/) | Lessons and preferences |
+| [decisions/](decisions/) | Settled choices (ADR pattern) |
+| [skills/](skills/) | Optional procedures (example: self-verify) |
+| [rules/](rules/) | Optional scoped rules — add when you need `globs` |
+| [templates/](templates/) | Only when no live URL exists |
 
-Do not commit local provider runtimes (for example repo-root `.claude/` hook
-trees) unless the project explicitly documents why they must be shared.
+## Hooks and provider config
 
-## Skills
+**Do not put git or IDE hooks in this tree.** Cursor, Claude Code, and other tools use their own hook locations (for example project `.cursor/hooks/`). This template does not ship hooks so we do not constrain models or duplicate provider wiring.
 
-Add real procedures under `skills/`. Remove or replace `example-skill` once
-you have your own skills.
+## Optional extensions
 
-Upstream template: [github.com/Madgeniusblink/dot-agents](https://github.com/Madgeniusblink/dot-agents).
+See [context/optional-extensions.md](context/optional-extensions.md) for profiles, evals, routing, MCP JSON, and other power-user folders. Add them in your own fork or home; they are not in the base install.
+
+**Note:** `context-install` may use `~/.agents/context` as a full runtime snapshot. See [decisions/0001-reference-context-folder.md](decisions/0001-reference-context-folder.md).
+
+Most clients do not auto-load `~/.agents/`. Wire [AGENTS.md](AGENTS.md) in user rules or project `.agents/` ([dot-agents](https://github.com/Madgeniusblink/dot-agents)).
+
+## Maintenance
+
+One idea per file. Review [memory/](memory/) monthly; delete stale entries.
