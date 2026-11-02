@@ -24,7 +24,6 @@ When both exist, prefer **project** files for repo work.
 | [decisions/](decisions/) | Your settled choices (**you own**) |
 | [skills/](skills/) | Example: [self-verify](skills/self-verify/SKILL.md) |
 | [rules/](rules/) | Add scoped rules when needed |
-| [templates/](templates/) | Only when no live URL exists |
 
 ## Hooks
 

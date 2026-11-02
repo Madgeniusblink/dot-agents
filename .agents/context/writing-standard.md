@@ -13,7 +13,7 @@ Use **must** for requirements. Use **can** for permission. Do not use vague "sho
 
 ## Scope
 
-Applies to: [standards/](../standards/), [rules/](../rules/), [skills/](../skills/), [checklists/](../checklists/), [templates/](../templates/), and [context/](.) files.
+Applies to: [standards/](../standards/), [rules/](../rules/), [skills/](../skills/), [checklists/](../checklists/), and [context/](.) files.
 
 Code comments in this tree should follow the same rules when you add them.
 

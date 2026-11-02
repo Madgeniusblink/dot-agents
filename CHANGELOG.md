@@ -8,12 +8,12 @@ Template semver tracks [upstream.json](.agents/context/upstream.json) `template_
 - Default install no longer overwrites edited `AGENTS.md`, checklists, or personal context files.
 - Removed `--force`. Fixed neutrality script exit code and Windows CI assertions.
 
+**Upgrade from 0.1.0:** Re-run `./install.sh` once on 0.1.1+. If you edited `AGENTS.md`, checklists, or personal context under 0.1.0, those edits may have been overwritten by a re-run on 0.1.0; restore from backup if needed. 0.1.1 protects those paths.
+
 ## 0.1.0 — 2026-11-02
 
 - Initial public template (`v0.1.0` tag).
-- Install policy: `.user-owned` and `.managed-refresh` lists; no `--force`.
-- Managed refresh paths: `standards/`, `context/foundation.md`, `context/sources-policy.md`, `context/writing-standard.md`, `context/optional-extensions.md`, `context/upstream.json`.
-- User-owned prefixes: `memory/`, `decisions/`.
+- Re-run install **overwrote all existing files** except later policy work; do not use 0.1.0 install behavior for edited trees (upgrade to 0.1.1).
 - OSS: CONTRIBUTING, SECURITY, issue/PR templates, root AGENTS.md, admission test, multi-OS CI.
 - CLI moved to [dot-agents-cli](https://github.com/Madgeniusblink/dot-agents-cli) (see `links.cli_install`).
 
