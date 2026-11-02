@@ -27,7 +27,7 @@ Re-run `./install.sh` to add **missing** files and refresh paths in [`.agents/.m
 ├── memory/
 ├── decisions/
 ├── skills/self-verify/
-├── rules/
+└── rules/
 ```
 
 Detail: [`.agents/AGENTS.md`](.agents/AGENTS.md). Changes: [CHANGELOG.md](CHANGELOG.md).
