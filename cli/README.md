@@ -35,6 +35,8 @@ dot-agents status
 | `install --from PATH` | Dev: use a checkout instead of embedded template |
 | `status` | Show home path and file count |
 | `doctor` | Check core foundation files |
+| `readme sync` | Regenerate README tree from `.agents/` (repo maintainers) |
+| `readme check` | Fail if README tree is stale (CI) |
 
 ## Environment
 

@@ -1,5 +1,7 @@
 //! Standalone `dot-agents` CLI — template is embedded at compile time.
 
+mod readme;
+
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use include_dir::{include_dir, Dir, DirEntry};
@@ -37,6 +39,21 @@ enum Commands {
     Status,
     /// Check foundation files exist
     Doctor,
+    /// Update or verify generated README tree section
+    Readme {
+        #[command(subcommand)]
+        command: ReadmeCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum ReadmeCommands {
+    /// Write generated tree into README.md (run from repo root)
+    Sync,
+    /// Exit with error if README tree is stale
+    Check,
+    /// Print generated tree to stdout
+    Print,
 }
 
 fn agents_home() -> PathBuf {
@@ -230,5 +247,20 @@ fn main() -> Result<()> {
         Commands::Install { mirror, from } => cmd_install(mirror, from),
         Commands::Status => cmd_status(),
         Commands::Doctor => cmd_doctor(),
+        Commands::Readme { command } => match command {
+            ReadmeCommands::Sync => {
+                let repo = readme::find_repo_root()?;
+                readme::sync_readme(&repo)
+            }
+            ReadmeCommands::Check => {
+                let repo = readme::find_repo_root()?;
+                readme::check_readme(&repo)
+            }
+            ReadmeCommands::Print => {
+                let repo = readme::find_repo_root()?;
+                print!("{}", readme::generate_tree_markdown(&repo)?);
+                Ok(())
+            }
+        },
     }
 }

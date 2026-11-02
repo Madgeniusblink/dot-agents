@@ -80,33 +80,73 @@ mkdir -p ~/.agents
 rsync -a --exclude='STRUCTURE.md' ./.agents/ ~/.agents/
 ```
 
-Base **core** layout (what this repo ships):
+## Shipped tree (`~/.agents/`)
 
+The tree below is **generated from `.agents/`** in this repo. When you add or remove files, run:
+
+```sh
+dot-agents readme sync    # from repo root (after cargo install --path cli)
+dot-agents readme check   # CI / pre-push
+```
+
+Install copies this layout to `$HOME/.agents` (excluding repo-only `STRUCTURE.md`):
+
+```sh
+dot-agents install
+```
+
+<!-- dot-agents-tree:start -->
 ```
 ~/.agents/
-├── AGENTS.md              # Short router
-├── standards/             # How to add skills, rules, checklists (public contract)
-├── context/               # Foundation, STE100, glossary, architecture, optional-extensions
+├── AGENTS.md
 ├── checklists/
 │   ├── before-commit.md
 │   └── before-release.md
+├── context/
+│   ├── architecture.md
+│   ├── foundation.md
+│   ├── glossary.md
+│   ├── optional-extensions.md
+│   ├── sources-policy.md
+│   ├── style-guide.md
+│   └── writing-standard.md
+├── decisions/
+│   └── 0001-reference-context-folder.md
 ├── memory/
 │   ├── MEMORY.md
-│   ├── preferences.md
-│   └── lessons.md
-├── decisions/
-│   └── 0001-<title>.md
-├── skills/
-│   └── self-verify/       # Example skill (checklist only; no hooks)
+│   ├── lessons.md
+│   └── preferences.md
 ├── rules/
-│   └── README.md          # Add scoped rules when you need them
+│   └── README.md
+├── skills/
+│   ├── README.md
+│   └── self-verify/
+│       ├── SKILL.md
+│       ├── assets/
+│       │   └── done-report-template.md
+│       ├── references/
+│       │   └── checklist-map.md
+│       └── scripts/
+│           └── open-checklist.sh
+├── standards/
+│   ├── README.md
+│   ├── checklists.md
+│   ├── decisions.md
+│   ├── evals.md
+│   ├── install.md
+│   ├── rules.md
+│   ├── schedules.md
+│   ├── skills.md
+│   ├── templates.md
+│   └── workflows.md
 └── templates/
-    └── pr-description.md  # Only when no live URL fits
+    └── pr-description.md
 ```
 
-**Not in base:** hooks (use `.cursor/hooks/` or provider paths), profiles, evals, routing JSON, MCP JSON — see [optional-extensions.md](.agents/context/optional-extensions.md).
+Same layout in this repo under [`.agents/`](.agents/). Repo-only file `.agents/STRUCTURE.md` is not installed to `~/.agents/`.
+<!-- dot-agents-tree:end -->
 
-Full **optional** tree (teams that outgrow the base) is documented in [standards/](.agents/standards/) without shipping every folder.
+**Not in base template:** hooks (use `.cursor/hooks/` or provider paths), profiles, evals, routing JSON — see [optional-extensions.md](.agents/context/optional-extensions.md). Optional artifact **standards** (evals, schedules, workflows) live under [`.agents/standards/`](.agents/standards/) as docs; add folders at home only when you need them.
 
 ### What makes an agent smarter (ranked)
 
