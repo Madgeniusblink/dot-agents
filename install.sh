@@ -44,9 +44,7 @@ skip_install_meta() {
 matches_rule_line() {
   _rel="$1"
   _line="$2"
-  case "$_line" in
-    ""|#*) return 1 ;;
-  esac
+  [ -z "$_line" ] && return 1
   case "$_line" in
     */)
       case "$_rel" in
