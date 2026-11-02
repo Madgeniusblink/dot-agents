@@ -2,6 +2,11 @@
 
 Template semver tracks [upstream.json](.agents/context/upstream.json) `template_version`.
 
+## 0.1.2 — 2026-11-02
+
+- Remove shipped `templates/` folder; PR shape uses `.github/pull_request_template.md`.
+- CHANGELOG corrects 0.1.0 install behavior; README shows full clone command.
+
 ## 0.1.1 — 2026-11-02
 
 - Install policy lists: `.user-owned`, `.managed-refresh` (single source for sh/ps1/CLI).
