@@ -1,5 +1,7 @@
 //! Standalone `dot-agents` CLI — template is embedded at compile time.
 
+mod lint;
+mod paths;
 mod readme;
 mod upstream;
 
@@ -30,25 +32,25 @@ struct Cli {
 enum Commands {
     /// Write embedded template to DOT_AGENTS_HOME (default ~/.agents)
     Install {
-        /// Remove files in home that are not in the template (destructive)
         #[arg(long)]
         mirror: bool,
-        /// Use a checkout's .agents/ instead of the embedded template (dev)
         #[arg(long, value_name = "PATH")]
         from: Option<PathBuf>,
     },
-    /// Show install location and file count
     Status,
-    /// Check foundation files exist
     Doctor,
-    /// Update or verify generated README tree section
+    /// Resolved home, scratch, and worktree paths
+    Paths {
+        #[arg(long)]
+        json: bool,
+    },
+    /// Run maintainer checks (repo root): readme, upstream, gitignore contract
+    Lint,
     Readme {
         #[command(subcommand)]
         command: ReadmeCommands,
     },
-    /// Print canonical upstream repo links (from embedded upstream.json)
     Upstream {
-        /// Output JSON instead of human text
         #[arg(long)]
         json: bool,
     },
@@ -56,22 +58,9 @@ enum Commands {
 
 #[derive(Subcommand)]
 enum ReadmeCommands {
-    /// Write generated tree into README.md (run from repo root)
     Sync,
-    /// Exit with error if README tree is stale
     Check,
-    /// Print generated tree to stdout
     Print,
-}
-
-fn agents_home() -> PathBuf {
-    env::var("DOT_AGENTS_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            env::var("HOME")
-                .map(|h| PathBuf::from(h).join(".agents"))
-                .unwrap_or_else(|_| PathBuf::from(".agents"))
-        })
 }
 
 fn resolve_filesystem_source(from: Option<PathBuf>) -> Result<Option<PathBuf>> {
@@ -196,7 +185,7 @@ fn install_embedded(dest: &Path, mirror: bool) -> Result<()> {
 }
 
 fn cmd_install(mirror: bool, from: Option<PathBuf>) -> Result<()> {
-    let dest = agents_home();
+    let dest = paths::agents_home();
     if let Some(src) = resolve_filesystem_source(from)? {
         install_from_dir(&src, &dest, mirror)?;
         println!("dot-agents {VERSION}");
@@ -211,7 +200,7 @@ fn cmd_install(mirror: bool, from: Option<PathBuf>) -> Result<()> {
 }
 
 fn cmd_status() -> Result<()> {
-    let dest = agents_home();
+    let dest = paths::agents_home();
     if !dest.is_dir() {
         anyhow::bail!("Not installed: {}. Run: dot-agents install", dest.display());
     }
@@ -221,19 +210,33 @@ fn cmd_status() -> Result<()> {
         .filter(|e| e.file_type().is_file())
         .count();
     println!("dot-agents {VERSION}");
+    println!("Template: v{VERSION}");
     println!("Home: {}", dest.display());
     println!("Files: {count}");
     Ok(())
 }
 
+fn cmd_paths(json: bool) -> Result<()> {
+    let (home, scratch, worktrees) = paths::resolved_paths()?;
+    if json {
+        print!("{}", paths::format_paths_json(&home, &scratch, &worktrees)?);
+    } else {
+        print!("{}", paths::format_paths_human(&home, &scratch, &worktrees));
+    }
+    Ok(())
+}
+
 fn cmd_doctor() -> Result<()> {
-    let dest = agents_home();
+    let dest = paths::agents_home();
     let required = [
         "AGENTS.md",
         "standards/README.md",
         "standards/extending.md",
+        "standards/lint.md",
         "context/writing-standard.md",
         "context/upstream.json",
+        "var/scratch/.gitignore",
+        "var/worktrees/.gitignore",
     ];
     let mut ok = true;
     for f in required {
@@ -267,6 +270,11 @@ fn main() -> Result<()> {
         Commands::Install { mirror, from } => cmd_install(mirror, from),
         Commands::Status => cmd_status(),
         Commands::Doctor => cmd_doctor(),
+        Commands::Paths { json } => cmd_paths(json),
+        Commands::Lint => {
+            let repo = readme::find_repo_root()?;
+            lint::lint_repo(&repo)
+        }
         Commands::Readme { command } => match command {
             ReadmeCommands::Sync => {
                 let repo = readme::find_repo_root()?;

@@ -15,6 +15,7 @@ Public contract for extending `~/.agents/` or `<repo>/.agents/`.
 | Templates | [templates.md](templates.md) | Link before local file |
 | Var (scratch, worktrees) | [var-layout.md](var-layout.md) | [data-locations.md](../context/data-locations.md) |
 | **Extend / upstream** | [extending.md](extending.md) | [upstream.json](../context/upstream.json) · `dot-agents upstream` |
+| **Lint (maintainers)** | [lint.md](lint.md) | `dot-agents lint` · CI [contract.yml](../../.github/workflows/contract.yml) |
 | Install | [install.md](install.md) | `dot-agents` CLI |
 
 Optional types (not in base tree): [evals.md](evals.md), [schedules.md](schedules.md), [workflows.md](workflows.md) — see [optional-extensions.md](../context/optional-extensions.md).

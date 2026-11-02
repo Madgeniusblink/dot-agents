@@ -151,6 +151,7 @@ dot-agents install
 │   ├── evals.md
 │   ├── extending.md
 │   ├── install.md
+│   ├── lint.md
 │   ├── rules.md
 │   ├── schedules.md
 │   ├── skills.md

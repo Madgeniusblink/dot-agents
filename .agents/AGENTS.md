@@ -2,7 +2,7 @@
 
 Short router. Load detail only when the task needs it.
 
-**Foundation:** [context/foundation.md](context/foundation.md) · **Writing:** [ASD-STE100](context/writing-standard.md) · **Standards:** [standards/](standards/) · **Extend:** [standards/extending.md](standards/extending.md) · **Upstream:** [context/upstream.json](context/upstream.json) or `dot-agents upstream`
+**Foundation:** [context/foundation.md](context/foundation.md) · **Writing:** [ASD-STE100](context/writing-standard.md) · **Standards:** [standards/](standards/) · **Extend:** [standards/extending.md](standards/extending.md) · **Keep:** [standards/lint.md](standards/lint.md) · **Upstream:** `dot-agents upstream`
 
 ## Smart habits (ranked)
 

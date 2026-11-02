@@ -33,7 +33,9 @@ dot-agents status
 | `install` | Write template to `~/.agents/` (or `DOT_AGENTS_HOME`) |
 | `install --mirror` | Also remove files in home not in template |
 | `install --from PATH` | Dev: use a checkout instead of embedded template |
-| `status` | Show home path and file count |
+| `status` | Show home path, file count, **Template: v…** |
+| `paths` | Resolved home, scratch, worktrees (`--json`) |
+| `lint` | Maintainer checks at repo root (readme, upstream, gitignore) |
 | `doctor` | Check core foundation files |
 | `readme sync` | Regenerate README tree from `.agents/` (repo maintainers) |
 | `readme check` | Fail if README tree is stale (CI) |
