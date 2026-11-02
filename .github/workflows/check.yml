@@ -7,27 +7,38 @@ on:
 
 jobs:
   checks:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: No private context or context-install
-        run: |
-          ! grep -rniE 'madgeniusblink/context|context-install' .agents README.md install.sh install.ps1
+      - name: Neutrality (context strings)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: sh scripts/check-neutrality.sh context
 
-      - name: Vendor names only in adapters.md
+      - name: Neutrality (vendor names)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: sh scripts/check-neutrality.sh vendors
+
+      - name: upstream.json paths exist
+        shell: bash
         run: |
-          hits=$(grep -rniE 'cursor|claude code|codex' .agents README.md \
-            | grep -v '.agents/standards/adapters.md' || true)
-          if [ -n "$hits" ]; then
-            echo "$hits"
-            exit 1
-          fi
+          test -f .agents/standards/README.md
+          test -f .agents/standards/install.md
+          test -f .agents/context/data-locations.md
+          test -f .agents/context/upstream.json
 
       - name: Relative link check
+        if: runner.os != 'Windows'
         run: python3 scripts/check-links.py
 
-      - name: Install preserves existing memory file
+      - name: Install preserves memory on re-run (sh)
+        if: runner.os != 'Windows'
+        shell: bash
         run: |
           tmp=$(mktemp -d)
           export DOT_AGENTS_HOME="$tmp/home"
@@ -35,3 +46,43 @@ jobs:
           echo "USER LESSON" >> "$DOT_AGENTS_HOME/memory/lessons.md"
           ./install.sh
           grep -q 'USER LESSON' "$DOT_AGENTS_HOME/memory/lessons.md"
+
+      - name: Install --force preserves memory (sh)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          tmp=$(mktemp -d)
+          export DOT_AGENTS_HOME="$tmp/home"
+          ./install.sh
+          echo "USER LESSON" >> "$DOT_AGENTS_HOME/memory/lessons.md"
+          ./install.sh --force
+          grep -q 'USER LESSON' "$DOT_AGENTS_HOME/memory/lessons.md"
+
+      - name: Install refreshes upstream-owned file (sh)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          tmp=$(mktemp -d)
+          export DOT_AGENTS_HOME="$tmp/home"
+          ./install.sh
+          echo "STALE" > "$DOT_AGENTS_HOME/standards/README.md"
+          ./install.sh
+          grep -q 'Public contract' "$DOT_AGENTS_HOME/standards/README.md"
+          ! grep -q 'STALE' "$DOT_AGENTS_HOME/standards/README.md"
+
+      - name: Install unknown flag fails (sh)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          ! ./install.sh --forse
+
+      - name: Install preserves memory (ps1)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $agentHome = Join-Path $env:RUNNER_TEMP "agents-home"
+          $env:DOT_AGENTS_HOME = $agentHome
+          ./install.ps1
+          Add-Content -Path (Join-Path $agentHome "memory/lessons.md") -Value "USER LESSON"
+          ./install.ps1
+          Select-String -Path (Join-Path $agentHome "memory/lessons.md") -Pattern "USER LESSON" -Quiet

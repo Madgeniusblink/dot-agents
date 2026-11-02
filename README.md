@@ -1,28 +1,30 @@
 # dot-agents
 
-Filesystem template for agent rules: copy `.agents/` into a **global home** or a **project** repo. This repository is **template only** (no Rust CLI). Vendor-specific wiring lives in [`.agents/standards/adapters.md`](.agents/standards/adapters.md).
+Filesystem template for agent rules: install `.agents/` into a **global home** or a **project** repo. Template only (no Rust CLI in this repo). Vendor wiring: [`.agents/standards/adapters.md`](.agents/standards/adapters.md).
+
+Canonical URLs and version pins: [`.agents/context/upstream.json`](.agents/context/upstream.json).
 
 ## Install
 
 **macOS / Linux**
 
+Clone this repository from GitHub (`links.repo` in [upstream.json](.agents/context/upstream.json)).
+
 ```sh
-git clone https://github.com/Madgeniusblink/dot-agents.git
 cd dot-agents
 ./install.sh
 ```
 
-Re-run `./install.sh` to add **missing** template files only. It does **not** overwrite your `memory/` or `decisions/`. Use `./install.sh --force` to overwrite.
+Re-run `./install.sh` to refresh **upstream-owned** files and add missing paths. It **never** overwrites existing files under `memory/` or `decisions/`. The `--force` flag does not change that.
 
 **Windows**
 
 ```powershell
-git clone https://github.com/Madgeniusblink/dot-agents.git
 cd dot-agents
 .\install.ps1
 ```
 
-Override target: `DOT_AGENTS_HOME` (Unix) or `$env:DOT_AGENTS_HOME` (Windows). Default: `~/.agents` or `%USERPROFILE%\.agents`.
+Override target: `DOT_AGENTS_HOME` (Unix) or `$env:DOT_AGENTS_HOME` (Windows). Default: `~/.agents` or `$HOME\.agents` (PowerShell uses `$HOME` when set).
 
 ## Shipped tree (`.agents/`)
 
@@ -39,21 +41,20 @@ Override target: `DOT_AGENTS_HOME` (Unix) or `$env:DOT_AGENTS_HOME` (Windows). D
 └── templates/
 ```
 
-Detail: [`.agents/AGENTS.md`](.agents/AGENTS.md) and [`.agents/standards/README.md`](.agents/standards/README.md).
+Detail: [`.agents/AGENTS.md`](.agents/AGENTS.md).
 
 ## Project copy
 
 ```sh
-cp -R dot-agents/.agents /path/to/your-repo/
+DOT_AGENTS_HOME=/path/to/your-repo/.agents ./install.sh
 ```
 
-Add a short root `AGENTS.md` in the project if you use one.
+Add a short root `AGENTS.md` in the project if your tool expects one at repo root.
 
-## Upstream
+## Maintainer docs
 
-Canonical repo: [github.com/Madgeniusblink/dot-agents](https://github.com/Madgeniusblink/dot-agents). Change the shared template via PR here; keep personal content in `memory/` and `decisions/`.
-
-Optional Rust CLI (embedded template, maintainer `lint`): [github.com/Madgeniusblink/dot-agents-cli](https://github.com/Madgeniusblink/dot-agents-cli).
+- [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md)
+- Optional Rust CLI: `cli_install` URL in [upstream.json](.agents/context/upstream.json)
 
 ## License
 

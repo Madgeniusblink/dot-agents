@@ -1,0 +1,5 @@
+blank_issues: false
+contact_links:
+  - name: Security
+    url: https://github.com/Madgeniusblink/dot-agents/security/policy
+    about: Report a vulnerability privately

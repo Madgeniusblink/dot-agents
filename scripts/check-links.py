@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SCAN = [ROOT / ".agents", ROOT / "README.md"]
+SCAN = [ROOT / ".agents", ROOT / "README.md", ROOT / "AGENTS.md"]
 LINK = re.compile(r"\]\(([^)]+)\)")
 
 
