@@ -23,5 +23,5 @@ Optional scratch or worktree paths you define yourself: [optional-extensions.md]
 
 ## Git
 
-- **Canon** (this template): tracked in [Madgeniusblink/dot-agents](https://github.com/Madgeniusblink/dot-agents).
+- **Canon** (this template): repository URL in [upstream.json](upstream.json).
 - **`~/.agents/`:** usually not a git repo; if you version it, ignore ephemeral dirs you add locally.

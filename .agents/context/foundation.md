@@ -7,7 +7,7 @@ This tree is a **small core**. It routes. It does not replace vendor docs.
 1. Give any model a **short entry** ([AGENTS.md](../AGENTS.md)).
 2. Point to **live, credible URLs** for formats and product behavior.
 3. Keep **local files** only for what you own: memory, decisions, lessons, checklists.
-4. Stay **easy to extend** when models get stronger. More intelligence needs less text, not more.
+4. **Do not add what the model already knows.** Link out. Delete restated manuals, formats, and generic rules ([extending.md](../standards/extending.md) admission test).
 
 ## What we do not maintain
 
@@ -25,7 +25,7 @@ This tree is a **small core**. It routes. It does not replace vendor docs.
 
 ## Extend this tree
 
-1. Read [sources-policy.md](sources-policy.md) and [optional-extensions.md](optional-extensions.md).
+1. Pass the [admission test](../standards/extending.md#admission-test-before-you-add-a-file).
 2. Write in [ASD-STE100](writing-standard.md) style.
 3. Add one file per idea.
 4. Link from [AGENTS.md](../AGENTS.md) or a skill.

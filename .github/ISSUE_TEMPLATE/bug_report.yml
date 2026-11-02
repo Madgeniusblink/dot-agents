@@ -1,0 +1,16 @@
+---
+name: Bug report
+description: Install script, CI, or template content bug
+labels: ["bug"]
+---
+
+## What happened
+
+## Expected
+
+## Steps to reproduce
+
+## Environment
+
+- OS:
+- Shell (bash / pwsh):

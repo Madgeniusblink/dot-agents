@@ -1,0 +1,15 @@
+---
+name: Template improvement
+description: Propose a change to the shared .agents template
+labels: ["enhancement"]
+---
+
+## Problem
+
+## Proposal
+
+## Admission test
+
+- [ ] Source / link-first checked
+- [ ] Not restating model-known content
+- [ ] Generalized (no personal paths or private repos)
