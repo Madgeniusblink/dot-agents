@@ -15,6 +15,8 @@ Windows: `.\install.ps1` or `.\install.ps1 -Force`
 
 Environment: `DOT_AGENTS_HOME` overrides the destination.
 
+Optional: [dot-agents-cli](https://github.com/Madgeniusblink/dot-agents-cli) (`cargo install --git … --path cli`) embeds this template in a Rust binary. Same skip/force behavior.
+
 ## Update behavior
 
 - Default: adds **missing** upstream files only. Does **not** change your `memory/`, `decisions/`, or other edited files.

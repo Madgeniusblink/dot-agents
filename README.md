@@ -53,6 +53,8 @@ Add a short root `AGENTS.md` in the project if you use one.
 
 Canonical repo: [github.com/Madgeniusblink/dot-agents](https://github.com/Madgeniusblink/dot-agents). Change the shared template via PR here; keep personal content in `memory/` and `decisions/`.
 
+Optional Rust CLI (embedded template, maintainer `lint`): [github.com/Madgeniusblink/dot-agents-cli](https://github.com/Madgeniusblink/dot-agents-cli).
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

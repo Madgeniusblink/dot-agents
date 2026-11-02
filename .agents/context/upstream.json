@@ -13,6 +13,7 @@
     "repo": "https://github.com/Madgeniusblink/dot-agents",
     "tree_main": "https://github.com/Madgeniusblink/dot-agents/tree/main",
     "raw_main": "https://raw.githubusercontent.com/Madgeniusblink/dot-agents/main",
-    "install_sh": "https://raw.githubusercontent.com/Madgeniusblink/dot-agents/main/install.sh"
+    "install_sh": "https://raw.githubusercontent.com/Madgeniusblink/dot-agents/main/install.sh",
+    "cli_install": "https://github.com/Madgeniusblink/dot-agents-cli"
   }
 }
