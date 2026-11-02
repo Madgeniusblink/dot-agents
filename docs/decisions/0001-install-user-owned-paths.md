@@ -1,17 +1,19 @@
-# 0001 Install protects memory and decisions
+# Install protects user-owned paths and refreshes a managed list
 
 ## Status
 
-Accepted
+Accepted (updated)
 
 ## Context
 
-Re-run install must refresh upstream template files without destroying user `memory/` or `decisions/`.
+Re-run install must add missing template files, refresh maintainer-controlled standards and core context policy files, and never destroy user `memory/`, `decisions/`, or other edited files.
 
 ## Decision
 
-Install scripts treat `memory/` and `decisions/` as user-owned. Existing files there are never overwritten. All other template paths refresh on each install. `--force` does not change user-owned protection.
+- Lists live in `.agents/.user-owned` and `.agents/.managed-refresh` (repo-only; not copied to home).
+- All installers (`install.sh`, `install.ps1`, `dot-agents` CLI) read the same lists.
+- No `--force` flag.
 
 ## Consequences
 
-Users get template updates without losing lessons. `--force` is not a data-destructive flag for personal dirs.
+Users opt into edits outside the managed list. Template updates ship via `.managed-refresh` and [CHANGELOG.md](../../CHANGELOG.md).

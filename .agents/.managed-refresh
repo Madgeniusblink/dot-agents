@@ -1,0 +1,7 @@
+# Refreshed on every install when the file already exists. Everything else: add if missing only.
+standards/
+context/foundation.md
+context/sources-policy.md
+context/writing-standard.md
+context/optional-extensions.md
+context/upstream.json

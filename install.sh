@@ -1,19 +1,15 @@
 #!/usr/bin/env sh
 # Install .agents/ to DOT_AGENTS_HOME (default ~/.agents).
-# Updates upstream-owned files. Never overwrites existing memory/ or decisions/ files.
 set -e
 
-FORCE=0
 for arg in "$@"; do
   case "$arg" in
-    --force) FORCE=1 ;;
     -h|--help)
-      echo "Usage: install.sh [--force]"
+      echo "Usage: install.sh"
       echo "  DOT_AGENTS_HOME  target directory (default: ~/.agents)"
       echo ""
-      echo "Re-run refreshes upstream-owned template files."
-      echo "Existing files under memory/ and decisions/ are never overwritten."
-      echo "--force does not change that protection."
+      echo "Adds missing files. Refreshes paths listed in .agents/.managed-refresh."
+      echo "Never overwrites paths listed in .agents/.user-owned once present."
       exit 0
       ;;
     *)
@@ -36,11 +32,53 @@ if [ ! -d "$SRC" ]; then
   exit 1
 fi
 
-is_user_owned() {
+# Repo-only policy files (read from template source, not copied to DEST).
+skip_install_meta() {
   case "$1" in
-    memory|memory/*|decisions|decisions/*) return 0 ;;
+    .user-owned|.managed-refresh) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+# rel uses / separators.
+matches_rule_line() {
+  _rel="$1"
+  _line="$2"
+  case "$_line" in
+    ""|#*) return 1 ;;
+  esac
+  case "$_line" in
+    */)
+      case "$_rel" in
+        "${_line%/}"|"${_line%/}"/*) return 0 ;;
+      esac
+      ;;
+    *)
+      [ "$_rel" = "$_line" ] && return 0
+      ;;
+  esac
+  return 1
+}
+
+matches_list() {
+  _rel="$1"
+  _listfile="$2"
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%%#*}"
+    line=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    if matches_rule_line "$_rel" "$line"; then
+      return 0
+    fi
+  done < "$_listfile"
+  return 1
+}
+
+is_user_owned() {
+  matches_list "$1" "$SRC/.user-owned"
+}
+
+is_managed_refresh() {
+  matches_list "$1" "$SRC/.managed-refresh"
 }
 
 should_copy() {
@@ -52,13 +90,19 @@ should_copy() {
   if is_user_owned "$_rel"; then
     return 1
   fi
-  return 0
+  if is_managed_refresh "$_rel"; then
+    return 0
+  fi
+  return 1
 }
 
 mkdir -p "$DEST"
 
 find "$SRC" -type f | while IFS= read -r file; do
   rel="${file#"$SRC"/}"
+  if skip_install_meta "$rel"; then
+    continue
+  fi
   target="$DEST/$rel"
   if should_copy "$rel" "$target"; then
     mkdir -p "$(dirname "$target")"
@@ -66,8 +110,4 @@ find "$SRC" -type f | while IFS= read -r file; do
   fi
 done
 
-if [ "$FORCE" = 1 ]; then
-  echo "Installed (upstream refreshed; memory/ and decisions/ left unchanged) -> $DEST"
-else
-  echo "Installed (upstream refreshed; memory/ and decisions/ left unchanged) -> $DEST"
-fi
+echo "Installed (missing added; managed paths refreshed; user-owned unchanged) -> $DEST"

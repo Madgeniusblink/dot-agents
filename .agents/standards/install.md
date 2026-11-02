@@ -4,32 +4,40 @@ Target: **agent home** directory (default `~/.agents` on Unix, `$HOME\.agents` o
 
 ## Scripts (no Rust required)
 
-From a clone of this repository (see [upstream.json](../context/upstream.json) → `links.repo`):
+From a clone (see [upstream.json](../context/upstream.json) → `links.repo` or `links.raw_tag`):
 
 ```sh
-./install.sh          # refresh upstream-owned files; add missing paths
-./install.sh --force  # same protection for memory/ and decisions/
+./install.sh
 ```
 
-Windows: `.\install.ps1` (optional `-Force`; same file rules)
+Windows: `.\install.ps1`
 
 Environment: `DOT_AGENTS_HOME` overrides the destination. On Unix, `HOME` must be set when `DOT_AGENTS_HOME` is unset.
 
-Optional CLI: URL in [upstream.json](../context/upstream.json) → `links.cli_install`.
+Optional CLI: [upstream.json](../context/upstream.json) → `links.cli_install` (same rules; reads `.user-owned` and `.managed-refresh`).
 
-## Upstream-owned vs user-owned
+## Policy files (single source of truth)
 
-| Area | On re-run |
+| File | Role |
+|------|------|
+| [`.user-owned`](../.user-owned) | Prefixes never overwritten once a file exists (`memory/`, `decisions/`). |
+| [`.managed-refresh`](../.managed-refresh) | Paths replaced on every install when present (standards + selected context files). |
+
+Installers do **not** copy these two files into your home. They read them from the template checkout.
+
+## Update behavior
+
+| Case | On re-run |
 |------|-----------|
-| **Upstream-owned** (standards, context, skills, rules, templates, checklists, shipped stubs) | Existing files are **updated** from the template. Missing files are added. |
-| **User-owned** (`memory/`, `decisions/`) | Existing files are **never** overwritten. Missing files are added once. |
+| Missing file | Added |
+| Path under `.user-owned` and file exists | Skipped |
+| Path under `.managed-refresh` and file exists | Refreshed from template |
+| Any other existing file (e.g. edited `AGENTS.md`, `checklists/`, `data-locations.md`) | Skipped |
 
-`--force` / `-Force` does **not** overwrite existing files under `memory/` or `decisions/`.
+See [CHANGELOG.md](../../CHANGELOG.md) when managed paths change.
 
 ## Project copy
 
 ```sh
 DOT_AGENTS_HOME=/path/to/repo/.agents ./install.sh
 ```
-
-Do not use `cp -R` if the project tree already has edited `memory/` or `decisions/`.
