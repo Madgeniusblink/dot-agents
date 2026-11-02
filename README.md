@@ -7,8 +7,39 @@ documented **global** `~/.agents/` home. Cursor discovers project skills under
 
 Personal Context canon stays in
 [`Madgeniusblink/context`](https://github.com/Madgeniusblink/context) (private).
-**dot-agents** is the shareable skeleton and the map agents read to navigate
-both layers.
+**dot-agents** is the shareable skeleton, [standards](.agents/standards/) contract, and installer for both layers.
+
+---
+
+## Philosophy (short)
+
+1. **Minimal core** — [foundation](.agents/context/foundation.md): route, do not encyclopedia.
+2. **Link first** — [sources policy](.agents/context/sources-policy.md): credible live URLs; local [templates](.agents/templates/) only for gaps.
+3. **ASD-STE100** — [writing standard](.agents/context/writing-standard.md) for all prose in this tree.
+4. **Standards folder** — When someone asks how to write a skill, rule, or schedule, point to [`.agents/standards/`](.agents/standards/README.md).
+
+---
+
+## Install at `~/.agents/` (home directory)
+
+Global install target is **`$HOME/.agents`**, not `/` on the disk.
+
+```sh
+git clone https://github.com/Madgeniusblink/dot-agents.git
+cd dot-agents
+chmod +x bin/dot-agents
+./bin/dot-agents install
+./bin/dot-agents doctor
+```
+
+Optional Rust CLI (same commands, optional `--mirror`):
+
+```sh
+cd cli && cargo install --path . --locked
+dot-agents install
+```
+
+Details: [`.agents/standards/install.md`](.agents/standards/install.md).
 
 ---
 
@@ -41,15 +72,18 @@ for personal checklists, memory, routing, and cross-repo reference.
 ## Global home: `~/.agents/`
 
 The **full scaffold** lives in this repo under [`.agents/`](.agents/). Install
-it once on your machine:
+with the CLI:
+
+```sh
+./bin/dot-agents install
+```
+
+Manual equivalent:
 
 ```sh
 mkdir -p ~/.agents
-rsync -a --exclude='STRUCTURE.md' /path/to/dot-agents/.agents/ ~/.agents/
-# or: cp -R dot-agents/.agents/. ~/.agents/
+rsync -a --exclude='STRUCTURE.md' ./.agents/ ~/.agents/
 ```
-
-Then edit `~/.agents/context/*` and `memory/*` for your environment. Layout:
 
 ```
 ~/.agents/

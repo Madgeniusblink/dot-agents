@@ -2,6 +2,8 @@
 
 Short router. Load detail only when the task needs it.
 
+**Foundation:** [context/foundation.md](context/foundation.md) · **Writing:** [ASD-STE100](context/writing-standard.md) · **Standards:** [standards/](standards/) · **Install:** [standards/install.md](standards/install.md)
+
 ## Smart habits (ranked)
 
 1. **Verification** — [checklists/before-commit.md](checklists/before-commit.md) and [hooks/before-commit.sh](hooks/before-commit.sh).
@@ -24,7 +26,8 @@ Short router. Load detail only when the task needs it.
 | [memory/](memory/) | Durable facts and lessons |
 | [tools/](tools/) | Local CLI notes and wrappers |
 | [hooks/](hooks/) | Shell hooks you wire in providers |
-| [context/](context/) | Glossary, architecture, style (stable reference) |
+| [context/](context/) | Glossary, architecture, style, foundation, sources policy |
+| [standards/](standards/) | How to add skills, rules, schedules, evals (link-first) |
 | [templates/](templates/) | Fixed output shapes |
 | [workflows/](workflows/) | Multi-step pipelines |
 | [checklists/](checklists/) | Done criteria |

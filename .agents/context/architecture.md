@@ -2,6 +2,9 @@
 
 Describe how your machines, repos, and runtimes connect. Update when layout changes.
 
-- **Source:** `~/Code/work/` — git clones (context, dot-agents, …).
-- **Global agent home:** `~/.agents/` — this tree.
-- **Context runtime (when installed):** `~/.agents/context` from `context-install`.
+- **Template source:** [github.com/Madgeniusblink/dot-agents](https://github.com/Madgeniusblink/dot-agents) — `.agents/` tree and [standards/](../standards/).
+- **Global home:** `~/.agents/` — install with [standards/install.md](../standards/install.md) or `./bin/dot-agents install`.
+- **Git clones:** e.g. `~/Code/work/` — edit template here; re-run install to refresh home.
+- **Context runtime (optional):** `context-install` may use `~/.agents/context` as a full snapshot. See [decisions/0001-reference-context-folder.md](../decisions/0001-reference-context-folder.md).
+
+External behavior: prefer live URLs in [sources-policy.md](sources-policy.md).
