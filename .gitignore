@@ -3,4 +3,22 @@
 .env.*
 *.pem
 *.key
+
+# Rust CLI
 cli/target/
+
+# Ephemeral agent paths (canon layout keeps README + .gitignore only)
+.agents/var/scratch/**
+!.agents/var/scratch/.gitignore
+!.agents/var/scratch/README.md
+.agents/var/worktrees/**
+!.agents/var/worktrees/.gitignore
+!.agents/var/worktrees/README.md
+
+# If you symlink or copy var into home without full install
+var/scratch/**
+!var/scratch/.gitignore
+!var/scratch/README.md
+var/worktrees/**
+!var/worktrees/.gitignore
+!var/worktrees/README.md

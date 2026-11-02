@@ -104,6 +104,7 @@ dot-agents install
 │   └── before-release.md
 ├── context/
 │   ├── architecture.md
+│   ├── data-locations.md
 │   ├── foundation.md
 │   ├── glossary.md
 │   ├── optional-extensions.md
@@ -138,15 +139,25 @@ dot-agents install
 │   ├── schedules.md
 │   ├── skills.md
 │   ├── templates.md
+│   ├── var-layout.md
 │   └── workflows.md
-└── templates/
-    └── pr-description.md
+├── templates/
+│   └── pr-description.md
+└── var/
+    ├── PROJECT-GITIGNORE-SNIPPET.md
+    ├── README.md
+    ├── scratch/
+    │   ├── .gitignore
+    │   └── README.md
+    └── worktrees/
+        ├── .gitignore
+        └── README.md
 ```
 
 Same layout in this repo under [`.agents/`](.agents/). Repo-only file `.agents/STRUCTURE.md` is not installed to `~/.agents/`.
 <!-- dot-agents-tree:end -->
 
-**Not in base template:** hooks (use `.cursor/hooks/` or provider paths), profiles, evals, routing JSON — see [optional-extensions.md](.agents/context/optional-extensions.md). Optional artifact **standards** (evals, schedules, workflows) live under [`.agents/standards/`](.agents/standards/) as docs; add folders at home only when you need them.
+**Not in base template:** hooks (use `.cursor/hooks/` or provider paths), profiles, evals, routing JSON — see [optional-extensions.md](.agents/context/optional-extensions.md). **`var/scratch/` and `var/worktrees/`** ship with `.gitignore` so ephemeral files never commit — see [data-locations.md](.agents/context/data-locations.md).
 
 ### What makes an agent smarter (ranked)
 
