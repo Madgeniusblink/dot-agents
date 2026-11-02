@@ -9,7 +9,7 @@ Canonical URLs and version pins: [`.agents/context/upstream.json`](.agents/conte
 Pinned clone (replace `<url>` with `links.repo` in [upstream.json](.agents/context/upstream.json)):
 
 ```sh
-git clone --branch v0.1.0 --depth 1 <url> dot-agents
+git clone --branch v0.1.1 --depth 1 <url> dot-agents
 cd dot-agents
 ./install.sh
 ```
