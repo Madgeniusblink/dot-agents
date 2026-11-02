@@ -7,4 +7,4 @@ Describe how your machines, repos, and runtimes connect. Update when layout chan
 - **Git clones:** e.g. `~/Code/work/` — edit template here; re-run install to refresh home.
 - **Context runtime (optional):** `context-install` may use `~/.agents/context` as a full snapshot. See [decisions/0001-reference-context-folder.md](../decisions/0001-reference-context-folder.md).
 
-External behavior: prefer live URLs in [sources-policy.md](sources-policy.md).
+- **Scratch / worktrees:** [var/](../var/) under `~/.agents/` — see [data-locations.md](data-locations.md).

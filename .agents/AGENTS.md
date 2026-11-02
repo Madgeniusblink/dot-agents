@@ -23,6 +23,16 @@ Short router. Load detail only when the task needs it.
 | [skills/](skills/) | Optional procedures (example: self-verify) |
 | [rules/](rules/) | Optional scoped rules — add when you need `globs` |
 | [templates/](templates/) | Only when no live URL exists |
+| [var/](var/) | Scratch and git worktrees (contents gitignored) |
+
+## Scratch and worktrees
+
+Canonical ephemeral paths (same for every model if you wire them in user rules):
+
+- Scratch: `~/.agents/var/scratch/` — `DOT_AGENTS_SCRATCH`
+- Worktrees: `~/.agents/var/worktrees/` — `DOT_AGENTS_WORKTREES`
+
+Map: [context/data-locations.md](context/data-locations.md). Standard: [standards/var-layout.md](standards/var-layout.md).
 
 ## Hooks and provider config
 

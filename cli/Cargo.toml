@@ -1,6 +1,6 @@
 [package]
 name = "dot-agents"
-version = "0.2.0"
+version = "0.2.2"
 edition = "2021"
 description = "Install and verify the ~/.agents global template (embedded, no repo required)"
 license = "MIT"

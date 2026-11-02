@@ -54,3 +54,13 @@ Copy `.agents/` into a repository. Do not overwrite `~/.agents/` unless you want
 ## Update
 
 Run `dot-agents install` again. Use `install --mirror` only if you want to delete extra files in `~/.agents/` that are not in the template.
+
+## Maintainers (this repo)
+
+After you change `.agents/`, refresh the README tree:
+
+```sh
+dot-agents readme sync
+```
+
+CI runs `dot-agents readme check` on pull requests.
