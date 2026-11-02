@@ -2,7 +2,7 @@
 
 Short router. Load detail only when the task needs it.
 
-**Foundation:** [context/foundation.md](context/foundation.md) · **Writing:** [ASD-STE100](context/writing-standard.md) · **Standards:** [standards/](standards/) · **Install:** [standards/install.md](standards/install.md)
+**Foundation:** [context/foundation.md](context/foundation.md) · **Writing:** [ASD-STE100](context/writing-standard.md) · **Standards:** [standards/](standards/) · **Extend:** [standards/extending.md](standards/extending.md) · **Upstream:** [context/upstream.json](context/upstream.json) or `dot-agents upstream`
 
 ## Smart habits (ranked)
 
@@ -44,7 +44,7 @@ See [context/optional-extensions.md](context/optional-extensions.md) for profile
 
 **Note:** `context-install` may use `~/.agents/context` as a full runtime snapshot. See [decisions/0001-reference-context-folder.md](decisions/0001-reference-context-folder.md).
 
-Most clients do not auto-load `~/.agents/`. Wire [AGENTS.md](AGENTS.md) in user rules or project `.agents/` ([dot-agents](https://github.com/Madgeniusblink/dot-agents)).
+Most clients do not auto-load `~/.agents/`. Wire [AGENTS.md](AGENTS.md) in user rules. For repo URLs when extending, run **`dot-agents upstream`** (canon: [upstream.json](context/upstream.json)).
 
 ## Maintenance
 

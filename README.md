@@ -9,6 +9,20 @@ Personal Context canon stays in
 [`Madgeniusblink/context`](https://github.com/Madgeniusblink/context) (private).
 **dot-agents** is the shareable skeleton, [standards](.agents/standards/) contract, and installer for both layers.
 
+- **Upstream:** [`.agents/context/upstream.json`](.agents/context/upstream.json) — single source for repo URLs; **`dot-agents upstream`** prints current links from the installed CLI.
+
+---
+
+## Extend (upstream)
+
+**Upstream** is the canonical template repo ([Madgeniusblink/dot-agents](https://github.com/Madgeniusblink/dot-agents)). **Overlay** is what you add locally (skills, memory, scratch).
+
+1. Read [`.agents/standards/extending.md`](.agents/standards/extending.md).
+2. Run **`dot-agents upstream`** for repo, raw, and tree links (always matches the CLI you installed).
+3. Add artifacts per [standards/](.agents/standards/); open PRs on **upstream** to change the shared template.
+
+Do not hard-code GitHub URLs in your overlay; link via `dot-agents upstream --json` or copy from its output.
+
 ---
 
 ## Philosophy (short)
@@ -110,6 +124,7 @@ dot-agents install
 │   ├── optional-extensions.md
 │   ├── sources-policy.md
 │   ├── style-guide.md
+│   ├── upstream.json
 │   └── writing-standard.md
 ├── decisions/
 │   └── 0001-reference-context-folder.md
@@ -134,6 +149,7 @@ dot-agents install
 │   ├── checklists.md
 │   ├── decisions.md
 │   ├── evals.md
+│   ├── extending.md
 │   ├── install.md
 │   ├── rules.md
 │   ├── schedules.md

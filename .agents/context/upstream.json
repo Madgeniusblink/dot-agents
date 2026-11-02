@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "name": "dot-agents",
+  "repository": "https://github.com/Madgeniusblink/dot-agents",
+  "default_branch": "main",
+  "extends_doc": "standards/extending.md",
+  "paths": {
+    "standards_index": "standards/README.md",
+    "install": "standards/install.md",
+    "data_locations": "context/data-locations.md",
+    "specs": "docs/specs/"
+  },
+  "links": {
+    "repo": "https://github.com/Madgeniusblink/dot-agents",
+    "tree_main": "https://github.com/Madgeniusblink/dot-agents/tree/main",
+    "raw_main": "https://raw.githubusercontent.com/Madgeniusblink/dot-agents/main",
+    "cli_install": "cargo install --git https://github.com/Madgeniusblink/dot-agents --path cli --locked"
+  }
+}

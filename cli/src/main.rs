@@ -1,6 +1,7 @@
 //! Standalone `dot-agents` CLI — template is embedded at compile time.
 
 mod readme;
+mod upstream;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
@@ -12,6 +13,7 @@ use walkdir::WalkDir;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const TEMPLATE: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../.agents");
+const UPSTREAM_JSON: &str = include_str!("../../.agents/context/upstream.json");
 
 #[derive(Parser)]
 #[command(
@@ -43,6 +45,12 @@ enum Commands {
     Readme {
         #[command(subcommand)]
         command: ReadmeCommands,
+    },
+    /// Print canonical upstream repo links (from embedded upstream.json)
+    Upstream {
+        /// Output JSON instead of human text
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -223,7 +231,9 @@ fn cmd_doctor() -> Result<()> {
     let required = [
         "AGENTS.md",
         "standards/README.md",
+        "standards/extending.md",
         "context/writing-standard.md",
+        "context/upstream.json",
     ];
     let mut ok = true;
     for f in required {
@@ -237,6 +247,16 @@ fn cmd_doctor() -> Result<()> {
     }
     if !ok {
         anyhow::bail!("Run: dot-agents install");
+    }
+    Ok(())
+}
+
+fn cmd_upstream(json: bool) -> Result<()> {
+    let u = upstream::parse_upstream(UPSTREAM_JSON)?;
+    if json {
+        println!("{}", UPSTREAM_JSON.trim());
+    } else {
+        print!("{}", upstream::format_human(&u));
     }
     Ok(())
 }
@@ -262,5 +282,6 @@ fn main() -> Result<()> {
                 Ok(())
             }
         },
+        Commands::Upstream { json } => cmd_upstream(json),
     }
 }
