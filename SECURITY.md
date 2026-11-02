@@ -11,7 +11,11 @@
 
 Do **not** open a public issue for exploitable security problems in this template or its install scripts.
 
-Email the repository owner through GitHub **Private vulnerability reporting** (Security tab) or a private channel you already use with maintainers.
+Use GitHub **private vulnerability reporting** for this repository:
+
+https://github.com/Madgeniusblink/dot-agents/security/advisories/new
+
+Enable **Private vulnerability reporting** under the repository **Settings → Security** if it is not already on.
 
 Include steps to reproduce, impact, and suggested fix if you have one.
 

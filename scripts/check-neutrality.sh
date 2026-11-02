@@ -9,7 +9,9 @@ mode="${1:?usage: check-neutrality.sh context|vendors}"
 case "$mode" in
   context)
     pat='madgeniusblink/context|context-install'
-    ! grep -rniE "$pat" .agents README.md install.sh install.ps1 AGENTS.md CONTRIBUTING.md
+    if grep -rniE "$pat" .agents README.md install.sh install.ps1 AGENTS.md CONTRIBUTING.md; then
+      exit 1
+    fi
     ;;
   vendors)
     hits=$(grep -rniE 'cursor|claude code|codex' .agents README.md AGENTS.md CONTRIBUTING.md \

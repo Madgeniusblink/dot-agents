@@ -31,52 +31,25 @@ jobs:
           test -f .agents/standards/install.md
           test -f .agents/context/data-locations.md
           test -f .agents/context/upstream.json
+          test -f .agents/.user-owned
+          test -f .agents/.managed-refresh
 
       - name: Relative link check
         if: runner.os != 'Windows'
         run: python3 scripts/check-links.py
 
-      - name: Install preserves memory on re-run (sh)
+      - name: Install behavior (sh)
         if: runner.os != 'Windows'
         shell: bash
-        run: |
-          tmp=$(mktemp -d)
-          export DOT_AGENTS_HOME="$tmp/home"
-          ./install.sh
-          echo "USER LESSON" >> "$DOT_AGENTS_HOME/memory/lessons.md"
-          ./install.sh
-          grep -q 'USER LESSON' "$DOT_AGENTS_HOME/memory/lessons.md"
-
-      - name: Install --force preserves memory (sh)
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          tmp=$(mktemp -d)
-          export DOT_AGENTS_HOME="$tmp/home"
-          ./install.sh
-          echo "USER LESSON" >> "$DOT_AGENTS_HOME/memory/lessons.md"
-          ./install.sh --force
-          grep -q 'USER LESSON' "$DOT_AGENTS_HOME/memory/lessons.md"
-
-      - name: Install refreshes upstream-owned file (sh)
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          tmp=$(mktemp -d)
-          export DOT_AGENTS_HOME="$tmp/home"
-          ./install.sh
-          echo "STALE" > "$DOT_AGENTS_HOME/standards/README.md"
-          ./install.sh
-          grep -q 'Public contract' "$DOT_AGENTS_HOME/standards/README.md"
-          ! grep -q 'STALE' "$DOT_AGENTS_HOME/standards/README.md"
+        run: sh scripts/test-install-behavior.sh
 
       - name: Install unknown flag fails (sh)
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          ! ./install.sh --forse
+          if ./install.sh --forse; then exit 1; fi
 
-      - name: Install preserves memory (ps1)
+      - name: Install behavior (ps1)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -85,4 +58,16 @@ jobs:
           ./install.ps1
           Add-Content -Path (Join-Path $agentHome "memory/lessons.md") -Value "USER LESSON"
           ./install.ps1
-          Select-String -Path (Join-Path $agentHome "memory/lessons.md") -Pattern "USER LESSON" -Quiet
+          if (-not (Select-String -Path (Join-Path $agentHome "memory/lessons.md") -Pattern "USER LESSON" -Quiet)) {
+            throw "memory/lessons.md was overwritten"
+          }
+          Set-Content -Path (Join-Path $agentHome "AGENTS.md") -Value "MY AGENT RULES"
+          ./install.ps1
+          if (-not (Select-String -Path (Join-Path $agentHome "AGENTS.md") -Pattern "MY AGENT RULES" -Quiet)) {
+            throw "AGENTS.md was overwritten"
+          }
+          Set-Content -Path (Join-Path $agentHome "standards/README.md") -Value "STALE"
+          ./install.ps1
+          if (-not (Select-String -Path (Join-Path $agentHome "standards/README.md") -Pattern "Public contract" -Quiet)) {
+            throw "standards/ was not refreshed"
+          }
