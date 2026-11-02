@@ -2,7 +2,7 @@
 
 Template semver tracks [upstream.json](.agents/context/upstream.json) `template_version`.
 
-## 0.1.1 — unreleased
+## 0.1.1 — 2026-11-02
 
 - Install policy lists: `.user-owned`, `.managed-refresh` (single source for sh/ps1/CLI).
 - Default install no longer overwrites edited `AGENTS.md`, checklists, or personal context files.
