@@ -1,11 +1,15 @@
 # Structure map (for agents)
 
+**Base core only.** Optional types: [context/optional-extensions.md](context/optional-extensions.md).
+
 | Path | Purpose |
 |------|---------|
-| [AGENTS.md](AGENTS.md) | Short router — start here |
-| [standards/](standards/) | **Public contract** — skills, rules, schedules, install |
-| [context/foundation.md](context/foundation.md) | Minimal core; link-first policy |
-| [context/writing-standard.md](context/writing-standard.md) | ASD-STE100 |
-| [context/sources-policy.md](context/sources-policy.md) | Live URLs before local templates |
+| [AGENTS.md](AGENTS.md) | Short router |
+| [standards/](standards/) | Public contract (skills, rules, install) |
+| [context/](context/) | Foundation, STE100, sources policy |
+| [checklists/](checklists/) | Before commit / release |
+| [memory/](memory/) | Lessons and preferences |
+| [decisions/](decisions/) | Settled choices |
+| [skills/self-verify/](skills/self-verify/) | Example verification skill |
 
-Repo install CLI: [../bin/dot-agents](../bin/dot-agents). Full narrative: [../README.md](../README.md).
+Install: [../bin/dot-agents](../bin/dot-agents). Narrative: [../README.md](../README.md).

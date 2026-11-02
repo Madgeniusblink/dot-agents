@@ -1,9 +1,0 @@
-{
-  "version": 1,
-  "default": "strong",
-  "routes": [
-    { "task": "typo|comment|format", "model": "fast" },
-    { "task": "architecture|security|incident", "model": "strong" },
-    { "task": "bulk refactor", "model": "strong", "note": "Prefer small batches" }
-  ]
-}

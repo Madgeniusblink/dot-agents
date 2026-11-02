@@ -6,25 +6,26 @@ This tree is a **small core**. It routes. It does not replace vendor docs.
 
 1. Give any model a **short entry** ([AGENTS.md](../AGENTS.md)).
 2. Point to **live, credible URLs** for formats and product behavior.
-3. Keep **local files** only for what you own: memory, decisions, lessons, hooks.
+3. Keep **local files** only for what you own: memory, decisions, lessons, checklists.
 4. Stay **easy to extend** when models get stronger. More intelligence needs less text, not more.
 
 ## What we do not maintain
 
 - Copy of full vendor documentation.
 - Long templates when an official URL already defines the shape.
-- Rules for every file type on day one.
+- Git or IDE hooks (use provider hook directories).
+- Profiles, evals, or JSON config unless you add them ([optional-extensions.md](optional-extensions.md)).
 
 ## What we do maintain
 
-- Router files and folder layout.
-- Personal or org facts ([memory/](../memory/), [decisions/](../decisions/)).
-- Stubs in [templates/](../templates/) **only** when no stable URL exists (see [sources-policy.md](sources-policy.md)).
-- [standards/](../standards/) — how to add each artifact type (link first, then local minimum).
+- Router files and minimal folder layout.
+- [standards/](../standards/) — how to add artifacts (link first).
+- Personal facts: [memory/](../memory/), [decisions/](../decisions/), [checklists/](../checklists/).
+- [templates/](../templates/) **only** when no stable URL exists ([sources-policy.md](sources-policy.md)).
 
 ## Extend this tree
 
-1. Read [sources-policy.md](sources-policy.md).
+1. Read [sources-policy.md](sources-policy.md) and [optional-extensions.md](optional-extensions.md).
 2. Write in [ASD-STE100](writing-standard.md) style.
 3. Add one file per idea.
-4. Link the new file from [AGENTS.md](../AGENTS.md) or a skill, or tools will not load it.
+4. Link from [AGENTS.md](../AGENTS.md) or a skill.

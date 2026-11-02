@@ -85,65 +85,41 @@ mkdir -p ~/.agents
 rsync -a --exclude='STRUCTURE.md' ./.agents/ ~/.agents/
 ```
 
+Base **core** layout (what this repo ships):
+
 ```
 ~/.agents/
-├── AGENTS.md              # Global rules. Keep short. Link out.
-├── rules/
-│   └── <topic>.md         # YAML front matter with `globs:` for scoped load
-├── skills/
-│   └── <skill-id>/
-│       ├── SKILL.md
-│       ├── scripts/
-│       ├── references/    # Extra docs on demand
-│       └── assets/        # Templates and samples
-├── commands/
-├── agents/                # Subagent personas
-├── memory/
-│   ├── MEMORY.md
-│   ├── <topic>.md
-│   └── lessons.md         # Mistakes and fixes
-├── tools/
-├── hooks/
-├── mcp.json
-├── settings.json
-├── context/               # Stable reference (glossary, architecture, style)
-│   ├── glossary.md
-│   ├── architecture.md
-│   └── style-guide.md
-├── templates/
-│   ├── spec.md
-│   ├── pr-description.md
-│   └── adr.md
-├── workflows/
-│   └── plan-build-review.md
+├── AGENTS.md              # Short router
+├── standards/             # How to add skills, rules, checklists (public contract)
+├── context/               # Foundation, STE100, glossary, architecture, optional-extensions
 ├── checklists/
 │   ├── before-commit.md
 │   └── before-release.md
-├── profiles/
-│   ├── strict-reviewer.md
-│   └── fast-prototype.md
-├── routing.json           # Task type → model
-├── evals/
-│   └── <task>/
-│       ├── prompt.md
-│       └── expected.md
+├── memory/
+│   ├── MEMORY.md
+│   ├── preferences.md
+│   └── lessons.md
 ├── decisions/
 │   └── 0001-<title>.md
-├── handoffs/              # Session summaries
-├── schedules/             # Recurring tasks
-└── permissions.json       # Tool/path allow and deny
+├── skills/
+│   └── self-verify/       # Example skill (checklist only; no hooks)
+├── rules/
+│   └── README.md          # Add scoped rules when you need them
+└── templates/
+    └── pr-description.md  # Only when no live URL fits
 ```
+
+**Not in base:** hooks (use `.cursor/hooks/` or provider paths), profiles, evals, routing JSON, MCP JSON — see [optional-extensions.md](.agents/context/optional-extensions.md).
+
+Full **optional** tree (teams that outgrow the base) is documented in [standards/](.agents/standards/) without shipping every folder.
 
 ### What makes an agent smarter (ranked)
 
-1. **Verification** — `checklists/` + a `before-commit` hook.
-2. **Lessons loop** — Append to `memory/lessons.md`; promote repeats to `rules/`.
-3. **Short entry file** — Detail in `context/`, `rules/`, skill `references/`.
-4. **Scoped rules** — `globs` in rule front matter saves context.
-5. **Decisions log** — Stops re-asking settled questions.
-6. **Evals** — Keep 5–10 real tasks; run after rule or model changes.
-7. **Routing** — Cheap tasks → fast model; hard tasks → strong model.
-8. **Handoffs** — Short end-of-session summary for the next run.
+1. **Verification** — [checklists/](.agents/checklists/) before you claim done.
+2. **Lessons loop** — [memory/lessons.md](.agents/memory/lessons.md); promote repeats to [rules/](.agents/rules/) when needed.
+3. **Short entry** — [AGENTS.md](.agents/AGENTS.md); detail in [context/](.agents/context/) and [standards/](.agents/standards/).
+4. **Decisions log** — [decisions/](.agents/decisions/) so settled choices stay settled.
+5. **Link-first** — [sources-policy.md](.agents/context/sources-policy.md); do not maintain vendor copies.
 
 ### Rules for every addition
 
@@ -161,10 +137,9 @@ Context source or documented in `decisions/` before running `-update`.
 
 Copy the same [`.agents/`](.agents/) tree into a repository (or a subset if you
 want a lighter project). Prefer project rules/skills for repo work; keep global
-`~/.agents/` for cross-repo memory, routing, and evals.
+`~/.agents/` for memory, checklists, and decisions.
 
-In this Git repo, `.agents/` is the canonical template — what you see in the
-file tree is the full layout (not a trimmed stub).
+In this Git repo, `.agents/` is the **base core** template. Optional folders are documented, not shipped.
 
 ---
 
