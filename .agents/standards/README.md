@@ -13,6 +13,6 @@ Public contract for extending `~/.agents/` or `<repo>/.agents/`.
 | Checklists | [checklists.md](checklists.md) | Local; STE100 |
 | Decisions | [decisions.md](decisions.md) | [adr.github.io](https://adr.github.io/) |
 | Templates | [templates.md](templates.md) | Link before local file |
-| Install | [install.md](install.md) | `./bin/dot-agents` |
+| Install | [install.md](install.md) | `dot-agents` CLI |
 
 Optional types (not in base tree): [evals.md](evals.md), [schedules.md](schedules.md), [workflows.md](workflows.md) — see [optional-extensions.md](../context/optional-extensions.md).

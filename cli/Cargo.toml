@@ -1,15 +1,18 @@
 [package]
 name = "dot-agents"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
-description = "Install and verify the ~/.agents global template from dot-agents"
+description = "Install and verify the ~/.agents global template (embedded, no repo required)"
 license = "MIT"
+repository = "https://github.com/Madgeniusblink/dot-agents"
+readme = "README.md"
 
 [[bin]]
 name = "dot-agents"
 path = "src/main.rs"
 
 [dependencies]
-clap = { version = "4", features = ["derive"] }
 anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+include_dir = "0.7"
 walkdir = "2"

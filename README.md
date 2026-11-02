@@ -22,24 +22,19 @@ Personal Context canon stays in
 
 ## Install at `~/.agents/` (home directory)
 
-Global install target is **`$HOME/.agents`**, not `/` on the disk.
+Global target is **`$HOME/.agents`**, not disk `/`.
+
+**Standalone CLI (recommended)** — template is **built into the binary**; no `bin/` script and no clone required after install:
 
 ```sh
-git clone https://github.com/Madgeniusblink/dot-agents.git
-cd dot-agents
-chmod +x bin/dot-agents
-./bin/dot-agents install
-./bin/dot-agents doctor
-```
-
-Optional Rust CLI (same commands, optional `--mirror`):
-
-```sh
-cd cli && cargo install --path . --locked
+cargo install --git https://github.com/Madgeniusblink/dot-agents --path cli --locked
 dot-agents install
+dot-agents doctor
 ```
 
-Details: [`.agents/standards/install.md`](.agents/standards/install.md).
+One-shot (installs CLI via cargo, then `~/.agents/`): `curl -fsSL …/install.sh | sh` from repo [install.sh](install.sh).
+
+Details: [cli/README.md](cli/README.md) and [`.agents/standards/install.md`](.agents/standards/install.md).
 
 ---
 
@@ -75,10 +70,10 @@ The **full scaffold** lives in this repo under [`.agents/`](.agents/). Install
 with the CLI:
 
 ```sh
-./bin/dot-agents install
+dot-agents install
 ```
 
-Manual equivalent:
+Manual equivalent (development only):
 
 ```sh
 mkdir -p ~/.agents

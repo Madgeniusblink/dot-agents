@@ -2,51 +2,55 @@
 
 Install the global home at **`~/.agents/`** (user home, not system root).
 
-## Requirements
+## Recommended: standalone CLI
 
-- Unix-like OS (macOS, Linux)
-- `rsync` or the `dot-agents` CLI
-
-## Option A — CLI (recommended)
-
-From a clone of [Madgeniusblink/dot-agents](https://github.com/Madgeniusblink/dot-agents):
+The **`dot-agents`** binary embeds the template. No clone and no `bin/` script required.
 
 ```sh
-./bin/dot-agents install
+cargo install --git https://github.com/Madgeniusblink/dot-agents --path cli --locked
+dot-agents install
+dot-agents doctor
 ```
 
-Or build the Rust CLI (optional, faster for repeated use):
+One-shot helper (clone + cargo + install): [install.sh](../../install.sh) at repo root.
+
+## Without a checkout
+
+After the CLI is on your PATH, only:
 
 ```sh
-cd cli && cargo install --path . --locked
 dot-agents install
 ```
 
-## Option B — manual
+Re-run after upgrading the CLI to refresh files from the new embedded template.
+
+## Development
+
+From a repo clone, `install` prefers `./.agents/` when present. Override:
 
 ```sh
-mkdir -p ~/.agents
-rsync -a --exclude='STRUCTURE.md' /path/to/dot-agents/.agents/ ~/.agents/
+dot-agents install --from /path/to/dot-agents/.agents
 ```
+
+Or set `DOT_AGENTS_SOURCE`.
 
 ## Verify
 
 ```sh
-./bin/dot-agents status
-# or: dot-agents status
+dot-agents status
+dot-agents doctor
 ```
 
-## Environment variables
+## Environment
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | `DOT_AGENTS_HOME` | `$HOME/.agents` | Install target |
-| `DOT_AGENTS_SOURCE` | auto | Path to repo `.agents/` directory |
 
-## Project-only install
+## Project-only
 
-Copy `.agents/` into a repository root. Do not overwrite `~/.agents/` unless you intend a global install.
+Copy `.agents/` into a repository. Do not overwrite `~/.agents/` unless you want a global install.
 
 ## Update
 
-Re-run `install`. The CLI uses `rsync` and does not delete unknown extra files in `~/.agents/` unless you pass `--mirror` (Rust CLI) or `rsync --delete` (manual).
+Run `dot-agents install` again. Use `install --mirror` only if you want to delete extra files in `~/.agents/` that are not in the template.
