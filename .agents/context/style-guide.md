@@ -7,7 +7,6 @@ All text in this tree must follow [ASD-STE100](writing-standard.md). Use the off
 ## Code
 
 - Match the owning repo. If the repo has no style, use a small diff and match nearby code.
-- TypeScript: see [rules/typescript.md](../rules/typescript.md).
 
 ## Files
 

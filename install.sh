@@ -1,21 +1,45 @@
 #!/usr/bin/env sh
-# Install dot-agents CLI then ~/.agents template. Requires Rust (cargo) or dot-agents already on PATH.
+# Install .agents/ to DOT_AGENTS_HOME (default ~/.agents). Skips existing files unless --force.
 set -e
 
-if command -v dot-agents >/dev/null 2>&1; then
-  echo "dot-agents already on PATH"
-else
-  if ! command -v cargo >/dev/null 2>&1; then
-    echo "Install Rust from https://rustup.rs then re-run this script," >&2
-    echo "or: cargo install --git https://github.com/Madgeniusblink/dot-agents --path cli --locked" >&2
-    exit 1
-  fi
-  REPO="${DOT_AGENTS_REPO:-https://github.com/Madgeniusblink/dot-agents.git}"
-  TMP="${TMPDIR:-/tmp}/dot-agents-install-$$"
-  git clone --depth 1 "$REPO" "$TMP"
-  cargo install --path "$TMP/cli" --locked
-  rm -rf "$TMP"
+FORCE=0
+for arg in "$@"; do
+  case "$arg" in
+    --force) FORCE=1 ;;
+    -h|--help)
+      echo "Usage: install.sh [--force]"
+      echo "  DOT_AGENTS_HOME  target directory (default: ~/.agents)"
+      exit 0
+      ;;
+  esac
+done
+
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+SRC="$ROOT/.agents"
+DEST="${DOT_AGENTS_HOME:-$HOME/.agents}"
+
+if [ ! -d "$SRC" ]; then
+  echo "error: missing $SRC" >&2
+  exit 1
 fi
 
-dot-agents install
-dot-agents doctor
+mkdir -p "$DEST"
+
+# Plain copy (no Rust, no rsync required)
+find "$SRC" -type f | while IFS= read -r file; do
+  rel="${file#"$SRC"/}"
+  case "$rel" in
+    STRUCTURE.md) continue ;;
+  esac
+  target="$DEST/$rel"
+  mkdir -p "$(dirname "$target")"
+  if [ "$FORCE" = 1 ] || [ ! -e "$target" ]; then
+    cp "$file" "$target"
+  fi
+done
+
+if [ "$FORCE" = 1 ]; then
+  echo "Installed (overwrote existing files) -> $DEST"
+else
+  echo "Installed (skipped existing files; use --force to overwrite) -> $DEST"
+fi

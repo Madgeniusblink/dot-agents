@@ -12,4 +12,4 @@
 | [decisions/](decisions/) | Settled choices |
 | [skills/self-verify/](skills/self-verify/) | Example verification skill |
 
-Install: `dot-agents install` ([cli/README.md](../cli/README.md)).
+Install: [install.sh](../install.sh) ([standards/install.md](standards/install.md)).

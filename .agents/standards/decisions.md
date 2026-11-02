@@ -8,8 +8,6 @@ Use the ADR format from that site. Local file name:
 
 `.agents/decisions/NNNN-<short-title>.md`
 
-Example: [0001-reference-context-folder.md](../decisions/0001-reference-context-folder.md).
-
 ## Rules
 
 1. Record **settled** choices only. Open questions belong in a spec or issue.

@@ -1,66 +1,29 @@
 # Standard: install
 
-Install the global home at **`~/.agents/`** (user home, not system root).
+Target: **agent home** directory (default `~/.agents` on Unix, `%USERPROFILE%\.agents` on Windows). Not disk `/`.
 
-## Recommended: standalone CLI
+## Scripts (no Rust required)
 
-The **`dot-agents`** binary embeds the template. No clone and no `bin/` script required.
-
-```sh
-cargo install --git https://github.com/Madgeniusblink/dot-agents --path cli --locked
-dot-agents install
-dot-agents doctor
-```
-
-One-shot helper (clone + cargo + install): [install.sh](../../install.sh) at repo root.
-
-## Without a checkout
-
-After the CLI is on your PATH, only:
+From a clone of [Madgeniusblink/dot-agents](https://github.com/Madgeniusblink/dot-agents):
 
 ```sh
-dot-agents install
+./install.sh          # skip files that already exist
+./install.sh --force  # overwrite every template file
 ```
 
-Re-run after upgrading the CLI to refresh files from the new embedded template.
+Windows: `.\install.ps1` or `.\install.ps1 -Force`
 
-## Development
+Environment: `DOT_AGENTS_HOME` overrides the destination.
 
-From a repo clone, `install` prefers `./.agents/` when present. Override:
+## Update behavior
 
-```sh
-dot-agents install --from /path/to/dot-agents/.agents
-```
-
-Or set `DOT_AGENTS_SOURCE`.
-
-## Verify
-
-```sh
-dot-agents status
-dot-agents doctor
-```
-
-## Environment
-
-| Variable | Default | Meaning |
-|----------|---------|---------|
-| `DOT_AGENTS_HOME` | `$HOME/.agents` | Install target |
+- Default: adds **missing** upstream files only. Does **not** change your `memory/`, `decisions/`, or other edited files.
+- `--force` / `-Force`: replaces all template paths with upstream copies.
 
 ## Project-only
 
-Copy `.agents/` into a repository. Do not overwrite `~/.agents/` unless you want a global install.
+Copy `.agents/` into a repository. Do not run `install.sh` against `~/.agents` unless you want a global home.
 
-## Update
+## Repo-only file
 
-Run `dot-agents install` again. Use `install --mirror` only if you want to delete extra files in `~/.agents/` that are not in the template.
-
-## Maintainers (this repo)
-
-After you change `.agents/`, refresh the README tree:
-
-```sh
-dot-agents readme sync
-```
-
-CI runs `dot-agents readme check` on pull requests.
+`.agents/STRUCTURE.md` is for maintainers in git; install scripts exclude it.

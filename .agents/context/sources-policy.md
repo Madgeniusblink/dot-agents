@@ -15,16 +15,17 @@
 | Topic | Primary URL |
 |-------|-------------|
 | Agent entry file | [agents.md](https://agents.md/) |
-| Cursor skills | [cursor.com/docs/skills](https://cursor.com/docs/skills) |
 | Simplified English | [ASD-STE100](https://www.asd-ste100.org/) |
 | Architecture decisions | [adr.github.io](https://adr.github.io/) |
+
+Tool-specific doc links belong in [standards/adapters.md](../standards/adapters.md).
 
 Do not treat blogs or forks as primary if an official doc exists.
 
 ## Dynamic data
 
-Prefer live URLs in `references/` inside skills. Refresh snapshots in [evals/](../evals/) when behavior changes.
+Prefer live URLs in `references/` inside skills.
 
 ## Maintenance
 
-You are not in the business of maintaining vendor text. You maintain **pointers**, **personal memory**, and **verification** ([checklists/](../checklists/), [evals/](../evals/)).
+You are not in the business of maintaining vendor text. You maintain **pointers**, **personal memory**, and **verification** ([checklists/](../checklists/)).

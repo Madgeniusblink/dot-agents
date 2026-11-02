@@ -1,0 +1,37 @@
+name: acceptance
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: No private context or context-install
+        run: |
+          ! grep -rniE 'madgeniusblink/context|context-install' .agents README.md install.sh install.ps1
+
+      - name: Vendor names only in adapters.md
+        run: |
+          hits=$(grep -rniE 'cursor|claude code|codex' .agents README.md \
+            | grep -v '.agents/standards/adapters.md' || true)
+          if [ -n "$hits" ]; then
+            echo "$hits"
+            exit 1
+          fi
+
+      - name: Relative link check
+        run: python3 scripts/check-links.py
+
+      - name: Install preserves existing memory file
+        run: |
+          tmp=$(mktemp -d)
+          export DOT_AGENTS_HOME="$tmp/home"
+          ./install.sh
+          echo "USER LESSON" >> "$DOT_AGENTS_HOME/memory/lessons.md"
+          ./install.sh
+          grep -q 'USER LESSON' "$DOT_AGENTS_HOME/memory/lessons.md"
