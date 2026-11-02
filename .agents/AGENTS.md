@@ -1,30 +1,16 @@
-# `.agents` base layer
+# `.agents` base layer (project)
 
-This directory is the **project-scoped agent base layer**: skills and small
-notes that belong in-repo, not in a personal Context install.
+Short router for **this repository**. Global layout and agent navigation:
+[README.md](../README.md) and [STRUCTURE.md](STRUCTURE.md).
 
-## Entry routing
+## This repo
 
-When this repository has a root [`AGENTS.md`](../AGENTS.md), that file stays the
-**primary router** (bootstrap, safety, links). This file holds **base-layer**
-detail that should not duplicate or inflate the root entry.
+| Path | Load when |
+|------|-----------|
+| [checklists/before-commit.md](checklists/before-commit.md) | Finishing a change |
+| [skills/](skills/) | Task matches skill `description` |
 
-If there is no root `AGENTS.md` yet, treat this file as the starting point and
-add a short root router when the project grows.
-
-## Layout
-
-| Path | Role |
-|------|------|
-| `skills/<name>/SKILL.md` | Project skills (Cursor/Codex/Claude discovery) |
-| `skills/<name>/references/` | Optional on-demand material for a skill |
-
-Do not commit local provider runtimes (for example repo-root `.claude/` hook
-trees) unless the project explicitly documents why they must be shared.
-
-## Skills
-
-Add real procedures under `skills/`. Remove or replace `example-skill` once
-you have your own skills.
+Root [`AGENTS.md`](../AGENTS.md), when you add one, stays the primary bootstrap;
+keep durable detail here or in linked files, not in the root file.
 
 Upstream template: [github.com/Madgeniusblink/dot-agents](https://github.com/Madgeniusblink/dot-agents).
