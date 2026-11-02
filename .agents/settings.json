@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "agents_home": "~/.agents",
+  "default_profile": "fast-prototype",
+  "notes": "Non-secret defaults only."
+}

@@ -40,8 +40,16 @@ for personal checklists, memory, routing, and cross-repo reference.
 
 ## Global home: `~/.agents/`
 
-Canonical layout on your machine (create locally; not fully duplicated in this
-Git repo):
+The **full scaffold** lives in this repo under [`.agents/`](.agents/). Install
+it once on your machine:
+
+```sh
+mkdir -p ~/.agents
+rsync -a --exclude='STRUCTURE.md' /path/to/dot-agents/.agents/ ~/.agents/
+# or: cp -R dot-agents/.agents/. ~/.agents/
+```
+
+Then edit `~/.agents/context/*` and `memory/*` for your environment. Layout:
 
 ```
 ~/.agents/
@@ -115,24 +123,14 @@ Context source or documented in `decisions/` before running `-update`.
 
 ---
 
-## Project layer: this repo’s `.agents/`
+## Project layer: `<repo>/.agents/`
 
-Minimal copy-friendly tree shipped here:
+Copy the same [`.agents/`](.agents/) tree into a repository (or a subset if you
+want a lighter project). Prefer project rules/skills for repo work; keep global
+`~/.agents/` for cross-repo memory, routing, and evals.
 
-```
-.agents/
-├── AGENTS.md
-├── checklists/
-│   └── before-commit.md
-├── skills/
-│   ├── README.md
-│   └── example-skill/
-│       └── SKILL.md
-└── STRUCTURE.md           # Pointer to this README’s global map
-```
-
-Extend a project tree toward the global layout as needed (rules, templates,
-workflows, etc.).
+In this Git repo, `.agents/` is the canonical template — what you see in the
+file tree is the full layout (not a trimmed stub).
 
 ---
 
@@ -155,13 +153,13 @@ git subtree add --prefix=.agents \
   https://github.com/Madgeniusblink/dot-agents.git main --squash
 ```
 
-**Bootstrap global home (one-time on your machine)**
+**Bootstrap global home**
 
 ```sh
-# Example: clone this repo and follow ~/.agents/ layout in README above,
-# or maintain ~/.agents/ separately and link from Cursor user rules to
-# ~/.agents/AGENTS.md
+rsync -a --exclude='STRUCTURE.md' ./.agents/ ~/.agents/
 ```
+
+Point Cursor user rules at `~/.agents/AGENTS.md` when you want global behavior.
 
 ---
 

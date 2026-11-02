@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "allow": {
+    "paths_read": ["~/.agents/**", "~/Code/**"],
+    "tools": ["read", "grep", "shell_non_destructive"]
+  },
+  "deny": {
+    "paths_write": ["~/.ssh/**", "**/.env"],
+    "tools": ["force_push_main", "production_deploy_without_approval"]
+  },
+  "notes": "Tune per host; clients may not enforce this file automatically."
+}

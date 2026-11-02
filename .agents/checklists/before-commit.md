@@ -1,8 +1,6 @@
-# Before commit (project)
+# Before commit
 
-- [ ] Diff matches stated scope
-- [ ] Checks run for touched surface (or reason documented)
-- [ ] No secrets in diff
-- [ ] Commit only if the user asked
-
-For personal/global checklist, see `~/.agents/checklists/before-commit.md`.
+- [ ] Diff matches stated scope (no drive-by edits)
+- [ ] Tests or checks run for touched surface (or documented why not)
+- [ ] No secrets or credentials in diff
+- [ ] User asked to commit (if using agent commit policy)

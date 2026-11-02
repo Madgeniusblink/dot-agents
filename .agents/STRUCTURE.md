@@ -1,18 +1,25 @@
 # Structure map (for agents)
 
-Read the repository [README.md](../README.md) for the full `~/.agents/` tree and
-navigation rules.
+This directory is the **full template tree**. Copy it to `~/.agents/` for a global
+home, or into `<repo>/.agents/` for one project.
 
-**This project**
+| Path | Purpose |
+|------|---------|
+| [AGENTS.md](AGENTS.md) | Short router — start here |
+| [rules/](rules/) | File-scoped rules (`globs` in front matter) |
+| [skills/](skills/) | Skills with `scripts/`, `references/`, `assets/` |
+| [context/](context/) | Glossary, architecture, style |
+| [checklists/](checklists/) | Done criteria |
+| [memory/](memory/) | Durable facts and [lessons.md](memory/lessons.md) |
+| [templates/](templates/) | Spec, PR, ADR shapes |
+| [workflows/](workflows/) | Multi-step pipelines |
+| [profiles/](profiles/) | Strict vs fast modes |
+| [evals/](evals/) | Prompt + expected pairs |
+| [decisions/](decisions/) | Settled choices |
+| [handoffs/](handoffs/) | Session summaries |
+| [schedules/](schedules/) | Recurring maintenance |
+| [routing.json](routing.json) | Task → model |
+| [permissions.json](permissions.json) | Allow/deny lists |
+| [mcp.json](mcp.json) / [settings.json](settings.json) | Client config stubs |
 
-| Path | When to load |
-|------|----------------|
-| [AGENTS.md](AGENTS.md) | Every session in this repo |
-| [checklists/before-commit.md](checklists/before-commit.md) | Before claiming work is done |
-| [skills/](skills/) | When task matches a skill description |
-
-**Global (`~/.agents/`)**
-
-Same layout as README; entrypoint `~/.agents/AGENTS.md`. Use for personal
-memory, routing, evals, and cross-repo reference — not duplicated in this Git
-repo.
+Full narrative: [README.md](../README.md).

@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "servers": {},
+  "notes": "Register MCP servers your client reads; keep secrets out of this file."
+}
