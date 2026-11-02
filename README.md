@@ -6,10 +6,8 @@ Canonical URLs and version pins: [`.agents/context/upstream.json`](.agents/conte
 
 ## Install
 
-Pinned clone (replace `<url>` with `links.repo` in [upstream.json](.agents/context/upstream.json)):
-
 ```sh
-git clone --branch v0.1.1 --depth 1 <url> dot-agents
+git clone --branch v0.1.1 --depth 1 https://github.com/Madgeniusblink/dot-agents.git dot-agents
 cd dot-agents
 ./install.sh
 ```
@@ -30,7 +28,6 @@ Re-run `./install.sh` to add **missing** files and refresh paths in [`.agents/.m
 ├── decisions/
 ├── skills/self-verify/
 ├── rules/
-└── templates/
 ```
 
 Detail: [`.agents/AGENTS.md`](.agents/AGENTS.md). Changes: [CHANGELOG.md](CHANGELOG.md).

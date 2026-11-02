@@ -21,7 +21,7 @@ This tree is a **small core**. It routes. It does not replace vendor docs.
 - Router files and minimal folder layout.
 - [standards/](../standards/) — how to add artifacts (link first).
 - Personal facts: [memory/](../memory/), [decisions/](../decisions/), [checklists/](../checklists/).
-- [templates/](../templates/) **only** when no stable URL exists ([sources-policy.md](sources-policy.md)).
+- New local files only when no stable URL exists ([sources-policy.md](sources-policy.md)).
 
 ## Extend this tree
 
