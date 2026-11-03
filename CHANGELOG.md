@@ -2,6 +2,11 @@
 
 Template semver tracks [upstream.json](.agents/context/upstream.json) `template_version`.
 
+## 0.7.3 — 2026-11-03
+
+- Add [docs/setup.md](docs/setup.md): how to point a tool at `~/.agents`, and why the transport must be a link or an import rather than a copy.
+- No change to the shipped tree or to install.
+
 ## 0.7.2 — 2026-11-03
 
 Trim pass. Rules 48 to 42.
