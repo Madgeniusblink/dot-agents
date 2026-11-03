@@ -21,4 +21,4 @@ Include steps to reproduce, impact, and suggested fix if you have one.
 
 ## Scope
 
-This repo ships markdown and shell/PowerShell installers. It does not run a network service.
+This repo ships markdown only. It runs no network service and installs nothing.

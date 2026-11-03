@@ -1,7 +1,7 @@
 # Point your tool at `~/.agents`
 
-Nothing in this template installs into a tool's own configuration. You wire it
-once per tool, and after that editing a rule takes effect immediately.
+Nothing here writes into a tool's own configuration. You wire it once per tool.
+Your agent home is a git checkout, so after that a rule you edit is live at once.
 
 ## The one rule: use a live transport
 

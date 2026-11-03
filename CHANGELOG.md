@@ -2,6 +2,16 @@
 
 Template semver tracks [upstream.json](.agents/context/upstream.json) `template_version`.
 
+## 0.8.0 — 2026-11-03
+
+Breaking: the agent home is a git checkout, not an install target.
+
+- Removed `install.sh`, `install.ps1`, `test-install-behavior.sh`, and the `.installed` hash manifest. Git answers every question they were built to answer, and answers it better: `git status` for what you changed, `git diff` for how, a merge conflict instead of a silent `kept (edited)`.
+- `standards/install.md` becomes [`standards/adopt.md`](.agents/standards/adopt.md): clone to `~/.agents`, merge from upstream.
+- CI drops the three install-behavior steps.
+
+**Upgrade:** Move your `~/.agents` aside, clone your copy of this template there, and restore your own `rules/`, `memory/`, and `skills/` files into it. Then `git add -A && git commit`. From then on, editing a file is the whole workflow.
+
 ## 0.7.4 — 2026-11-03
 
 - Drop every reference to the optional Rust CLI. It pinned the template seven releases back, would not compile against the current tree, and installed with the two-list policy the hash manifest replaced at 0.3.0. The shell installers are the only supported path.

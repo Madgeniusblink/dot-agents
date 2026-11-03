@@ -22,12 +22,12 @@ Apply this in order. If any step fails, do not add the file.
 
 1. Link live docs first ([sources-policy.md](../context/sources-policy.md)).
 2. Open PRs on **upstream** to change the shared template.
-3. Re-run [install.sh](../../install.sh) to update files you have not touched and add missing files ([install.md](install.md)).
+3. `git merge upstream/main` to take base improvements ([adopt.md](adopt.md)).
 
 ## Coexistence
 
-Install keeps a hash of each file it writes. It replaces a file only if the hash still matches, so your edits and your own files are never overwritten ([install.md](install.md)).
+Your home is a checkout, so `git status` shows exactly what you changed and a merge shows you any line that moved under it ([adopt.md](adopt.md)).
 
-So add beside the base; do not edit it. Base improvements then arrive on the next install with nothing to merge.
+So add beside the base where you can. A file you leave alone merges cleanly; a file you rewrote conflicts, which is the signal you want.
 
 Do not name vendors. Say "your tool."
