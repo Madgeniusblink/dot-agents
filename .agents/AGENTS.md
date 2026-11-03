@@ -1,40 +1,51 @@
 # Agent rules
 
-Short router. Load linked files only when the task needs them.
+Router for this agent home. It names folders, not files. A file you add to a
+folder loads without an edit here.
 
-**Foundation:** [context/foundation.md](context/foundation.md) · **Writing:** [context/writing-standard.md](context/writing-standard.md) · **Standards:** [standards/](standards/) · **Vendor wiring:** [standards/adapters.md](standards/adapters.md)
+## Every session
+
+1. Read [principles.md](principles.md).
+2. Read every `*.md` file in [rules/](rules/).
+3. If `AGENTS.local.md` exists beside this file, read it. It holds your own
+   additions. Where it conflicts with a shipped file, it wins.
+
+## When the task needs it
+
+| Folder | Holds | Use |
+|--------|-------|-----|
+| [memory/](memory/) | Facts: accounts, hosts, preferences, lessons | List the folder. Open files whose name or title matches the task. |
+| [templates/](templates/) | Output shapes | List the folder. Fill the one that matches the output. |
+| [skills/](skills/) | Procedures whose order the model cannot derive | Your tool finds them by `description`. Do not call one by name. |
+| [checklists/](checklists/) | Done criteria | Open before commit or release. |
+| [decisions/](decisions/) | Your settled choices | Read before you reopen a choice. |
+| [context/](context/) | Foundation, writing standard, glossary | Open when a file links it. |
+| [standards/](standards/) | How to add a file to this tree | Open before you add or change a file. |
 
 ## Global vs project
 
 | Copy location | Use |
 |---------------|-----|
-| User agent home (e.g. `~/.agents/`) | Cross-repo memory, checklists, personal decisions |
+| User agent home (e.g. `~/.agents/`) | Cross-repo rules, memory, personal decisions |
 | `<repo>/.agents/` | Rules and skills for one codebase |
 
 When both exist, prefer **project** files for repo work.
 
-## Core map
+## Your changes
 
-| Path | Purpose |
-|------|---------|
-| [standards/](standards/) | How to extend this tree (link-first) |
-| [context/](context/) | Foundation, STE100 pointer, glossary, architecture |
-| [checklists/](checklists/) | Done criteria |
-| [memory/](memory/) | Your lessons and preferences (**you own**) |
-| [decisions/](decisions/) | Your settled choices (**you own**) |
-| [skills/](skills/) | Example: [self-verify](skills/self-verify/SKILL.md) |
-| [rules/](rules/) | Add scoped rules when needed |
+Install refreshes shipped files. Do not edit them; your edit is replaced.
+
+- New rule: add a file to `rules/`.
+- New fact: add a file to `memory/`.
+- New skill or template: add a folder or file beside the shipped ones.
+- Anything else for this router: `AGENTS.local.md`.
+
+To change a shipped file, open a pull request on the upstream template
+([upstream.json](context/upstream.json)). See [standards/extending.md](standards/extending.md).
 
 ## Hooks
 
-Do not put git or IDE hooks in this tree. Use your tool’s hook paths. See [adapters.md](standards/adapters.md).
+Do not put git or IDE hooks in this tree. Use your tool's hook paths.
 
-## Optional extensions
-
-[context/optional-extensions.md](context/optional-extensions.md) — profiles, evals, scratch dirs, worktrees, and other folders you add yourself.
-
-## Maintenance
-
-One idea per file. Review [memory/](memory/) monthly. Upstream template: [upstream.json](context/upstream.json).
-
-Most tools do **not** auto-load this tree. Wire [AGENTS.md](AGENTS.md) in your tool’s user or project rules.
+Most tools do **not** auto-load this tree. Point your tool's user rules at this
+file.

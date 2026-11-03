@@ -1,8 +1,7 @@
-# Memory index
+# Memory
 
-| File | Use |
-|------|-----|
-| [lessons.md](lessons.md) | Mistakes and fixes |
-| [preferences.md](preferences.md) | Stable preferences |
+One fact per file. Agents list this folder and open files by name and title,
+so a new file needs no entry here.
 
-Review monthly; delete stale lines.
+Use this file only for notes that apply to all memory. Review monthly; delete
+stale files.

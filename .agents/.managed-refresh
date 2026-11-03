@@ -1,4 +1,12 @@
 # Refreshed on every install when the file already exists. Everything else: add if missing only.
+# Customize by adding files beside these, or AGENTS.local.md. Do not edit these in your home.
+AGENTS.md
+principles.md
+rules/behavior.md
+templates/
+skills/README.md
+skills/patch/
+skills/self-verify/
 standards/
 context/foundation.md
 context/sources-policy.md

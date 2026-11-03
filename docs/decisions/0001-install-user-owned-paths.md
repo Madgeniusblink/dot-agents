@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (updated)
+Accepted (updated; managed list widened by [0005](0005-dynamic-base-layer.md))
 
 ## Context
 

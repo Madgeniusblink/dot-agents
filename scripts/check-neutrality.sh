@@ -14,8 +14,7 @@ case "$mode" in
     fi
     ;;
   vendors)
-    hits=$(grep -rniE 'cursor|claude code|codex' .agents README.md AGENTS.md CONTRIBUTING.md \
-      | grep -v '.agents/standards/adapters.md' || true)
+    hits=$(grep -rniE 'cursor|claude code|codex' .agents README.md AGENTS.md CONTRIBUTING.md || true)
     if [ -n "$hits" ]; then
       echo "$hits"
       exit 1

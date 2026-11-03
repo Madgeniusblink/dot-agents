@@ -15,9 +15,16 @@ run_install_tests() {
   ./install.sh
   grep -q 'USER LESSON' "$DOT_AGENTS_HOME/memory/lessons.md"
 
-  echo "MY AGENT RULES" > "$DOT_AGENTS_HOME/AGENTS.md"
+  echo "MY AGENT RULES" > "$DOT_AGENTS_HOME/AGENTS.local.md"
+  echo "MY RULE" > "$DOT_AGENTS_HOME/rules/mine.md"
+  echo "STALE" > "$DOT_AGENTS_HOME/AGENTS.md"
+  echo "STALE" > "$DOT_AGENTS_HOME/rules/behavior.md"
   ./install.sh
-  grep -q 'MY AGENT RULES' "$DOT_AGENTS_HOME/AGENTS.md"
+  grep -q 'MY AGENT RULES' "$DOT_AGENTS_HOME/AGENTS.local.md"
+  grep -q 'MY RULE' "$DOT_AGENTS_HOME/rules/mine.md"
+  grep -q 'AGENTS.local.md' "$DOT_AGENTS_HOME/AGENTS.md"
+  ! grep -q 'STALE' "$DOT_AGENTS_HOME/AGENTS.md"
+  ! grep -q 'STALE' "$DOT_AGENTS_HOME/rules/behavior.md"
 
   echo "STALE" > "$DOT_AGENTS_HOME/standards/README.md"
   ./install.sh

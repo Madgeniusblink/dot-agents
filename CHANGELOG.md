@@ -2,6 +2,17 @@
 
 Template semver tracks [upstream.json](.agents/context/upstream.json) `template_version`.
 
+## 0.2.0 — 2026-11-02
+
+- Router names folders, not files. Every `rules/*.md` loads each session; `memory/`, `templates/`, and `skills/` are listed, not indexed. Optional `AGENTS.local.md` holds your router additions.
+- New shipped files: `principles.md`, `rules/behavior.md`, `templates/handoff.md`, `templates/brief.md`, `skills/patch/`.
+- `rules/` is the primary surface; skills are the exception.
+- `.managed-refresh` now includes `AGENTS.md`, `principles.md`, `rules/behavior.md`, `templates/`, and shipped skills.
+- Removed `standards/adapters.md`. No shipped file names a vendor.
+- Removed `rules/README.md` (the router loads every file in `rules/`); guidance moved to `standards/rules.md`.
+
+**Upgrade from 0.1.x:** Re-run install **replaces** `AGENTS.md`. Before you upgrade, move your own `AGENTS.md` lines into `AGENTS.local.md` beside it. Delete an old `rules/README.md` from your home if present.
+
 ## 0.1.2 — 2026-11-02
 
 - Remove shipped `templates/` folder; PR shape uses `.github/pull_request_template.md`.

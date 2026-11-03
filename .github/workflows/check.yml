@@ -61,10 +61,18 @@ jobs:
           if (-not (Select-String -Path (Join-Path $agentHome "memory/lessons.md") -Pattern "USER LESSON" -Quiet)) {
             throw "memory/lessons.md was overwritten"
           }
-          Set-Content -Path (Join-Path $agentHome "AGENTS.md") -Value "MY AGENT RULES"
+          Set-Content -Path (Join-Path $agentHome "AGENTS.local.md") -Value "MY AGENT RULES"
+          Set-Content -Path (Join-Path $agentHome "rules/mine.md") -Value "MY RULE"
+          Set-Content -Path (Join-Path $agentHome "AGENTS.md") -Value "STALE"
           ./install.ps1
-          if (-not (Select-String -Path (Join-Path $agentHome "AGENTS.md") -Pattern "MY AGENT RULES" -Quiet)) {
-            throw "AGENTS.md was overwritten"
+          if (-not (Select-String -Path (Join-Path $agentHome "AGENTS.local.md") -Pattern "MY AGENT RULES" -Quiet)) {
+            throw "AGENTS.local.md was overwritten"
+          }
+          if (-not (Select-String -Path (Join-Path $agentHome "rules/mine.md") -Pattern "MY RULE" -Quiet)) {
+            throw "rules/mine.md was overwritten"
+          }
+          if (Select-String -Path (Join-Path $agentHome "AGENTS.md") -Pattern "STALE" -Quiet) {
+            throw "AGENTS.md was not refreshed"
           }
           Set-Content -Path (Join-Path $agentHome "standards/README.md") -Value "STALE"
           ./install.ps1
