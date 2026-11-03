@@ -2,6 +2,13 @@
 
 Template semver tracks [upstream.json](.agents/context/upstream.json) `template_version`.
 
+## 0.7.1 — 2026-11-03
+
+- [boundaries.md](.agents/rules/boundaries.md): an agent does not grant itself authority, weaken a check guarding its current task, or accept its own control change. A narrower instruction wins only where it does not weaken a boundary. Archived material is never current authority.
+- [AGENTS.md](.agents/AGENTS.md): the project-wins-over-home line now carries the boundary carve-out.
+
+**Upgrade:** Re-run install.
+
 ## 0.7.0 — 2026-11-03
 
 Closes the context-repo audit. The remaining 11,700 lines were read or categorically dismissed; nothing further is pending.
