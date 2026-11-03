@@ -2,6 +2,13 @@
 
 Template semver tracks [upstream.json](.agents/context/upstream.json) `template_version`.
 
+## 0.5.1 — 2026-11-03
+
+- Add [report](.agents/skills/report/SKILL.md) skill: loads personal `memory/voice.md` only when reporting status or completion.
+- Document private `voice.md` overlay in [docs/examples/agents-private-memory-voice.md](docs/examples/agents-private-memory-voice.md).
+
+**Upgrade:** Re-run install. Adds the new skill; add `memory/voice.md` yourself if you want custom reporting prefs.
+
 ## 0.5.0 — 2026-11-03
 
 - Removed `memory/MEMORY.md` and `memory/lessons.md`. Both described files you write; any filled copy differed forever. Their two lasting lines are in `principles.md`. `memory/` now ships empty.
