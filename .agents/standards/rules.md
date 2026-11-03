@@ -31,7 +31,7 @@ Some tools support path-scoped front matter (for example `globs:`). If yours doe
 ## Rules
 
 1. One topic per file. File name: `kebab-case` or single topic word.
-2. Body: short bullets. Link [style-guide](../context/style-guide.md) or live docs for detail.
+2. Body: one line per bullet. Link live docs for detail.
 3. Prose: [ASD-STE100](../context/writing-standard.md).
 
 ## Extend

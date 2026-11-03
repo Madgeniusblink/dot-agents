@@ -8,8 +8,9 @@ Template semver tracks [upstream.json](.agents/context/upstream.json) `template_
 - Corrections rewritten as outcomes, not procedures. Each ends with the month added and the task that proves it.
 - CI rejects a correction without `` `YYYY-MM · task` ``.
 - New principle: state the outcome, not the procedure.
+- The template no longer ships empty files. Removed `context/architecture.md`, `context/glossary.md`, `context/style-guide.md`, and `memory/preferences.md`: each existed to be filled, so every copy differed forever and showed as edited on every install. The two style-guide lines moved to `principles.md`.
 
-**Upgrade:** Re-run install. An untouched `rules/behavior.md` is removed and the two new files are added. If you edited it, install keeps it and lists it; move your lines to `rules/preferences.md` and delete it.
+**Upgrade:** Re-run install. An untouched `rules/behavior.md` is removed and the two new files are added. If you edited it, install keeps it and lists it; move your lines to `rules/preferences.md` and delete it. Your filled-in copies of the four removed files are kept and become yours.
 
 ## 0.3.0 — 2026-11-02
 

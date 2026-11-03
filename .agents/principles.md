@@ -19,6 +19,9 @@
 7. **Add beside the base; do not edit it.** Install updates every shipped
    file you have not touched. Your own rules, facts, and skills go in new
    files. Change a shipped file upstream.
-8. **More intelligence needs less text, not more.** Corrections expire;
+8. **Write plainly; match the repo.** Prose follows
+   [ASD-STE100](context/writing-standard.md). Code matches the owning repo.
+   With no repo style, keep the diff small and match nearby code.
+9. **More intelligence needs less text, not more.** Corrections expire;
    boundaries do not. If the set grows while models improve, something is in
    the wrong file.
