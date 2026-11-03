@@ -9,7 +9,7 @@ Apply the user's reporting preferences before the reply leaves chat.
 
 ## Workflow
 
-1. If [memory/voice.md](../../memory/voice.md) exists, read **How to report to me**
+1. If `memory/voice.md` exists under the agent home, read **How to report to me**
    and follow it for this message only.
 2. Otherwise use [principles.md](../../principles.md) and
    [rules/corrections.md](../../rules/corrections.md) for tone and decisions.

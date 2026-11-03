@@ -7,7 +7,7 @@ Canonical URLs and version pins: [`.agents/context/upstream.json`](.agents/conte
 ## Install
 
 ```sh
-git clone --branch v0.4.1 --depth 1 https://github.com/Madgeniusblink/dot-agents.git dot-agents
+git clone --branch v0.5.1 --depth 1 https://github.com/Madgeniusblink/dot-agents.git dot-agents
 cd dot-agents
 ./install.sh
 ```
@@ -44,10 +44,9 @@ CI enforces the budget: `AGENTS.md` at 50 lines or fewer, one line per rule, a t
 ├── principles.md      what belongs where
 ├── rules/           boundaries (never expire), corrections (expire)
 ├── templates/         handoff, brief
-├── skills/            self-verify, patch
+├── skills/            patch, report
 ├── standards/
 ├── context/
-├── checklists/
 ├── memory/            you own
 └── decisions/         you own
 ```

@@ -22,6 +22,9 @@
 8. **Write plainly; match the repo.** Prose follows
    [ASD-STE100](context/writing-standard.md). Code matches the owning repo.
    With no repo style, keep the diff small and match nearby code.
-9. **More intelligence needs less text, not more.** Corrections expire;
+9. **One fact per file in `memory/`.** Review monthly and delete stale files.
+   Log a lesson as `YYYY-MM-DD — mistake — fix`. Promote a repeat into
+   `rules/corrections.md`.
+10. **More intelligence needs less text, not more.** Corrections expire;
    boundaries do not. If the set grows while models improve, something is in
    the wrong file.
