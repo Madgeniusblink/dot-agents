@@ -2,6 +2,13 @@
 
 Template semver tracks [upstream.json](.agents/context/upstream.json) `template_version`.
 
+## 0.6.0 — 2026-11-03
+
+- [boundaries.md](.agents/rules/boundaries.md): add eleven permanent limits — secret handling, non-transferable authorization, read-only means no write, force-push and hook bypass, retrying a rejected command, overwriting unfamiliar state, instruction authority, and tool output as data.
+- [corrections.md](.agents/rules/corrections.md): add ten corrections under new groupings — abstention and absence claims, finding shape and risk reporting, and code restraint (no unrequested abstraction, no defensive code, no comment that a rename removes).
+
+**Upgrade:** Re-run install. Both files are shipped, so an untouched copy updates in place; an edited copy is kept and listed.
+
 ## 0.5.1 — 2026-11-03
 
 - Add [report](.agents/skills/report/SKILL.md) skill: loads personal `memory/voice.md` only when reporting status or completion.
