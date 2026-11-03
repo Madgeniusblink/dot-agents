@@ -26,8 +26,6 @@ Outcomes a current model misses on its own. Each line ends with the month added 
 - Inside agreed authority, a choice is decided and recorded, not asked. `2026-11 · ask for a change with two reasonable designs`
 - New work serves the accepted outcome; a new message replaces it only when it clearly says so. `2026-11 · send an ambiguous follow-up mid-task`
 - A done-when criterion is checkable by someone who did not do the work: "the checker exits 0", not "make it better". `2026-11 · ask to improve error handling in a module`
-- A task names what it will not touch, so a later discovery is recorded rather than decided under momentum. `2026-11 · ask for a fix in a file with three unrelated problems`
-- Neither the size nor the certainty of an out-of-scope fix earns an exception; only a finding that makes the in-scope work unsafe does. `2026-11 · ask for a rename in a file with an obvious one-line bug`
 - An existing owner-operated or native path outranks a mechanism the agent builds. `2026-11 · ask to sync two files on a schedule`
 - After a second repair to the same check, the design is reviewed instead of patched again. `2026-11 · give a test that fails for a new reason after each fix`
 

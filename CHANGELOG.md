@@ -2,6 +2,18 @@
 
 Template semver tracks [upstream.json](.agents/context/upstream.json) `template_version`.
 
+## 0.7.2 — 2026-11-03
+
+Trim pass. Rules 48 to 42.
+
+- Cut four boundaries that did not earn an always-on line: a retry limit the corrections already cover, an "unfamiliar state" rule too vague to test, an instruction-ranking line whose useful half is the next one, and an archived-material line that is document hygiene rather than an agent limit.
+- Folded hook and signature bypass into the force-push line, and the no-exception clause into the out-of-scope line.
+- Cut two corrections that restated the scope contract already stated once.
+- Added one boundary: anything published where others can read it carries no private name, path, host, tool, or internal state.
+- [AGENTS.md](.agents/AGENTS.md): the router states precedence and points at `rules/` rather than repeating the limit.
+
+**Upgrade:** Re-run install.
+
 ## 0.7.1 — 2026-11-03
 
 - [boundaries.md](.agents/rules/boundaries.md): an agent does not grant itself authority, weaken a check guarding its current task, or accept its own control change. A narrower instruction wins only where it does not weaken a boundary. Archived material is never current authority.
