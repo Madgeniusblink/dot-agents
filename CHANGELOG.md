@@ -2,6 +2,13 @@
 
 Template semver tracks [upstream.json](.agents/context/upstream.json) `template_version`.
 
+## 0.4.1 — 2026-11-03
+
+- Add [report](.agents/skills/report/SKILL.md) skill: loads personal `memory/voice.md` only when reporting status or completion.
+- Document private `voice.md` overlay in [docs/examples/agents-private-memory-voice.md](docs/examples/agents-private-memory-voice.md).
+
+**Upgrade:** Re-run install. Adds the new skill; create `memory/voice.md` in your private overlay if you want custom reporting prefs.
+
 ## 0.4.0 — 2026-11-02
 
 - `rules/behavior.md` split by decay clock: `rules/boundaries.md` (what needs a human; never expires) and `rules/corrections.md` (what the model misses; expires).
