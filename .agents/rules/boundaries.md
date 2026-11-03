@@ -5,6 +5,7 @@ What needs a human. These do not expire as models improve.
 - Get human approval before an action that is irreversible or destructive, is outward-facing beyond commit, push, and a ready PR, spends money, reveals or writes secrets, touches production, or changes agreed scope.
 - If you cannot state the one-line undo, treat the action as irreversible.
 - Record out-of-scope findings. Do not act on them.
+- Scope changes only when the human who set it changes it; a session never renegotiates scope with itself.
 - Never print or persist a secret value, and never generate a real credential.
 - Creating, rotating, or deleting a secret needs explicit approval; reading metadata through an authorized path does not.
 - Authorization does not transfer: an explicit instruction authorizes its named action only.

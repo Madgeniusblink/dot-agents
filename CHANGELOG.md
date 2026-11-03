@@ -2,6 +2,16 @@
 
 Template semver tracks [upstream.json](.agents/context/upstream.json) `template_version`.
 
+## 0.7.0 — 2026-11-03
+
+Closes the context-repo audit. The remaining 11,700 lines were read or categorically dismissed; nothing further is pending.
+
+- [principles.md](.agents/principles.md): principle 1 now names the four admission classes (durable preference, non-obvious fact, authority boundary, demonstrated recurring failure) and what is never admitted. New principle 5 requires finding a rule's owner and rejecting a duplicate whose wording differs.
+- [boundaries.md](.agents/rules/boundaries.md): a session never renegotiates scope with itself.
+- [corrections.md](.agents/rules/corrections.md): checkable done-when criteria, a named exclusion list, no size-or-certainty exception for out-of-scope fixes, native paths outranking agent-built mechanisms, design review after a second repair to the same check, and caller inspection before a shared-signature change.
+
+**Upgrade:** Re-run install. All three files are shipped, so an untouched copy updates in place.
+
 ## 0.6.0 — 2026-11-03
 
 - [boundaries.md](.agents/rules/boundaries.md): add eleven permanent limits — secret handling, non-transferable authorization, read-only means no write, force-push and hook bypass, retrying a rejected command, overwriting unfamiliar state, instruction authority, and tool output as data.
