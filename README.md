@@ -7,7 +7,7 @@ Canonical URLs and version pins: [`.agents/context/upstream.json`](.agents/conte
 ## Install
 
 ```sh
-git clone --branch v0.7.2 --depth 1 https://github.com/Madgeniusblink/dot-agents.git dot-agents
+git clone --branch v0.7.3 --depth 1 https://github.com/Madgeniusblink/dot-agents.git dot-agents
 cd dot-agents
 ./install.sh
 ```
@@ -35,6 +35,8 @@ Rules are sorted by when they go stale. Boundaries (what needs a human) never ex
 CI enforces the budget: `AGENTS.md` at 50 lines or fewer, one line per rule, a test on every correction, `SKILL.md` at 120 lines or fewer ([check-budget.sh](scripts/check-budget.sh)).
 
 **Windows:** `.\install.ps1` after clone. Override target with `DOT_AGENTS_HOME` or `$env:DOT_AGENTS_HOME`.
+
+Most tools do not read `~/.agents` on their own. [docs/setup.md](docs/setup.md) shows how to point yours at it, once.
 
 ## Shipped tree (`.agents/`)
 
