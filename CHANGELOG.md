@@ -2,6 +2,15 @@
 
 Template semver tracks [upstream.json](.agents/context/upstream.json) `template_version`.
 
+## 0.4.0 — 2026-11-02
+
+- `rules/behavior.md` split by decay clock: `rules/boundaries.md` (what needs a human; never expires) and `rules/corrections.md` (what the model misses; expires).
+- Corrections rewritten as outcomes, not procedures. Each ends with the month added and the task that proves it.
+- CI rejects a correction without `` `YYYY-MM · task` ``.
+- New principle: state the outcome, not the procedure.
+
+**Upgrade:** Re-run install. An untouched `rules/behavior.md` is removed and the two new files are added. If you edited it, install keeps it and lists it; move your lines to `rules/preferences.md` and delete it.
+
 ## 0.3.0 — 2026-11-02
 
 - Install keeps a hash manifest (`.installed`). It replaces a file only if you have not touched it, keeps and lists every file you edited, and removes unchanged files the template stopped shipping.

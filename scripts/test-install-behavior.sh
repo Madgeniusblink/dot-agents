@@ -53,10 +53,10 @@ export DOT_AGENTS_HOME="$M"
 mkdir -p "$M/rules"
 cp "$tmp/tpl/.agents/principles.md" "$M/principles.md"
 echo "OLD EDITED ROUTER" > "$M/AGENTS.md"
-echo "OLD" > "$M/rules/behavior.md"
+echo "OLD" > "$M/rules/boundaries.md"
 inst
 grep -q 'OLD EDITED ROUTER' "$M/AGENTS.md" || fail "migration replaced AGENTS.md"
-grep -q '^OLD$' "$M/rules/behavior.md" || fail "migration replaced rules/behavior.md"
+grep -q '^OLD$' "$M/rules/boundaries.md" || fail "migration replaced rules/boundaries.md"
 echo "UPSTREAM V3" >> "$tmp/tpl/.agents/AGENTS.md"
 echo "UPSTREAM V3" >> "$tmp/tpl/.agents/principles.md"
 inst
