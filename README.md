@@ -7,7 +7,7 @@ Canonical URLs and version pins: [`.agents/context/upstream.json`](.agents/conte
 ## Install
 
 ```sh
-git clone --branch v0.3.0 --depth 1 https://github.com/Madgeniusblink/dot-agents.git dot-agents
+git clone --branch v0.4.0 --depth 1 https://github.com/Madgeniusblink/dot-agents.git dot-agents
 cd dot-agents
 ./install.sh
 ```
@@ -28,9 +28,11 @@ So the template's job is not to give you more instructions. It is to spend as fe
 | **Skill** (`skills/`) | Description always, body when triggered | A procedure |
 | **Fact** (`memory/`) | Read on demand | What the model cannot know |
 
-Nothing goes in because it is true. A file earns its place by changing what the agent does when it is absent. This set should shrink as models improve.
+Nothing goes in because it is true. A file earns its place by changing what the agent does when it is absent.
 
-CI enforces the budget: `AGENTS.md` at 50 lines or fewer, one line per rule, `SKILL.md` at 120 lines or fewer ([check-budget.sh](scripts/check-budget.sh)).
+Rules are sorted by when they go stale. Boundaries (what needs a human) never expire. Corrections (what the model misses) are written as outcomes and each carries the task that proves it; on a model upgrade, run the task without the line and delete it if the output holds. So the set shrinks by construction as models improve.
+
+CI enforces the budget: `AGENTS.md` at 50 lines or fewer, one line per rule, a test on every correction, `SKILL.md` at 120 lines or fewer ([check-budget.sh](scripts/check-budget.sh)).
 
 **Windows:** `.\install.ps1` after clone. Override target with `DOT_AGENTS_HOME` or `$env:DOT_AGENTS_HOME`.
 
@@ -40,7 +42,7 @@ CI enforces the budget: `AGENTS.md` at 50 lines or fewer, one line per rule, `SK
 .agents/
 ├── AGENTS.md          router (folders, not files)
 ├── principles.md      what belongs where
-├── rules/behavior.md  always on
+├── rules/           boundaries (never expire), corrections (expire)
 ├── templates/         handoff, brief
 ├── skills/            self-verify, patch
 ├── standards/

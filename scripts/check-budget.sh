@@ -1,5 +1,6 @@
 #!/usr/bin/env sh
-# Context budget: router <= 50 lines, one line per rule, skill <= 120 lines.
+# Context budget: router <= 50 lines, one line per rule, skill <= 120 lines,
+# every correction dated with its retirement test.
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT/.agents"
@@ -21,6 +22,11 @@ for f in rules/*.md; do
     END { exit bad }
   ' "$f" || status=1
 done
+
+# A correction carries its death condition: `YYYY-MM · task that proves it`.
+if [ -f rules/corrections.md ]; then
+  awk '/^- / && $0 !~ /`[0-9][0-9][0-9][0-9]-[0-9][0-9] · [^`]+`$/ { print "rules/corrections.md:" NR ": correction lacks `YYYY-MM · test task`"; bad=1 } END { exit bad }' rules/corrections.md || status=1
+fi
 
 for f in skills/*/SKILL.md; do
   [ -e "$f" ] || continue

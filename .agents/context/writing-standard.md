@@ -19,4 +19,4 @@ Code comments in this tree should follow the same rules when you add them.
 
 ## Code style
 
-For programming style, see [style-guide.md](style-guide.md). STE100 applies to **prose**, not to code syntax.
+STE100 applies to **prose**, not to code syntax. Code matches the owning repo.
