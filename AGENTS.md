@@ -13,7 +13,7 @@ You work on the **dot-agents template repository**, not only on `~/.agents/`.
 
 ## Install behavior
 
-[install.sh](install.sh) and [install.ps1](install.ps1) refresh **upstream-owned** paths under `.agents/`. They **never** overwrite existing `memory/` or `decisions/` files in the target home.
+[install.sh](install.sh) and [install.ps1](install.ps1) keep a hash manifest (`.installed`) in the target home. They replace a file only if it is unchanged since they wrote it.
 
 ## Checks
 

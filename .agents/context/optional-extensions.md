@@ -2,7 +2,7 @@
 
 The base template stays small so any engineer, PM, founder, or CTO can adopt it without noise.
 
-Add these **only when you need them**. None of them load automatically from `~/.agents/` unless you link them from `AGENTS.local.md` or a skill.
+Add these **only when you need them**. None of them load automatically from `~/.agents/` unless a file in `rules/` or a skill points at them.
 
 | Extension | What it is | How it works |
 |-----------|------------|--------------|

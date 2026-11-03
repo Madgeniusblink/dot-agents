@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted. Install and `AGENTS.local.md` parts superseded by [0006](0006-install-manifest.md).
 
 ## Context
 

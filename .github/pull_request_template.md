@@ -5,4 +5,4 @@
 ## Test plan
 
 - [ ] Acceptance checks in CI (or equivalent read-only checks)
-- [ ] Install behavior: shipped files refreshed; memory/, decisions/, and added files protected
+- [ ] Install behavior: untouched files updated; edited and added files kept
