@@ -7,7 +7,7 @@ Canonical URLs and version pins: [`.agents/context/upstream.json`](.agents/conte
 ## Install
 
 ```sh
-git clone --branch v0.5.1 --depth 1 https://github.com/Madgeniusblink/dot-agents.git dot-agents
+git clone --branch v0.6.0 --depth 1 https://github.com/Madgeniusblink/dot-agents.git dot-agents
 cd dot-agents
 ./install.sh
 ```
