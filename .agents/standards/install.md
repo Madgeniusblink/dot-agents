@@ -2,7 +2,7 @@
 
 Target: **agent home** directory (default `~/.agents` on Unix, `$HOME\.agents` on Windows when `$HOME` is set). Not disk `/`.
 
-## Scripts (no Rust required)
+## Scripts
 
 From a clone (see [upstream.json](../context/upstream.json) → `links.repo` or `links.raw_tag`):
 
@@ -10,31 +10,22 @@ From a clone (see [upstream.json](../context/upstream.json) → `links.repo` or 
 ./install.sh
 ```
 
-Windows: `.\install.ps1`
+Windows: `.\install.ps1`. `DOT_AGENTS_HOME` overrides the destination.
 
-Environment: `DOT_AGENTS_HOME` overrides the destination. On Unix, `HOME` must be set when `DOT_AGENTS_HOME` is unset.
+## Manifest
 
-Optional CLI: [upstream.json](../context/upstream.json) → `links.cli_install` (same rules; reads `.user-owned` and `.managed-refresh`).
+Install writes `.installed` in your home: one SHA-256 per file, as installed. On the next install, per shipped file:
 
-## Policy files (single source of truth)
+| On disk | Action |
+|---------|--------|
+| Missing | Add it |
+| Same as the new version | Nothing to do |
+| Same as `.installed` (you did not touch it) | Replace with the new version |
+| Anything else (you edited it, or it predates the manifest) | Keep it and print `kept (edited)` |
 
-| File | Role |
-|------|------|
-| [`.user-owned`](../.user-owned) | Prefixes never overwritten once a file exists (`memory/`, `decisions/`). |
-| [`.managed-refresh`](../.managed-refresh) | Paths replaced on every install when present: router, principles, shipped rules, templates, skills, standards, core context. |
+A file the template stopped shipping is removed if unchanged, else kept.
 
-Installers do **not** copy these two files into your home. They read them from the template checkout.
-
-## Update behavior
-
-| Case | On re-run |
-|------|-----------|
-| Missing file | Added |
-| Path under `.user-owned` and file exists | Skipped |
-| Path under `.managed-refresh` and file exists | Refreshed from template |
-| Any other existing file (e.g. `AGENTS.local.md`, your own `rules/*.md`, `checklists/`, `data-locations.md`) | Skipped |
-
-See [CHANGELOG.md](../../CHANGELOG.md) when managed paths change.
+Your own files (`rules/mine.md`, `memory/*`, `decisions/*`) are never shipped, so install never touches them. An edited shipped file stops getting updates; delete it to take the current version.
 
 ## Project copy
 

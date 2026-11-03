@@ -7,14 +7,30 @@ Canonical URLs and version pins: [`.agents/context/upstream.json`](.agents/conte
 ## Install
 
 ```sh
-git clone --branch v0.2.0 --depth 1 https://github.com/Madgeniusblink/dot-agents.git dot-agents
+git clone --branch v0.3.0 --depth 1 https://github.com/Madgeniusblink/dot-agents.git dot-agents
 cd dot-agents
 ./install.sh
 ```
 
-Re-run `./install.sh` to add **missing** files and refresh shipped paths in [`.agents/.managed-refresh`](.agents/.managed-refresh), including `AGENTS.md`. It does **not** overwrite paths in [`.agents/.user-owned`](.agents/.user-owned) or files the template does not ship.
+Re-run `./install.sh` to update. It replaces a file only if you have not touched it since the last install, and lists every file it kept ([install.md](.agents/standards/install.md)).
 
-Customize by adding files: your own `rules/*.md`, `memory/*.md`, skills, and an optional `AGENTS.local.md` for router additions. Do not edit shipped files; install replaces them.
+Customize by adding files: your own `rules/*.md`, `memory/*.md`, and skills. `AGENTS.md` is a router of links; there is nothing in it to edit.
+
+## Why it is small
+
+Your agent's context is mostly spent before your instructions are read. Tool definitions, MCP servers, and the system prompt come first. `AGENTS.md` is last in line and competes with all of it.
+
+So the template's job is not to give you more instructions. It is to spend as few tokens as possible correcting the model, and to keep everything else out of the always-on path.
+
+| Kind | Cost | Put here |
+|------|------|----------|
+| **Rule** (`rules/`) | Always loaded, so one line | A behavior the model gets wrong |
+| **Skill** (`skills/`) | Description always, body when triggered | A procedure |
+| **Fact** (`memory/`) | Read on demand | What the model cannot know |
+
+Nothing goes in because it is true. A file earns its place by changing what the agent does when it is absent. This set should shrink as models improve.
+
+CI enforces the budget: `AGENTS.md` at 50 lines or fewer, one line per rule, `SKILL.md` at 120 lines or fewer ([check-budget.sh](scripts/check-budget.sh)).
 
 **Windows:** `.\install.ps1` after clone. Override target with `DOT_AGENTS_HOME` or `$env:DOT_AGENTS_HOME`.
 

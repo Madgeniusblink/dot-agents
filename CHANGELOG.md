@@ -2,6 +2,16 @@
 
 Template semver tracks [upstream.json](.agents/context/upstream.json) `template_version`.
 
+## 0.3.0 — 2026-11-02
+
+- Install keeps a hash manifest (`.installed`). It replaces a file only if you have not touched it, keeps and lists every file you edited, and removes unchanged files the template stopped shipping.
+- Removed `.user-owned` and `.managed-refresh`. The manifest measures what you edited instead of guessing.
+- `AGENTS.md` is a router of links. No `AGENTS.local.md`: your additions go in `rules/`, `memory/`, and `skills/`.
+- Every rule in `rules/behavior.md` is one line.
+- CI budget check: `AGENTS.md` at 50 lines or fewer, one line per rule, `SKILL.md` at 120 lines or fewer.
+
+**Upgrade:** No action needed. The first install under 0.3.0 has no manifest, so it keeps every existing file that differs from 0.3.0 and lists it. Delete a listed file you never edited to take the current version. If you used `AGENTS.local.md` in 0.2.0, move its lines into a file in `rules/`.
+
 ## 0.2.0 — 2026-11-02
 
 - Router names folders, not files. Every `rules/*.md` loads each session; `memory/`, `templates/`, and `skills/` are listed, not indexed. Optional `AGENTS.local.md` holds your router additions.
@@ -33,4 +43,4 @@ Template semver tracks [upstream.json](.agents/context/upstream.json) `template_
 - OSS: CONTRIBUTING, SECURITY, issue/PR templates, root AGENTS.md, admission test, multi-OS CI.
 - CLI moved to [dot-agents-cli](https://github.com/Madgeniusblink/dot-agents-cli) (see `links.cli_install`).
 
-When `.managed-refresh` changes, bump `template_version`, tag, and note here.
+When install behavior or shipped files change, bump `template_version`, tag, and note here.

@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (updated; managed list widened by [0005](0005-dynamic-base-layer.md))
+Superseded by [0006](0006-install-manifest.md)
 
 ## Context
 

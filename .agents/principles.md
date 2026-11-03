@@ -14,8 +14,8 @@
    vendor documentation.
 5. **One idea per file.** Keep a skill under 120 lines. Longer detail goes in
    that skill's `references/`.
-6. **Add beside the base; do not edit it.** Shipped files refresh on install.
-   Your own rules, facts, and skills go in new files. Change a shipped file
-   upstream.
+6. **Add beside the base; do not edit it.** Install updates every shipped
+   file you have not touched. Your own rules, facts, and skills go in new
+   files. Change a shipped file upstream.
 7. **More intelligence needs less text, not more.** A set that grows as models
    improve is measuring the wrong thing.

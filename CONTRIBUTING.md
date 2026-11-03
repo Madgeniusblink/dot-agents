@@ -5,7 +5,7 @@ Thanks for improving the shared template.
 ## Before you open a PR
 
 1. Read [AGENTS.md](AGENTS.md) and the [admission test](.agents/standards/extending.md#admission-test-before-you-add-a-file).
-2. Run the same checks as CI locally if you can: neutrality greps, link check, install tests (see [.github/workflows/check.yml](.github/workflows/check.yml)).
+2. Run the same checks as CI locally if you can: neutrality greps, link check, budget check, install tests (see [.github/workflows/check.yml](.github/workflows/check.yml)).
 3. Do not name vendors in shipped files. Say "your tool."
 4. Record **template** design choices in [docs/decisions/](docs/decisions/), not in `.agents/decisions/` (user-owned).
 

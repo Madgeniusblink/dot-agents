@@ -1,5 +1,6 @@
 #!/usr/bin/env sh
 # Install .agents/ to DOT_AGENTS_HOME (default ~/.agents).
+# Replaces a file only if it is unchanged since install wrote it (.installed manifest).
 set -e
 
 for arg in "$@"; do
@@ -8,8 +9,8 @@ for arg in "$@"; do
       echo "Usage: install.sh"
       echo "  DOT_AGENTS_HOME  target directory (default: ~/.agents)"
       echo ""
-      echo "Adds missing files. Refreshes paths listed in .agents/.managed-refresh."
-      echo "Never overwrites paths listed in .agents/.user-owned once present."
+      echo "Adds missing files. Replaces a file only if it is unchanged since the last install."
+      echo "Keeps any file you edited, and lists it. Removes unchanged files the template no longer ships."
       exit 0
       ;;
     *)
@@ -32,80 +33,67 @@ if [ ! -d "$SRC" ]; then
   exit 1
 fi
 
-# Repo-only policy files (read from template source, not copied to DEST).
-skip_install_meta() {
-  case "$1" in
-    .user-owned|.managed-refresh) return 0 ;;
-    *) return 1 ;;
-  esac
-}
+if command -v sha256sum >/dev/null 2>&1; then
+  hash_file() { sha256sum "$1" | cut -c1-64; }
+else
+  hash_file() { shasum -a 256 "$1" | cut -c1-64; }
+fi
 
-# rel uses / separators.
-matches_rule_line() {
-  _rel="$1"
-  _line="$2"
-  [ -z "$_line" ] && return 1
-  case "$_line" in
-    */)
-      case "$_rel" in
-        "${_line%/}"|"${_line%/}"/*) return 0 ;;
-      esac
-      ;;
-    *)
-      [ "$_rel" = "$_line" ] && return 0
-      ;;
-  esac
-  return 1
-}
-
-matches_list() {
-  _rel="$1"
-  _listfile="$2"
-  while IFS= read -r line || [ -n "$line" ]; do
-    line="${line%%#*}"
-    line=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-    if matches_rule_line "$_rel" "$line"; then
-      return 0
-    fi
-  done < "$_listfile"
-  return 1
-}
-
-is_user_owned() {
-  matches_list "$1" "$SRC/.user-owned"
-}
-
-is_managed_refresh() {
-  matches_list "$1" "$SRC/.managed-refresh"
-}
-
-should_copy() {
-  _rel="$1"
-  _target="$2"
-  if [ ! -e "$_target" ]; then
-    return 0
-  fi
-  if is_user_owned "$_rel"; then
-    return 1
-  fi
-  if is_managed_refresh "$_rel"; then
-    return 0
-  fi
-  return 1
-}
-
+MANIFEST="$DEST/.installed"
 mkdir -p "$DEST"
+[ -f "$MANIFEST" ] || : > "$MANIFEST"
+NEW="$MANIFEST.new"
+: > "$NEW"
 
-find "$SRC" -type f | while IFS= read -r file; do
-  rel="${file#"$SRC"/}"
-  if skip_install_meta "$rel"; then
-    continue
-  fi
+# Manifest line: <sha256>  <relative path>
+recorded() {
+  awk -v r="$1" 'substr($0, 67) == r { print substr($0, 1, 64); exit }' "$MANIFEST"
+}
+
+LIST="$(mktemp)"
+trap 'rm -f "$LIST"' EXIT
+(cd "$SRC" && find . -type f | sed 's|^\./||' | sort) > "$LIST"
+
+while IFS= read -r rel; do
+  file="$SRC/$rel"
   target="$DEST/$rel"
-  if should_copy "$rel" "$target"; then
+  new=$(hash_file "$file")
+  if [ ! -e "$target" ]; then
     mkdir -p "$(dirname "$target")"
     cp "$file" "$target"
+    echo "$new  $rel" >> "$NEW"
+    continue
   fi
-done
+  have=$(hash_file "$target")
+  old=$(recorded "$rel")
+  if [ "$have" = "$new" ]; then
+    echo "$new  $rel" >> "$NEW"
+  elif [ -n "$old" ] && [ "$have" = "$old" ]; then
+    cp "$file" "$target"
+    echo "$new  $rel" >> "$NEW"
+    echo "updated: $rel"
+  else
+    # Edited, or present before the manifest existed. Never guess: keep it.
+    [ -n "$old" ] && echo "$old  $rel" >> "$NEW"
+    echo "kept (edited): $rel"
+  fi
+done < "$LIST"
 
-echo "Installed (missing added; managed paths refreshed; user-owned unchanged) -> $DEST"
+# Files install wrote that the template no longer ships: remove if unchanged.
+while IFS= read -r line; do
+  rel="${line#????????????????????????????????????????????????????????????????  }"
+  old="${line%%  *}"
+  grep -qxF "$rel" "$LIST" && continue
+  target="$DEST/$rel"
+  [ -e "$target" ] || continue
+  if [ "$(hash_file "$target")" = "$old" ]; then
+    rm "$target"
+    echo "removed: $rel"
+  else
+    echo "kept (edited, no longer shipped): $rel"
+  fi
+done < "$MANIFEST"
+
+mv "$NEW" "$MANIFEST"
+echo "Installed -> $DEST"
+echo "A kept file gets no updates. Delete one you never edited to take the current version."
