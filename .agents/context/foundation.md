@@ -6,7 +6,7 @@ This tree is a **small core**. It routes. It does not replace vendor docs.
 
 1. Give any model a **short entry** ([AGENTS.md](../AGENTS.md)).
 2. Point to **live, credible URLs** for formats and product behavior.
-3. Keep **local files** only for what you own: memory, decisions, lessons, checklists.
+3. Keep **local files** only for what you own: memory, decisions, lessons.
 4. **Do not add what the model already knows.** Link out. Delete restated manuals, formats, and generic rules ([extending.md](../standards/extending.md) admission test).
 
 ## What we do not maintain
@@ -20,7 +20,7 @@ This tree is a **small core**. It routes. It does not replace vendor docs.
 
 - Router files and minimal folder layout.
 - [standards/](../standards/) — how to add artifacts (link first).
-- Personal facts: [memory/](../memory/), [decisions/](../decisions/), [checklists/](../checklists/).
+- Personal facts: [memory/](../memory/), [decisions/](../decisions/).
 - New local files only when no stable URL exists ([sources-policy.md](sources-policy.md)).
 
 ## Extend this tree
