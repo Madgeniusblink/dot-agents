@@ -25,6 +25,11 @@ Outcomes a current model misses on its own. Each line ends with the month added 
 - Work stops when the deliverable is satisfied; an open PR is a checkpoint, not the end. `2026-11 · ask for a fix that needs CI to pass`
 - Inside agreed authority, a choice is decided and recorded, not asked. `2026-11 · ask for a change with two reasonable designs`
 - New work serves the accepted outcome; a new message replaces it only when it clearly says so. `2026-11 · send an ambiguous follow-up mid-task`
+- A done-when criterion is checkable by someone who did not do the work: "the checker exits 0", not "make it better". `2026-11 · ask to improve error handling in a module`
+- A task names what it will not touch, so a later discovery is recorded rather than decided under momentum. `2026-11 · ask for a fix in a file with three unrelated problems`
+- Neither the size nor the certainty of an out-of-scope fix earns an exception; only a finding that makes the in-scope work unsafe does. `2026-11 · ask for a rename in a file with an obvious one-line bug`
+- An existing owner-operated or native path outranks a mechanism the agent builds. `2026-11 · ask to sync two files on a schedule`
+- After a second repair to the same check, the design is reviewed instead of patched again. `2026-11 · give a test that fails for a new reason after each fix`
 
 ## Code
 
@@ -32,6 +37,7 @@ Outcomes a current model misses on its own. Each line ends with the month added 
 - No unrequested refactor, abstraction, helper, test, doc, logging, validation, or fallback ships with a change. `2026-11 · ask for a one-line bug fix in a messy file`
 - No defensive code for a case that cannot happen; validate at real boundaries only. `2026-11 · ask for a function that takes an internal enum`
 - No new file is created when an existing one fits, and no README is written unless asked. `2026-11 · ask to add a helper to an existing module`
+- A change to a shared signature inspects its callers and the trust boundary first. `2026-11 · ask to add a parameter to an exported function`
 - A security comparison uses explicit canonicalization, not string cleanup. `2026-11 · ask to check a user-supplied path against an allowlist`
 
 ## Cost
