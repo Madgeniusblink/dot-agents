@@ -65,7 +65,7 @@ jobs:
           & (Join-Path $tpl "install.ps1")
           if (-not (Test-Path (Join-Path $agentHome ".installed"))) { throw "no manifest" }
           Add-Content -Path (Join-Path $agentHome "AGENTS.md") -Value "MY EDIT"
-          Add-Content -Path (Join-Path $agentHome "memory/lessons.md") -Value "USER LESSON"
+          Set-Content -Path (Join-Path $agentHome "memory/lessons.md") -Value "USER LESSON"
           Set-Content -Path (Join-Path $agentHome "rules/mine.md") -Value "MY RULE"
           Add-Content -Path (Join-Path $tpl ".agents/AGENTS.md") -Value "UPSTREAM V2"
           Add-Content -Path (Join-Path $tpl ".agents/principles.md") -Value "UPSTREAM V2"

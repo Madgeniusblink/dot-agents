@@ -25,12 +25,11 @@ grep -qE '^(updated|kept|removed)' "$tmp/out" && fail "clean re-run changed some
 
 # User edits and additions.
 echo "MY EDIT" >> "$H/AGENTS.md"
-echo "USER LESSON" >> "$H/memory/lessons.md"
+echo "USER LESSON" > "$H/memory/lessons.md"
 echo "MY RULE" > "$H/rules/mine.md"
 
 # Upstream changes three files and drops one.
 echo "UPSTREAM V2" >> "$tmp/tpl/.agents/AGENTS.md"
-echo "UPSTREAM V2" >> "$tmp/tpl/.agents/memory/lessons.md"
 echo "UPSTREAM V2" >> "$tmp/tpl/.agents/principles.md"
 rm "$tmp/tpl/.agents/templates/brief.md"
 inst

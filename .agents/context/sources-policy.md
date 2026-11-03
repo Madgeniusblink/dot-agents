@@ -26,4 +26,4 @@ Prefer live URLs in `references/` inside skills.
 
 ## Maintenance
 
-You are not in the business of maintaining vendor text. You maintain **pointers**, **personal memory**, and **verification** ([checklists/](../checklists/)).
+You are not in the business of maintaining vendor text. You maintain **pointers**, **personal memory**, and **corrections** ([rules/](../rules/)).

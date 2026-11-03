@@ -2,6 +2,14 @@
 
 Template semver tracks [upstream.json](.agents/context/upstream.json) `template_version`.
 
+## 0.5.0 — 2026-11-03
+
+- Removed `memory/MEMORY.md` and `memory/lessons.md`. Both described files you write; any filled copy differed forever. Their two lasting lines are in `principles.md`. `memory/` now ships empty.
+- Removed `checklists/`, `standards/checklists.md`, and `skills/self-verify/`. Their items are things a current model does unprompted, or already sit in `rules/`.
+- Shipped tree: 29 files to 22.
+
+**Upgrade:** Re-run install. Untouched copies of the removed files are deleted. Filled-in copies are kept and become yours.
+
 ## 0.4.0 — 2026-11-02
 
 - `rules/behavior.md` split by decay clock: `rules/boundaries.md` (what needs a human; never expires) and `rules/corrections.md` (what the model misses; expires).

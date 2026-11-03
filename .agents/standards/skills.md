@@ -4,8 +4,8 @@ Format and discovery: your tool's current docs. Prose: [ASD-STE100](../context/w
 
 Rules come first. A skill is the exception: use one only when a procedure has steps whose order the model cannot derive ([principles.md](../principles.md)).
 
-Examples in this repo: [self-verify](../skills/self-verify/SKILL.md), [patch](../skills/patch/SKILL.md).
+Example in this repo: [patch](../skills/patch/SKILL.md).
 
 ## Extend
 
-Add a skill only when a procedure repeats. Promote from [memory/lessons.md](../memory/lessons.md) after the same mistake three times.
+Add a skill only when a procedure repeats. Promote a lesson logged in `memory/` after the same mistake three times.

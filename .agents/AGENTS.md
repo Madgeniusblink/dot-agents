@@ -9,7 +9,6 @@ Router. Links only. Read the first two rows every session; open the rest when th
 | Facts you cannot know | [memory/](memory/) — list it; open what matches the task |
 | Output shapes | [templates/](templates/) — list it; fill the one that matches |
 | Procedures | [skills/](skills/) — your tool finds them by `description` |
-| Done criteria | [checklists/](checklists/) |
 | Settled choices | [decisions/](decisions/) |
 | Foundation and writing | [context/](context/) |
 | Adding a file here | [standards/](standards/) |

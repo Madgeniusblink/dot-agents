@@ -36,4 +36,4 @@ Some tools support path-scoped front matter (for example `globs:`). If yours doe
 
 ## Extend
 
-Promote from [lessons.md](../memory/lessons.md). Do not duplicate [standards/](.) text in every rule.
+Promote a lesson logged in `memory/` after it repeats. Do not duplicate [standards/](.) text in every rule.
