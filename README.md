@@ -7,7 +7,7 @@ Canonical URLs and version pins: [`.agents/context/upstream.json`](.agents/conte
 ## Install
 
 ```sh
-git clone --branch v0.7.3 --depth 1 https://github.com/Madgeniusblink/dot-agents.git dot-agents
+git clone --branch v0.7.4 --depth 1 https://github.com/Madgeniusblink/dot-agents.git dot-agents
 cd dot-agents
 ./install.sh
 ```
@@ -63,7 +63,7 @@ DOT_AGENTS_HOME=/path/to/your-repo/.agents ./install.sh
 
 ## Maintainer docs
 
-[CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md) · optional CLI in [upstream.json](.agents/context/upstream.json) → `links.cli_install`
+[CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md)
 
 ## License
 

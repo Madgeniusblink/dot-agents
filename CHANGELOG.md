@@ -2,6 +2,10 @@
 
 Template semver tracks [upstream.json](.agents/context/upstream.json) `template_version`.
 
+## 0.7.4 — 2026-11-03
+
+- Drop every reference to the optional Rust CLI. It pinned the template seven releases back, would not compile against the current tree, and installed with the two-list policy the hash manifest replaced at 0.3.0. The shell installers are the only supported path.
+
 ## 0.7.3 — 2026-11-03
 
 - Add [docs/setup.md](docs/setup.md): how to point a tool at `~/.agents`, and why the transport must be a link or an import rather than a copy.
