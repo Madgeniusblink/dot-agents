@@ -16,7 +16,7 @@
 | Simplified English | [ASD-STE100](https://www.asd-ste100.org/) |
 | Architecture decisions | [adr.github.io](https://adr.github.io/) |
 
-Tool-specific doc links belong in [standards/adapters.md](../standards/adapters.md).
+Tool-specific docs change often. Do not copy or pin them here; say "your tool" and let the reader use their tool's current docs.
 
 Do not treat blogs or forks as primary if an official doc exists.
 

@@ -10,6 +10,5 @@ Public contract for extending this tree. **Writing:** [ASD-STE100](../context/wr
 | Decisions | [decisions.md](decisions.md) |
 | Install | [install.md](install.md) |
 | Extend / upstream | [extending.md](extending.md) |
-| **Vendor wiring** | [adapters.md](adapters.md) |
 
 Optional folder types: [optional-extensions.md](../context/optional-extensions.md).

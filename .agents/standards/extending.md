@@ -5,7 +5,7 @@
 | Term | Meaning |
 |------|---------|
 | **Upstream** | This template repo ([upstream.json](../context/upstream.json)) |
-| **Overlay** | Your files beside upstream (memory, extra skills) |
+| **Overlay** | Your files beside upstream: new rules, memory, skills, `AGENTS.local.md` |
 | **Extend** | Add artifacts using [standards/](.) |
 
 ## Admission test (before you add a file)
@@ -26,6 +26,8 @@ Apply this in order. If any step fails, do not add the file.
 
 ## Coexistence
 
-Default install adds missing files and refreshes only `.managed-refresh` paths. It never overwrites `.user-owned` paths or other files you already edited.
+Default install adds missing files and refreshes `.managed-refresh` paths, which include the router, principles, shipped rules, templates, and skills. It never overwrites `.user-owned` paths or files that upstream does not ship.
 
-Vendor names: [adapters.md](adapters.md) only.
+So add beside the base; do not edit it. Base improvements then arrive on the next install with nothing to merge.
+
+Do not name vendors. Say "your tool."

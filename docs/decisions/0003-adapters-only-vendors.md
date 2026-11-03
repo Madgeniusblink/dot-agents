@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Superseded by [0005](0005-dynamic-base-layer.md). `adapters.md` is removed; no shipped file names a vendor.
 
 ## Context
 

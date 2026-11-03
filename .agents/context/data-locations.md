@@ -17,7 +17,7 @@ One map for paths agents and humans share. Update when your layout changes.
 
 ## Provider defaults (do not assume)
 
-Your tool may use its own config dirs. Prefer the table above in **user rules** so every model gets the same path. See [adapters.md](../standards/adapters.md).
+Your tool may use its own config dirs. Prefer the table above in **user rules** so every model gets the same path.
 
 Optional scratch or worktree paths you define yourself: [optional-extensions.md](optional-extensions.md).
 

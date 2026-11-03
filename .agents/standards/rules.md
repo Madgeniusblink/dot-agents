@@ -2,7 +2,11 @@
 
 Path: `.agents/rules/<topic>.md`
 
-Scoped rules (optional, tool-specific): some tools support YAML front matter with `globs:` so a rule loads only for matching paths. See [adapters.md](adapters.md). If your tool does not use `globs`, write plain markdown rules.
+`rules/` is the primary surface. The router loads every `*.md` file in it each session, so a new file needs no router edit. Keep each file short; every line costs context in every session.
+
+The shipped [behavior.md](../rules/behavior.md) refreshes on install. Add your own rules in a separate file.
+
+Some tools support path-scoped front matter (for example `globs:`). If yours does, see its current docs. Otherwise write plain markdown rules.
 
 ## Rules
 
