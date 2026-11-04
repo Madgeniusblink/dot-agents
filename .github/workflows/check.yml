@@ -28,7 +28,7 @@ jobs:
         shell: bash
         run: |
           test -f .agents/standards/README.md
-          test -f .agents/standards/install.md
+          test -f .agents/standards/adopt.md
           test -f .agents/context/data-locations.md
           test -f .agents/context/upstream.json
 
@@ -41,41 +41,5 @@ jobs:
         if: runner.os != 'Windows'
         run: python3 scripts/check-links.py
 
-      - name: Install behavior (sh)
-        if: runner.os != 'Windows'
-        shell: bash
-        run: sh scripts/test-install-behavior.sh
 
-      - name: Install unknown flag fails (sh)
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          if ./install.sh --forse; then exit 1; fi
 
-      - name: Install behavior (ps1)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $tpl = Join-Path $env:RUNNER_TEMP "tpl"
-          New-Item -ItemType Directory -Force -Path $tpl | Out-Null
-          Copy-Item install.ps1 $tpl
-          Copy-Item .agents (Join-Path $tpl ".agents") -Recurse
-          $agentHome = Join-Path $env:RUNNER_TEMP "agents-home"
-          $env:DOT_AGENTS_HOME = $agentHome
-          & (Join-Path $tpl "install.ps1")
-          if (-not (Test-Path (Join-Path $agentHome ".installed"))) { throw "no manifest" }
-          Add-Content -Path (Join-Path $agentHome "AGENTS.md") -Value "MY EDIT"
-          Set-Content -Path (Join-Path $agentHome "memory/lessons.md") -Value "USER LESSON"
-          Set-Content -Path (Join-Path $agentHome "rules/mine.md") -Value "MY RULE"
-          Add-Content -Path (Join-Path $tpl ".agents/AGENTS.md") -Value "UPSTREAM V2"
-          Add-Content -Path (Join-Path $tpl ".agents/principles.md") -Value "UPSTREAM V2"
-          Remove-Item (Join-Path $tpl ".agents/templates/brief.md")
-          & (Join-Path $tpl "install.ps1")
-          if (-not (Select-String -Path (Join-Path $agentHome "AGENTS.md") -Pattern "MY EDIT" -Quiet)) { throw "edited AGENTS.md replaced" }
-          if (Select-String -Path (Join-Path $agentHome "AGENTS.md") -Pattern "UPSTREAM V2" -Quiet) { throw "edited AGENTS.md merged" }
-          if (-not (Select-String -Path (Join-Path $agentHome "memory/lessons.md") -Pattern "USER LESSON" -Quiet)) { throw "memory edit replaced" }
-          if (-not (Select-String -Path (Join-Path $agentHome "rules/mine.md") -Pattern "MY RULE" -Quiet)) { throw "user rule touched" }
-          if (-not (Select-String -Path (Join-Path $agentHome "principles.md") -Pattern "UPSTREAM V2" -Quiet)) { throw "untouched file not updated" }
-          if (Test-Path (Join-Path $agentHome "templates/brief.md")) { throw "unchanged dropped file not removed" }
-          & (Join-Path $tpl "install.ps1")
-          if (-not (Select-String -Path (Join-Path $agentHome "AGENTS.md") -Pattern "MY EDIT" -Quiet)) { throw "edit lost on second install" }

@@ -4,9 +4,9 @@ One map for paths agents and humans share. Update when your layout changes.
 
 ## Global home
 
-| What | Default path | Override |
-|------|----------------|----------|
-| Agent home | `~/.agents/` | `DOT_AGENTS_HOME` |
+| What | Path |
+|------|------|
+| Agent home | `~/.agents/`, a git checkout you own |
 
 ## Project (optional)
 

@@ -21,10 +21,9 @@ private repo (for example `agents-private`) and install into `~/.agents`.
 
 1. Commit `memory/voice.md` in your private repo (only the tree you own:
    `memory/`, `rules/`, `decisions/`, extra `skills/`).
-2. Copy or merge into `DOT_AGENTS_HOME` (default `~/.agents`), or clone the
-   private repo as your agent home.
-3. Re-run [install.sh](../../install.sh) from [dot-agents](https://github.com/Madgeniusblink/dot-agents).
-   The manifest keeps any file you edited; it only adds missing upstream files.
+2. Clone that private repo to `~/.agents`. It is your agent home, not a copy
+   of one.
+3. Commit the change. The home is the checkout, so it is live at once.
 
 ## Token efficiency
 

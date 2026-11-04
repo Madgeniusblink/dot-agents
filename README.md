@@ -1,18 +1,25 @@
 # dot-agents
 
-Filesystem template for agent rules: install `.agents/` into a **global home** or a **project** repo. The router names folders, not files, so what you add loads without edits and base improvements arrive on the next install.
+Filesystem template for agent rules. Your agent home is a git checkout, not an install target, so a file you edit is live at once. The router names folders, not files, so what you add loads with no edit to it.
 
 Canonical URLs and version pins: [`.agents/context/upstream.json`](.agents/context/upstream.json).
 
-## Install
+## Start
+
+Press **Use this template**, make your copy private, then clone it to your agent home:
 
 ```sh
-git clone --branch v0.7.4 --depth 1 https://github.com/Madgeniusblink/dot-agents.git dot-agents
-cd dot-agents
-./install.sh
+git clone <your-copy> ~/.agents
 ```
 
-Re-run `./install.sh` to update. It replaces a file only if you have not touched it since the last install, and lists every file it kept ([install.md](.agents/standards/install.md)).
+Take later improvements with a merge:
+
+```sh
+cd ~/.agents && git remote add upstream https://github.com/Madgeniusblink/dot-agents
+git fetch upstream && git merge upstream/main
+```
+
+A conflict is the point: it shows the line that moved under a rule you rewrote. There is no installer, no copy, and no manifest, because `git status` and `git diff` already answer every question one would need to reinvent ([adopt.md](.agents/standards/adopt.md)).
 
 Customize by adding files: your own `rules/*.md`, `memory/*.md`, and skills. `AGENTS.md` is a router of links; there is nothing in it to edit.
 
@@ -33,8 +40,6 @@ Nothing goes in because it is true. A file earns its place by changing what the 
 Rules are sorted by when they go stale. Boundaries (what needs a human) never expire. Corrections (what the model misses) are written as outcomes and each carries the task that proves it; on a model upgrade, run the task without the line and delete it if the output holds. So the set shrinks by construction as models improve.
 
 CI enforces the budget: `AGENTS.md` at 50 lines or fewer, one line per rule, a test on every correction, `SKILL.md` at 120 lines or fewer ([check-budget.sh](scripts/check-budget.sh)).
-
-**Windows:** `.\install.ps1` after clone. Override target with `DOT_AGENTS_HOME` or `$env:DOT_AGENTS_HOME`.
 
 Most tools do not read `~/.agents` on their own. [docs/setup.md](docs/setup.md) shows how to point yours at it, once.
 
@@ -57,9 +62,7 @@ Detail: [`.agents/AGENTS.md`](.agents/AGENTS.md). Changes: [CHANGELOG.md](CHANGE
 
 ## Project copy
 
-```sh
-DOT_AGENTS_HOME=/path/to/your-repo/.agents ./install.sh
-```
+A repository gets its own `.agents/`, committed with that repository. Copy in the files that repository needs. It is not a checkout of this one.
 
 ## Maintainer docs
 

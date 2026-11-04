@@ -11,9 +11,9 @@ You work on the **dot-agents template repository**, not only on `~/.agents/`.
 | Template repo decisions | [docs/decisions/](docs/decisions/) |
 | Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) |
 
-## Install behavior
+## Adopting this tree
 
-[install.sh](install.sh) and [install.ps1](install.ps1) keep a hash manifest (`.installed`) in the target home. They replace a file only if it is unchanged since they wrote it.
+There is no installer. An agent home is a clone of a repository like this one, so an edited file is live at once and `git` reports every difference ([.agents/standards/adopt.md](.agents/standards/adopt.md)).
 
 ## Checks
 
