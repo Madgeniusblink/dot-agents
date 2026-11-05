@@ -12,10 +12,13 @@ if [ "$n" -gt 50 ]; then
   status=1
 fi
 
-# A rule is one line: no wrapped or indented continuation, no multi-line paragraph.
+# A rule is one line: no wrapped or indented continuation, no multi-line
+# paragraph. Prose before the first rule is a preamble, not a rule.
 for f in rules/*.md; do
   [ -e "$f" ] || continue
   awk -v f="$f" '
+    /^- / { started=1 }
+    !started { next }
     /^[ \t]+[^ \t]/ { print f ":" NR ": rule continues on an indented line"; bad=1 }
     /^[^ \t#-]/ && prev ~ /^[^ \t#-]/ { print f ":" NR ": paragraph spans more than one line"; bad=1 }
     { prev = $0 }

@@ -66,7 +66,8 @@ whole tree; most of it is there to be opened on demand.
 sh ~/.agents/scripts/check.sh
 ```
 
-Budget, links, and neutrality. Run it after any edit you make inside the home.
+Context budget and relative links. Run it after any edit you make inside the
+home.
 
 ## Edit it
 
