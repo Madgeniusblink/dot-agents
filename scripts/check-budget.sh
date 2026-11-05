@@ -28,6 +28,7 @@ if [ -f rules/corrections.md ]; then
   awk '/^- / && $0 !~ /`[0-9][0-9][0-9][0-9]-[0-9][0-9] · [^`]+`$/ { print "rules/corrections.md:" NR ": correction lacks `YYYY-MM · test task`"; bad=1 } END { exit bad }' rules/corrections.md || status=1
 fi
 
+# A skill is <= 120 lines and carries frontmatter whose name is its directory.
 for f in skills/*/SKILL.md; do
   [ -e "$f" ] || continue
   n=$(wc -l < "$f" | tr -d ' ')
@@ -35,6 +36,17 @@ for f in skills/*/SKILL.md; do
     echo "$f: $n lines (max 120). Move detail to references/."
     status=1
   fi
+  dir=$(basename "$(dirname "$f")")
+  name=$(awk 'NR==1 && $0 != "---" { exit } NR>1 && $0 == "---" { exit } /^name:/ { gsub(/^name:[ \t]*|["'"'"']/, ""); print; exit }' "$f")
+  if [ "$name" != "$dir" ]; then
+    echo "$f: frontmatter name is [$name], directory is [$dir]."
+    status=1
+  fi
+  grep -q '^description:' "$f" || { echo "$f: frontmatter has no description. A tool finds a skill by it."; status=1; }
+done
+
+for d in skills/*/; do
+  [ -e "$d/SKILL.md" ] || { echo "$d: no SKILL.md."; status=1; }
 done
 
 [ "$status" -eq 0 ] && echo "budget OK"

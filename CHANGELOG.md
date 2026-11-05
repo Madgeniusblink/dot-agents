@@ -10,6 +10,7 @@ Breaking: the repository root is the tree. Everything that was under `.agents/` 
 - The old root `AGENTS.md` (rules for working on this repository) moves to [docs/repo-rules.md](docs/repo-rules.md).
 - New skill [agent-home](skills/agent-home/SKILL.md). It is the surface an agent finds when the home did not load: how to tell a missing home from unwired tooling, how to clone it, how to wire a tool, how to read the rules for one session when wiring is not possible, and how to verify. A skill is found by its `description`, so this works in a tool that never read the router.
 - New [scripts/check.sh](scripts/check.sh) runs budget, links, and neutrality under one exit code. The router names `scripts/` now; before this nothing in the tree did.
+- [check-budget.sh](scripts/check-budget.sh) now checks skill frontmatter: every skill directory holds a `SKILL.md`, its `name` matches the directory, and it has a `description`. A tool finds a skill by its description, so a missing one makes the skill unreachable without any other symptom.
 
 **Upgrade:** Pull into your `~/.agents`. If your home predates this, your files are one directory deeper than the new layout: move the contents of `~/.agents/.agents/` up one level, delete the empty directory, and commit.
 
