@@ -69,6 +69,23 @@ sh ~/.agents/scripts/check.sh
 Context budget and relative links. Run it after any edit you make inside the
 home.
 
+## Update it
+
+The home takes shared files from a template by merge, not by an installer:
+
+```sh
+git -C ~/.agents fetch upstream
+git -C ~/.agents merge upstream/main
+```
+
+Read `CHANGELOG.md` after the merge; a release may ask for a one-time move.
+
+A conflict appears only where the user changed a file the template also
+changed, and that conflict is the report an installer could not give. Resolve
+it, do not discard either side, and do not re-run the merge with a strategy
+that picks a winner for them. If `upstream` is not set, ask for the template's
+URL rather than guessing it.
+
 ## Edit it
 
 The home is a checkout, so an edited file is live at once and `git diff` shows
