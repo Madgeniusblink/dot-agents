@@ -6,7 +6,7 @@
 
 Use the ADR format from that site. Local file name:
 
-`.agents/decisions/NNNN-<short-title>.md`
+`decisions/NNNN-<short-title>.md`
 
 ## Rules
 

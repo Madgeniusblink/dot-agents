@@ -3,7 +3,7 @@
 # every correction dated with its retirement test.
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$ROOT/.agents"
+cd "$ROOT"
 status=0
 
 n=$(wc -l < AGENTS.md | tr -d ' ')

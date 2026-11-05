@@ -3,7 +3,7 @@
 Keep personal reporting prefs out of the public template. Maintain them in a
 private repo (for example `agents-private`) and install into `~/.agents`.
 
-## File: `.agents/memory/voice.md`
+## File: `memory/voice.md`
 
 ```markdown
 # Voice
@@ -27,8 +27,8 @@ private repo (for example `agents-private`) and install into `~/.agents`.
 
 ## Token efficiency
 
-- [AGENTS.md](../../.agents/AGENTS.md) does **not** load `voice.md` every session.
-- [report skill](../../.agents/skills/report/SKILL.md) loads `voice.md` only when
+- [AGENTS.md](../../AGENTS.md) does **not** load `voice.md` every session.
+- [report skill](../../skills/report/SKILL.md) loads `voice.md` only when
   the model is reporting status or completion.
 - Do **not** duplicate these lines in Cursor user rules unless you need a host
   that never reads skills.

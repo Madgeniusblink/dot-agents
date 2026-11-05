@@ -10,7 +10,7 @@ Neutral template must not favor one agent product.
 
 ## Decision
 
-Product names and vendor doc links live only in [adapters.md](../../.agents/standards/adapters.md). Other files say "your tool."
+Product names and vendor doc links live only in `standards/adapters.md`. Other files say "your tool."
 
 ## Consequences
 
