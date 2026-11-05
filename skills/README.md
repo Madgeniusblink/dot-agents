@@ -6,4 +6,4 @@ One directory per skill: `<skill-id>/SKILL.md` plus optional `scripts/`,
 Rules come first. Add a skill only when a procedure has steps whose order the
 model cannot derive. See [principles.md](../principles.md).
 
-Examples: [patch](patch/SKILL.md), [report](report/SKILL.md).
+Examples: [agent-home](agent-home/SKILL.md), [patch](patch/SKILL.md), [report](report/SKILL.md).

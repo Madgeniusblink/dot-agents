@@ -1,6 +1,6 @@
 # Standard: rules
 
-Path: `.agents/rules/<topic>.md`
+Path: `rules/<topic>.md`
 
 `rules/` is the primary surface. The router loads every `*.md` file in it each session, so a new file needs no router edit. Keep each file short; every line costs context in every session.
 

@@ -4,12 +4,12 @@
 
 | Version | Supported |
 |---------|-----------|
-| Latest tag in [upstream.json](.agents/context/upstream.json) (`release_tag`) | Yes |
+| Latest tag in [upstream.json](context/upstream.json) (`release_tag`) | Yes |
 | `main` | Best effort |
 
 ## Reporting a vulnerability
 
-Do **not** open a public issue for exploitable security problems in this template or its install scripts.
+Do **not** open a public issue for exploitable security problems in this template or its scripts.
 
 Use GitHub **private vulnerability reporting** for this repository:
 

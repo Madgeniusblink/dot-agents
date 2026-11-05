@@ -16,7 +16,7 @@ Apply this in order. If any step fails, do not add the file.
 2. **Model-knowledge** — Run the task **without** the proposed file. If the result already passes, do not add it. If the model already knows the content (format specs, STE100 rules, generic tool docs), link or delete; do not restate.
 3. **Generalize** — Remove names, chats, branches, and one-off paths. Would another team reuse this?
 4. **Normalize** — One idea per file. Short sentences ([writing-standard.md](../context/writing-standard.md)).
-5. **Decision** — Is this a settled template choice? Record it under [docs/decisions/](../../docs/decisions/) in the **git repo** (not shipped to `~/.agents/`). User choices stay in `.agents/decisions/`.
+5. **Decision** — Is this a settled template choice? Record it under [docs/decisions/](../docs/decisions/) in the **git repo** (not shipped to `~/.agents/`). Your own choices stay in [decisions/](../decisions/).
 
 ## Rules
 

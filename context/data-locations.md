@@ -24,4 +24,4 @@ Optional scratch or worktree paths you define yourself: [optional-extensions.md]
 ## Git
 
 - **Canon** (this template): repository URL in [upstream.json](upstream.json).
-- **`~/.agents/`:** usually not a git repo; if you version it, ignore ephemeral dirs you add locally.
+- **`~/.agents/`:** a checkout of your own fork of this template. Ignore ephemeral dirs you add locally.

@@ -4,14 +4,14 @@ Thanks for improving the shared template.
 
 ## Before you open a PR
 
-1. Read [AGENTS.md](AGENTS.md) and the [admission test](.agents/standards/extending.md#admission-test-before-you-add-a-file).
+1. Read [docs/repo-rules.md](docs/repo-rules.md) and the [admission test](standards/extending.md#admission-test-before-you-add-a-file).
 2. Run the same checks as CI locally if you can: neutrality greps, link check, budget check, the checks in [.github/workflows/check.yml](.github/workflows/check.yml).
 3. Do not name vendors in shipped files. Say "your tool."
-4. Record **template** design choices in [docs/decisions/](docs/decisions/), not in `.agents/decisions/` (user-owned).
+4. Record **template** design choices in [docs/decisions/](docs/decisions/), not in `decisions/` (yours).
 
 ## Versioning
 
-Template version and tag URLs live in [.agents/context/upstream.json](.agents/context/upstream.json) (`template_version`, `release_tag`, `links.raw_tag`). Tag releases on `main` when the template version bumps.
+Template version and tag URLs live in [context/upstream.json](context/upstream.json) (`template_version`, `release_tag`, `links.raw_tag`). Tag releases on `main` when the template version bumps.
 
 ## GitHub account settings (maintainer)
 

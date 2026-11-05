@@ -2,7 +2,7 @@
 
 Filesystem template for agent rules. Your agent home is a git checkout, not an install target, so a file you edit is live at once. The router names folders, not files, so what you add loads with no edit to it.
 
-Canonical URLs and version pins: [`.agents/context/upstream.json`](.agents/context/upstream.json).
+Canonical URLs and version pins: [`context/upstream.json`](context/upstream.json).
 
 ## Start
 
@@ -19,7 +19,7 @@ cd ~/.agents && git remote add upstream https://github.com/Madgeniusblink/dot-ag
 git fetch upstream && git merge upstream/main
 ```
 
-A conflict is the point: it shows the line that moved under a rule you rewrote. There is no installer, no copy, and no manifest, because `git status` and `git diff` already answer every question one would need to reinvent ([adopt.md](.agents/standards/adopt.md)).
+A conflict is the point: it shows the line that moved under a rule you rewrote. There is no installer, no copy, and no manifest, because `git status` and `git diff` already answer every question one would need to reinvent ([adopt.md](standards/adopt.md)).
 
 Customize by adding files: your own `rules/*.md`, `memory/*.md`, and skills. `AGENTS.md` is a router of links; there is nothing in it to edit.
 
@@ -43,26 +43,29 @@ CI enforces the budget: `AGENTS.md` at 50 lines or fewer, one line per rule, a t
 
 Most tools do not read `~/.agents` on their own. [docs/setup.md](docs/setup.md) shows how to point yours at it, once.
 
-## Shipped tree (`.agents/`)
+## The tree
+
+The root of this repository is the tree. Clone it to `~/.agents` and the paths below are live.
 
 ```
-.agents/
+~/.agents/
 ├── AGENTS.md          router (folders, not files)
 ├── principles.md      what belongs where
-├── rules/           boundaries (never expire), corrections (expire)
+├── rules/             boundaries (never expire), corrections (expire)
 ├── templates/         handoff, brief
-├── skills/            patch, report
+├── skills/            agent-home, patch, report
 ├── standards/
 ├── context/
+├── scripts/           check.sh
 ├── memory/            you own
 └── decisions/         you own
 ```
 
-Detail: [`.agents/AGENTS.md`](.agents/AGENTS.md). Changes: [CHANGELOG.md](CHANGELOG.md).
+Detail: [`AGENTS.md`](AGENTS.md). Changes: [CHANGELOG.md](CHANGELOG.md).
 
 ## Project copy
 
-A repository gets its own `.agents/`, committed with that repository. Copy in the files that repository needs. It is not a checkout of this one.
+A repository gets its own `.agents/` directory, committed with that repository. Copy in the files that repository needs. It is not a checkout of this one.
 
 ## Maintainer docs
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check relative markdown links under .agents/ and README.md resolve to existing files."""
+"""Check that relative markdown links resolve to existing files."""
 from __future__ import annotations
 
 import re
@@ -7,7 +7,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SCAN = [ROOT / ".agents", ROOT / "README.md", ROOT / "AGENTS.md"]
+SCAN = [ROOT / "AGENTS.md", ROOT / "principles.md", ROOT / "README.md",
+        ROOT / "rules", ROOT / "context", ROOT / "standards",
+        ROOT / "skills", ROOT / "templates", ROOT / "docs"]
 LINK = re.compile(r"\]\(([^)]+)\)")
 
 

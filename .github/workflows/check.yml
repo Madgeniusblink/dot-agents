@@ -27,10 +27,10 @@ jobs:
       - name: upstream.json paths exist
         shell: bash
         run: |
-          test -f .agents/standards/README.md
-          test -f .agents/standards/adopt.md
-          test -f .agents/context/data-locations.md
-          test -f .agents/context/upstream.json
+          test -f standards/README.md
+          test -f standards/adopt.md
+          test -f context/data-locations.md
+          test -f context/upstream.json
 
       - name: Context budget
         if: runner.os != 'Windows'

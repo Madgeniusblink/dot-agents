@@ -1,6 +1,20 @@
 # Changelog
 
-Template semver tracks [upstream.json](.agents/context/upstream.json) `template_version`.
+Template semver tracks [upstream.json](context/upstream.json) `template_version`.
+
+## 0.9.0 — 2026-11-04
+
+Breaking: the repository root is the tree. Everything that was under `.agents/` now sits at the root, so a clone of this repo *is* a `~/.agents`.
+
+- `git clone <fork> ~/.agents` now lands the router at `~/.agents/AGENTS.md`. Before this, it landed at `~/.agents/.agents/AGENTS.md` and left the contributor rules where the router should be — wrong, and silent about it.
+- The old root `AGENTS.md` (rules for working on this repository) moves to [docs/repo-rules.md](docs/repo-rules.md).
+- New skill [agent-home](skills/agent-home/SKILL.md). It is the surface an agent finds when the home did not load: how to tell a missing home from unwired tooling, how to clone it, how to wire a tool, how to read the rules for one session when wiring is not possible, and how to verify. A skill is found by its `description`, so this works in a tool that never read the router.
+- New [scripts/check.sh](scripts/check.sh) runs budget, links, and neutrality under one exit code. The router names `scripts/` now; before this nothing in the tree did.
+- [check.sh](scripts/check.sh) runs budget and links only. Vendor neutrality is a rule about *this repository*, and a home carries the user's own files, which may name any tool they like. CI still runs [check-neutrality.sh](scripts/check-neutrality.sh) at full strength, where every file is a template file by definition.
+- [check-budget.sh](scripts/check-budget.sh) no longer reads prose above the first rule as a rule. A preamble explaining a `rules/` file is not a rule, and flagging it pushed real files out of house style to satisfy the test.
+- [check-budget.sh](scripts/check-budget.sh) now checks skill frontmatter: every skill directory holds a `SKILL.md`, its `name` matches the directory, and it has a `description`. A tool finds a skill by its description, so a missing one makes the skill unreachable without any other symptom.
+
+**Upgrade:** Pull into your `~/.agents`. If your home predates this, your files are one directory deeper than the new layout: move the contents of `~/.agents/.agents/` up one level, delete the empty directory, and commit.
 
 ## 0.8.0 — 2026-11-03
 
