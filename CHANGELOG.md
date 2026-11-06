@@ -2,6 +2,10 @@
 
 Template semver tracks [upstream.json](context/upstream.json) `template_version`.
 
+## 0.9.1 — 2026-11-05
+
+- [agent-home](skills/agent-home/SKILL.md) gains an **Update it** section. The skill covered clone, wire, read, verify, and edit, but not the merge from upstream, which is the step the user runs most and the only one with a conflict to reason about.
+
 ## 0.9.0 — 2026-11-04
 
 Breaking: the repository root is the tree. Everything that was under `.agents/` now sits at the root, so a clone of this repo *is* a `~/.agents`.
