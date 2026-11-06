@@ -12,7 +12,7 @@ Router. Links only. Read the first two rows every session; open the rest when th
 | Settled choices | [decisions/](decisions/) |
 | Foundation and writing | [context/](context/) |
 | Adding a file here | [standards/](standards/) |
-| Checking this tree | [scripts/](scripts/) — run `scripts/check.sh` |
+| Wiring and checking | [scripts/](scripts/) — `wire.sh`, then `check.sh` |
 
 Project files (`<repo>/.agents/`) win over this home for repo work. [rules/](rules/) states the limit.
 

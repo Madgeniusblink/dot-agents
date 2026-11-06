@@ -36,9 +36,20 @@ home the user filled by hand is their decision, not yours.
 
 ## Wire a tool
 
-Full per-tool steps are in `~/.agents/docs/setup.md`. Read it before wiring.
-The one rule it enforces: the transport must resolve when the tool reads, so a
-symlink or an import line, never a copy. A copy goes stale and says nothing.
+```sh
+sh ~/.agents/scripts/wire.sh            # what it would change
+sh ~/.agents/scripts/wire.sh --apply    # write it
+```
+
+It detects the tools in `$HOME`, adds one import line per always-on file, and
+links `skills/`, which has no import syntax in any tool. `--link` uses symlinks
+for the rules too. It is idempotent, so a second run reports and changes
+nothing. `~/.agents/docs/setup.md` has the per-tool detail and the tools the
+script does not know.
+
+The one rule the script enforces: the transport must resolve when the tool
+reads, so a symlink or an import line, never a copy. A copy goes stale and
+says nothing.
 
 Only `AGENTS.md` and `rules/` need to load every session. The router names
 `memory/`, `templates/`, and `skills/`, so leave those for the model to open

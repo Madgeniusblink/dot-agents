@@ -20,6 +20,16 @@ Only `AGENTS.md` and `rules/` need to load every session. The router names
 `memory/`, `templates/`, and `skills/`, so the model opens those when the task
 matches.
 
+## Do it with the script
+
+```sh
+sh scripts/wire.sh            # prints what it would change
+sh scripts/wire.sh --apply    # writes it
+```
+
+It covers the tools below and is idempotent. Read on for the detail, for a
+tool it does not know, or to wire by hand.
+
 ## Claude Code
 
 User-level rules in `~/.claude/rules/` load in every project with no approval
@@ -43,6 +53,11 @@ Imports expand before the model sees anything and nest up to four hops, so an
 imported file may import others. Add a line when you add a rule file.
 
 Source: [How Claude remembers your project](https://code.claude.com/docs/en/memory).
+
+Skills are the exception to import-only wiring. No tool has an import syntax
+for a directory of skills, so a link is the only live transport. Without one,
+name `~/.agents/skills/` in the tool's instruction file and accept that the
+model decides whether to look.
 
 ## A tool with no import syntax
 
