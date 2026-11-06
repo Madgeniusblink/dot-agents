@@ -2,6 +2,12 @@
 
 Template semver tracks [upstream.json](context/upstream.json) `template_version`.
 
+## 0.10.0 — 2026-11-06
+
+- New [scripts/wire.sh](scripts/wire.sh). It points the agent tools on a machine at the home: it finds the tool directories in `$HOME`, adds one import line per always-on file, and links `skills/`. It prints what it would change and writes nothing until `--apply`, because wiring edits files outside the home. `--link` uses symlinks for the rules too. Running it twice changes nothing.
+- Wiring was the one step in adopting this tree that a model could not derive. Which directory loads without an approval prompt, how far imports nest, and that no tool has an import syntax for a directory of skills are all facts about a tool, not about the tree. Install never needed a script; this did.
+- [agent-home](skills/agent-home/SKILL.md) and [docs/setup.md](docs/setup.md) name the script. The router row for `scripts/` now names both scripts.
+
 ## 0.9.1 — 2026-11-05
 
 - [agent-home](skills/agent-home/SKILL.md) gains an **Update it** section. The skill covered clone, wire, read, verify, and edit, but not the merge from upstream, which is the step the user runs most and the only one with a conflict to reason about.
