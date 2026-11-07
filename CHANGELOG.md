@@ -2,6 +2,10 @@
 
 Template semver tracks [upstream.json](context/upstream.json) `template_version`.
 
+## 0.11.3 — 2026-11-06
+
+- [context.sh](scripts/context.sh) reports a home whose `.gitattributes` marks files `merge=ours` while `merge.ours.driver` is unset. The driver is local config, not something a clone carries, so without it the attribute falls back to a normal merge and those files conflict on every upstream change with no sign of why.
+
 ## 0.11.2 — 2026-11-06
 
 - Fix a shell error in [context.sh](scripts/context.sh) on the clean case it exists to confirm. `grep -c` exits 1 when it matches nothing, so `|| echo 0` appended a second count and the comparison got `0\n0`. A tool config holding no rules of its own is the correct state, so the report failed exactly where it should have said everything is fine.

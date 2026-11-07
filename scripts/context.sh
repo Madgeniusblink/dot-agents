@@ -17,6 +17,15 @@ else
   echo "  NOT a git checkout. You cannot see what you changed."
 fi
 
+# merge=ours without the driver set falls back to a normal merge, silently.
+if [ -f "$HOME_DIR/.gitattributes" ] && grep -q 'merge=ours' "$HOME_DIR/.gitattributes" 2>/dev/null; then
+  if [ "$(git -C "$HOME_DIR" config merge.ours.driver)" != "true" ]; then
+    echo "  .gitattributes marks files merge=ours but merge.ours.driver is unset."
+    echo "  Those files will conflict on every upstream change. Fix:"
+    echo "    git -C $(tilde "$HOME_DIR") config merge.ours.driver true"
+  fi
+fi
+
 echo
 echo "always-on (loads every session):"
 total=0
