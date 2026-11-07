@@ -28,17 +28,31 @@ def check_file(md: Path) -> int:
     return errors
 
 
+# A merge command without --no-edit opens an editor and waits. In a shell no
+# one is watching, that is indistinguishable from a hang.
+BAD_MERGE = re.compile(r"git (?:-C \S+ )?merge (?!--no-edit|--abort|--continue)")
+
+
+def check_merges(md: Path) -> int:
+    errors = 0
+    for i, line in enumerate(md.read_text(encoding="utf-8").splitlines(), 1):
+        if BAD_MERGE.search(line):
+            print(f"{md.relative_to(ROOT)}:{i}: git merge without --no-edit")
+            errors += 1
+    return errors
+
+
 def main() -> int:
     errors = 0
     for path in SCAN:
         if path.is_dir():
             for md in path.rglob("*.md"):
-                errors += check_file(md)
+                errors += check_file(md) + check_merges(md)
         elif path.is_file():
-            errors += check_file(path)
+            errors += check_file(path) + check_merges(path)
     if errors:
         return 1
-    print("link check OK")
+    print("link and command check OK")
     return 0
 
 

@@ -2,6 +2,12 @@
 
 Template semver tracks [upstream.json](context/upstream.json) `template_version`.
 
+## 0.11.1 — 2026-11-06
+
+- Every documented merge now carries `--no-edit`. Without it, `git merge` opens an editor for the merge message and waits. In a shell nobody is watching, that is indistinguishable from a hang, and it stopped a real update mid-command.
+- [check-links.py](scripts/check-links.py) fails on a documented `git merge` that lacks the flag, so the next one cannot ship. `--abort` and `--continue` are allowed.
+- Trimmed [agent-home](skills/agent-home/SKILL.md) back under the 120-line cap after the new text pushed it to 123. The budget caught it; the cap did not move.
+
 ## 0.11.0 — 2026-11-06
 
 - New [scripts/context.sh](scripts/context.sh). It reports what loads into an agent's context and from where: the home's branch and state, the always-on files and their byte cost, the directories the router leaves for later, and for each tool which imports resolve. Reads only.

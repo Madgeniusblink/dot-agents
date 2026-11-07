@@ -52,22 +52,16 @@ sh ~/.agents/scripts/wire.sh            # what it would change
 sh ~/.agents/scripts/wire.sh --apply    # write it
 ```
 
-It detects the tools in `$HOME`, adds one import line per always-on file, and
-links `skills/`, which has no import syntax in any tool. `--link` uses symlinks
-for the rules too. It is idempotent, so a second run reports and changes
-nothing. `~/.agents/docs/setup.md` has the per-tool detail and the tools the
-script does not know.
+It finds the tools in `$HOME`, adds one import line per always-on file, and
+links `skills/`, which no tool can import. `--link` uses symlinks for the rules
+too. Running it twice changes nothing. `~/.agents/docs/setup.md` covers the
+tools it does not know.
 
-The one rule the script enforces: the transport must resolve when the tool
-reads, so a symlink or an import line, never a copy. A copy goes stale and
-says nothing.
+Every transport must resolve when the tool reads, so a symlink or an import
+line, never a copy. A copy goes stale and says nothing.
 
-Only `AGENTS.md` and `rules/` need to load every session. The router names
-`memory/`, `templates/`, and `skills/`, so leave those for the model to open
-when the task matches.
-
-Wiring writes into a tool's own configuration outside the home. Get the user's
-approval first, and name the exact file you will change.
+Wiring writes outside the home. Get the user's approval first, and name the
+exact file you will change.
 
 ## Read it without wiring
 
@@ -97,8 +91,11 @@ The home takes shared files from a template by merge, not by an installer:
 
 ```sh
 git -C ~/.agents fetch upstream
-git -C ~/.agents merge upstream/main
+git -C ~/.agents merge --no-edit upstream/main
 ```
+
+Keep `--no-edit`. Without it git opens an editor for the merge message and
+waits, which looks like a hang in any shell the user is not watching.
 
 Read `CHANGELOG.md` after the merge; a release may ask for a one-time move.
 

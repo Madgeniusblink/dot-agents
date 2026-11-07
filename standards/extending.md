@@ -22,7 +22,7 @@ Apply this in order. If any step fails, do not add the file.
 
 1. Link live docs first ([sources-policy.md](../context/sources-policy.md)).
 2. Open PRs on **upstream** to change the shared template.
-3. `git merge upstream/main` to take base improvements ([adopt.md](adopt.md)).
+3. `git merge --no-edit upstream/main` to take base improvements ([adopt.md](adopt.md)).
 
 ## Coexistence
 
