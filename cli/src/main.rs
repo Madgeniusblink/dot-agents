@@ -10,6 +10,7 @@ mod git;
 mod harness;
 mod home;
 mod memory;
+mod out;
 mod plan;
 mod reset;
 mod scan;
@@ -62,16 +63,25 @@ enum Cmd {
         /// Walk caches, vendored trees, and Library too
         #[arg(long)]
         all: bool,
+        /// Print each file in full, one block per file
+        #[arg(long)]
+        long: bool,
     },
 
     /// The tool's auto memory per repository, what the home already covers, and what to prune
     Memory {
+        /// Print each note in full, one block per note
+        #[arg(long)]
+        long: bool,
         #[command(subcommand)]
         action: Option<MemoryAction>,
     },
 
     /// Every skill each tool can load, with duplicates, and what to remove
     Skills {
+        /// Print each description in full, one block per skill
+        #[arg(long)]
+        long: bool,
         #[command(subcommand)]
         action: Option<SkillsAction>,
     },
@@ -193,15 +203,20 @@ fn run() -> Result<ExitCode> {
             tree::tree(&root, depth, all, home.as_ref());
             Ok(ok)
         }
-        Cmd::Scan { root, all } => {
+        Cmd::Scan { root, all, long } => {
             let home = Home::locate(cli.home).ok();
-            scan::scan(root.unwrap_or_else(home::user_home), all, home.as_ref());
+            scan::scan(
+                root.unwrap_or_else(home::user_home),
+                all,
+                long,
+                home.as_ref(),
+            );
             Ok(ok)
         }
-        Cmd::Memory { action } => {
+        Cmd::Memory { long, action } => {
             let home = Home::locate(cli.home).ok();
             match action {
-                None => memory::list(home.as_ref()),
+                None => memory::list(home.as_ref(), long),
                 Some(MemoryAction::Prune {
                     names,
                     covered,
@@ -213,10 +228,10 @@ fn run() -> Result<ExitCode> {
             }
             Ok(ok)
         }
-        Cmd::Skills { action } => {
+        Cmd::Skills { long, action } => {
             let home = Home::locate(cli.home).ok();
             match action {
-                None => skills::list(home.as_ref()),
+                None => skills::list(home.as_ref(), long),
                 Some(SkillsAction::Remove { names, apply }) => {
                     plan::banner(apply);
                     skills::remove(&names, home.as_ref()).run(apply)?;

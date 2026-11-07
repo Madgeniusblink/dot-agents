@@ -6,6 +6,7 @@
 
 use crate::harness::Claude;
 use crate::home::{rel, tilde, user_home, Home};
+use crate::out;
 use crate::plan::{Action, Plan};
 use crate::reset::timestamp;
 use std::collections::{BTreeMap, BTreeSet};
@@ -30,6 +31,7 @@ pub struct Entry {
     pub file: PathBuf,
     pub name: String,
     pub kind: String,
+    pub description: String,
     pub lines: usize,
     words: BTreeSet<String>,
 }
@@ -106,6 +108,7 @@ pub fn entries(claude: &Claude) -> Vec<Entry> {
                 words: words(&format!("{name} {description} {first}")),
                 name,
                 kind: field(&text, "type").unwrap_or("").to_string(),
+                description: description.to_string(),
                 lines: text.lines().count(),
                 file,
             });
@@ -166,7 +169,8 @@ fn best_match<'a>(e: &Entry, units: &'a [Unit]) -> Option<(f32, &'a str)> {
         .filter(|(s, _)| *s >= SIMILAR)
 }
 
-pub fn list(home: Option<&Home>) {
+pub fn list(home: Option<&Home>, long: bool) {
+    let width = out::width();
     let claude = Claude::new();
     let entries = entries(&claude);
     if entries.is_empty() {
@@ -178,39 +182,46 @@ pub fn list(home: Option<&Home>) {
     }
     let units = home.map(home_units).unwrap_or_default();
     let repos: BTreeSet<&Path> = entries.iter().map(|e| e.dir.as_path()).collect();
-    println!(
-        "claude code auto memory: {} repositories, {} entries. Machine-local; each MEMORY.md loads every session in its repository.",
-        repos.len(),
-        entries.len()
+    out::say(
+        &format!(
+            "claude code auto memory: {} repositories, {} notes. The notes stay on this machine. Each MEMORY.md loads in every session in its repository.",
+            repos.len(),
+            entries.len()
+        ),
+        0,
+        width,
     );
     if units.is_empty() {
-        println!("no home found, so nothing to compare against.");
+        println!("no home found, so there is nothing to compare against.");
     }
     for dir in repos {
         let group: Vec<&Entry> = entries.iter().filter(|e| e.dir == dir).collect();
-        println!();
-        println!("{}  ({} entries)", tilde(dir), group.len());
-        let width = group
+        out::section(&tilde(dir), group.len(), width);
+        let kind_w = group.iter().map(|e| e.kind.len()).max().unwrap_or(0);
+        let items: Vec<out::Row> = group
             .iter()
-            .map(|e| e.name.len())
-            .max()
-            .unwrap_or(0)
-            .min(40);
-        for e in group {
-            let verdict = match best_match(e, &units) {
-                Some((s, place)) if s >= COVERED => format!("covered by {place} ({s:.2})"),
-                Some((s, place)) => format!("similar to {place} ({s:.2})"),
-                None => String::new(),
-            };
-            let name: String = e.name.chars().take(40).collect();
-            println!(
-                "  {:<9} {:<width$}  {:>4} lines  {verdict}",
-                e.kind,
-                name,
-                e.lines,
-                width = width
-            );
-        }
+            .map(|e| {
+                let verdict = match best_match(e, &units) {
+                    Some((s, place)) if s >= COVERED => format!("covered by {place} ({s:.2})"),
+                    Some((s, place)) => format!("similar to {place} ({s:.2})"),
+                    None => String::new(),
+                };
+                if long {
+                    out::Row::new(
+                        &e.name,
+                        format!("{}, {} lines", e.kind, e.lines),
+                        format!("{verdict}\n{}", e.description),
+                    )
+                } else {
+                    out::Row::new(
+                        &e.name,
+                        format!("{:>4} lines", e.lines),
+                        format!("{:<kind_w$}  {verdict}", e.kind),
+                    )
+                }
+            })
+            .collect();
+        out::print(&items, long, width);
     }
 
     let mut by_file: BTreeMap<String, Vec<&Entry>> = BTreeMap::new();
@@ -225,12 +236,20 @@ pub fn list(home: Option<&Home>) {
     }
     let dup: Vec<_> = by_file.iter().filter(|(_, v)| v.len() > 1).collect();
     if !dup.is_empty() {
-        println!();
-        println!("the same note in more than one repository:");
-        for (f, v) in dup {
-            let places: Vec<String> = v.iter().map(|e| tilde(&e.dir)).collect();
-            println!("  {f}  in {}", places.join(", "));
-        }
+        out::section(
+            "the same note in more than one repository",
+            dup.len(),
+            width,
+        );
+        let sep = if long { "\n" } else { ", " };
+        let items: Vec<out::Row> = dup
+            .iter()
+            .map(|(f, v)| {
+                let places: Vec<String> = v.iter().map(|e| tilde(&e.dir)).collect();
+                out::Row::new(f.as_str(), "", format!("in {}", places.join(sep)))
+            })
+            .collect();
+        out::print(&items, long, width);
     }
 
     let covered = entries
@@ -238,13 +257,24 @@ pub fn list(home: Option<&Home>) {
         .filter(|e| best_match(e, &units).is_some_and(|(s, _)| s >= COVERED))
         .count();
     println!();
-    println!(
-        "{covered} covered by the home. A note the home already states is a near-duplicate, the kind that hurts most."
+    out::say(
+        &format!(
+            "the home covers {covered} of these notes. A note that the home already states is a near-duplicate, and that kind hurts most."
+        ),
+        0,
+        width,
     );
-    println!("prune some:    agents memory prune <name>... --apply");
-    println!("prune covered: agents memory prune --covered --apply");
-    println!(
-        "both move the note to ~/.agents-reset/<timestamp>/ and drop its line from MEMORY.md."
+    let mut pairs = vec![
+        ("prune some", "agents memory prune <name>... --apply"),
+        ("prune covered", "agents memory prune --covered --apply"),
+    ];
+    if !long {
+        pairs.push(("read in full", "agents memory --long"));
+    }
+    out::steps(
+        &pairs,
+        &["Both commands move the note to ~/.agents-reset/<timestamp>/ and drop its line from MEMORY.md."],
+        width,
     );
 }
 

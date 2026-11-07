@@ -2,6 +2,7 @@
 //! the same skill twice. Removal moves a skill aside, never deletes it.
 
 use crate::home::{rel, tilde, user_home, Home};
+use crate::out;
 use crate::plan::{Action, Plan};
 use crate::reset::timestamp;
 use std::collections::hash_map::DefaultHasher;
@@ -23,9 +24,7 @@ impl Source {
         match self {
             Source::Home => "home",
             Source::User => "claude code, user skills",
-            Source::Plugin => {
-                "claude code, plugin skills (managed by the plugin; disable it instead)"
-            }
+            Source::Plugin => "claude code, plugin skills",
         }
     }
 }
@@ -105,7 +104,8 @@ fn frontmatter(text: &str) -> (Option<String>, Option<String>, &str) {
     (field("name"), field("description"), &body[4..])
 }
 
-pub fn list(home: Option<&Home>) {
+pub fn list(home: Option<&Home>, long: bool) {
+    let width = out::width();
     let skills = find(home);
     let links = fs::read_dir(user_home().join(".claude").join("skills"))
         .map(|rd| {
@@ -116,35 +116,43 @@ pub fn list(home: Option<&Home>) {
         })
         .unwrap_or_default();
 
+    println!("tools can load {} skills.", skills.len());
     for source in [Source::Home, Source::User, Source::Plugin] {
         let group: Vec<&Skill> = skills.iter().filter(|s| s.source == source).collect();
         if group.is_empty() && !(source == Source::User && !links.is_empty()) {
             continue;
         }
-        println!();
-        println!("{} ({}):", source.label(), group.len());
+        out::section(source.label(), group.len(), width);
+        let mut items = Vec::new();
         if source == Source::User {
             for l in &links {
-                println!(
-                    "  {} -> {}  (a link; those skills are listed under their own source)",
+                items.push(out::Row::new(
                     rel(l),
-                    tilde(&fs::read_link(l).unwrap_or_default())
-                );
+                    "link",
+                    format!("-> {}", tilde(&fs::read_link(l).unwrap_or_default())),
+                ));
             }
         }
-        let width = group.iter().map(|s| s.name.len()).max().unwrap_or(0);
-        for s in group {
-            let desc: String = s.description.chars().take(64).collect();
-            let more = if s.description.chars().count() > 64 {
-                "…"
-            } else {
-                ""
-            };
-            println!(
-                "  {:<width$}  {:>4} lines  {desc}{more}",
-                s.name,
-                s.lines,
-                width = width
+        for s in &group {
+            items.push(out::Row::new(
+                &s.name,
+                format!("{:>4} lines", s.lines),
+                &s.description,
+            ));
+        }
+        out::print(&items, long, width);
+        if source == Source::User && !links.is_empty() {
+            out::say(
+                "A link points to another source. Its skills show under that source.",
+                2,
+                width,
+            );
+        }
+        if source == Source::Plugin {
+            out::say(
+                "A plugin manages these skills. To remove one, disable its plugin.",
+                2,
+                width,
             );
         }
     }
@@ -172,37 +180,56 @@ pub fn list(home: Option<&Home>) {
         println!("no duplicates: every name and every body appears once.");
     }
     if !same_name.is_empty() {
-        println!();
-        println!(
-            "same name in more than one place (the tool picks one; you did not choose which):"
+        out::section("same name in more than one place", same_name.len(), width);
+        let sep = if long { "\n" } else { ", " };
+        let items: Vec<out::Row> = same_name
+            .iter()
+            .map(|group| {
+                let identical = group.iter().all(|s| s.hash == group[0].hash);
+                let places: Vec<String> = group.iter().map(|s| tilde(&s.dir)).collect();
+                out::Row::new(
+                    &group[0].name,
+                    if identical {
+                        "identical"
+                    } else {
+                        "DIFFERENT bodies"
+                    },
+                    places.join(sep),
+                )
+            })
+            .collect();
+        out::print(&items, long, width);
+        out::say(
+            "The tool picks one of each. You did not choose which.",
+            2,
+            width,
         );
-        for group in same_name {
-            let identical = group.iter().all(|s| s.hash == group[0].hash);
-            let places: Vec<String> = group.iter().map(|s| tilde(&s.dir)).collect();
-            println!(
-                "  {}  {}  {}",
-                group[0].name,
-                if identical {
-                    "identical"
-                } else {
-                    "DIFFERENT bodies"
-                },
-                places.join(", ")
-            );
-        }
     }
     if !same_body.is_empty() {
-        println!();
-        println!("same body under different names:");
-        for group in same_body {
-            let places: Vec<String> = group.iter().map(|s| tilde(&s.dir)).collect();
-            println!("  {}", places.join(" = "));
-        }
+        out::section("same body under different names", same_body.len(), width);
+        let sep = if long { "\n" } else { " = " };
+        let items: Vec<out::Row> = same_body
+            .iter()
+            .map(|group| {
+                let names: Vec<&str> = group.iter().map(|s| s.name.as_str()).collect();
+                let places: Vec<String> = group.iter().map(|s| tilde(&s.dir)).collect();
+                out::Row::new(names.join(", "), "", places.join(sep))
+            })
+            .collect();
+        out::print(&items, long, width);
     }
-    println!();
-    println!("remove some:   agents skills remove <name>... --apply");
-    println!("keep only some: agents skills keep <name>... --apply");
-    println!("both move the skill to ~/.agents-reset/<timestamp>/ and never delete.");
+    let mut pairs = vec![
+        ("remove some", "agents skills remove <name>... --apply"),
+        ("keep only some", "agents skills keep <name>... --apply"),
+    ];
+    if !long {
+        pairs.push(("read in full", "agents skills --long"));
+    }
+    out::steps(
+        &pairs,
+        &["Both commands move the skill to ~/.agents-reset/<timestamp>/. They never delete."],
+        width,
+    );
 }
 
 fn aside(names: &[String], keep: bool, home: Option<&Home>) -> Plan {

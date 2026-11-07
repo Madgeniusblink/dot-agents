@@ -5,6 +5,7 @@ use crate::harness::{
     codex_dir, cursor_dir, grok_dir, grok_dropin, Claude, CODEX_PROJECT_DOC_MAX, CURSOR_LINE,
 };
 use crate::home::{expand_home, tilde, Home};
+use crate::out;
 use crate::wire::{dropin_content, generated_content, is_ours};
 use serde_json::Value;
 use std::collections::BTreeSet;
@@ -12,6 +13,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 pub fn status(home: &Home) {
+    let width = out::width();
     println!("home: {}", tilde(&home.dir));
     if home.git(&["rev-parse", "--is-inside-work-tree"]).is_some() {
         let branch = home
@@ -43,45 +45,62 @@ pub fn status(home: &Home) {
     if attributes.contains("merge=ours")
         && home.git(&["config", "merge.ours.driver"]).as_deref() != Some("true")
     {
-        println!("  .gitattributes marks files merge=ours but merge.ours.driver is unset.");
-        println!("  Those files will conflict on every upstream change. Fix:");
+        out::say(
+            ".gitattributes marks files merge=ours, but merge.ours.driver is not set. Those files conflict on every upstream change. To fix, run:",
+            2,
+            width,
+        );
         println!(
             "    git -C {} config merge.ours.driver true",
             tilde(&home.dir)
         );
     }
 
-    println!();
-    println!("always-on (loads every session):");
+    let always_on = home.always_on();
+    out::section("always-on, loads in every session", always_on.len(), width);
     let mut total = 0u64;
-    for f in home.always_on() {
-        let n = fs::metadata(&f).map(|m| m.len()).unwrap_or(0);
+    let mut items = Vec::new();
+    for f in &always_on {
+        let n = fs::metadata(f).map(|m| m.len()).unwrap_or(0);
         total += n;
-        println!(
-            "  {}  {n} bytes",
-            f.file_name().unwrap_or_default().to_string_lossy()
-        );
+        items.push(out::Row::new(
+            f.file_name().unwrap_or_default().to_string_lossy(),
+            format!("{n} bytes"),
+            "",
+        ));
     }
-    println!("  total {total} bytes");
+    items.push(out::Row::new("total", format!("{total} bytes"), ""));
+    out::print(&items, false, width);
 
-    println!();
-    println!("on demand (the router names these; opened when a task matches):");
-    for d in [
+    let demand: Vec<out::Row> = [
         "memory",
         "templates",
         "skills",
         "decisions",
         "standards",
         "context",
-    ] {
-        let p = home.dir.join(d);
-        if p.is_dir() {
-            println!("  {d}/  {} files", count_files(&p));
-        }
-    }
+    ]
+    .iter()
+    .map(|d| home.dir.join(d))
+    .filter(|p| p.is_dir())
+    .map(|p| {
+        out::Row::new(
+            format!("{}/", p.file_name().unwrap_or_default().to_string_lossy()),
+            format!("{} files", count_files(&p)),
+            "",
+        )
+    })
+    .collect();
+    out::section("on demand", demand.len(), width);
+    out::print(&demand, false, width);
+    out::say(
+        "The router names these. A tool opens one when a task matches it.",
+        2,
+        width,
+    );
 
-    println!();
-    println!("what each harness loads:");
+    let harnesses = 3 + usize::from(grok_dir().is_dir()) + usize::from(cursor_dir().is_dir());
+    out::section("what each harness loads", harnesses, width);
     let claude = Claude::new();
     let generated = generated_content(home);
     report_file(
@@ -120,29 +139,27 @@ pub fn status(home: &Home) {
     }
     if cursor_dir().is_dir() {
         println!();
-        println!("cursor: user rules live in the app settings, not a file.");
+        println!("cursor: user rules live in the app settings, not in a file.");
         println!("  Nothing here can read or wire them. Paste the pointer line by hand:");
         println!("    {CURSOR_LINE}");
     }
 
-    dead_hooks(&claude.settings());
+    dead_hooks(&claude.settings(), width);
 
-    println!();
-    println!("links into this home:");
-    let mut found = false;
-    for l in [claude.rules_link(), claude.skills_link()] {
-        if !l.is_symlink() {
-            continue;
-        }
-        found = true;
-        let target = fs::read_link(&l).unwrap_or_default();
+    let links: Vec<PathBuf> = [claude.rules_link(), claude.skills_link()]
+        .into_iter()
+        .filter(|l| l.is_symlink())
+        .collect();
+    out::section("links into this home", links.len(), width);
+    for l in &links {
+        let target = fs::read_link(l).unwrap_or_default();
         if l.exists() {
-            println!("  {} -> {}", tilde(&l), tilde(&target));
+            println!("  {} -> {}", tilde(l), tilde(&target));
         } else {
-            println!("  BROKEN {} -> {}", tilde(&l), target.display());
+            println!("  BROKEN {} -> {}", tilde(l), target.display());
         }
     }
-    if !found {
+    if links.is_empty() {
         println!("  none");
     }
 }
@@ -165,11 +182,16 @@ fn report_file(
     always_on: u64,
     expected: Option<&str>,
 ) {
+    let width = out::width();
     println!();
     if !f.exists() && !f.is_symlink() {
-        println!(
-            "{label}: no file at {}. This harness loads nothing from here.",
-            tilde(f)
+        out::say(
+            &format!(
+                "{label}: no file at {}. This harness loads nothing from here.",
+                tilde(f)
+            ),
+            0,
+            width,
         );
         return;
     }
@@ -182,7 +204,7 @@ fn report_file(
         };
         let path = expand_home(target);
         if !path.exists() {
-            println!("  BROKEN {line}");
+            println!("{}", out::fit(&format!("  BROKEN {line}"), width));
             broken += 1;
         } else if path.starts_with(&home.dir) {
             mine += 1;
@@ -198,25 +220,33 @@ fn report_file(
             tilde(&fs::read_link(f).unwrap_or_default())
         );
     }
-    println!(
-        "  {lines} lines, {bytes} bytes: {mine} imports from this home, {foreign} from elsewhere, {broken} broken"
+    out::say(
+        &format!("{lines} lines, {bytes} bytes: {mine} imports from this home, {foreign} from elsewhere, {broken} broken."),
+        2,
+        width,
     );
     // Codex compares global plus thread instructions against project_doc_max_bytes
     // and warns, but truncates only project files. Crossing it is a signal, not a
     // cut-off. Source: codex-rs/core/src/agents_md_manager.rs.
     if let Some(cap) = cap {
         if bytes + always_on > cap {
-            println!(
-                "  {} bytes with the always-on set, over the {cap} byte",
-                bytes + always_on
+            out::say(
+                &format!(
+                    "{} bytes with the always-on set. That is over the {cap} byte project_doc_max_bytes setting. The harness does not truncate this file, but it warns. Project files then compete for what is left.",
+                    bytes + always_on
+                ),
+                2,
+                width,
             );
-            println!("  project_doc_max_bytes setting. This file is not truncated, but the");
-            println!("  harness warns, and project files then compete for what is left.");
         }
     }
     let ours = is_ours(f);
     if ours && expected.is_some_and(|want| want != text) {
-        println!("  STALE: the home changed since this was written. Run: agents wire --apply");
+        out::say(
+            "STALE: the home changed after wire wrote this file. Run: agents wire --apply",
+            2,
+            width,
+        );
     }
     // Content in the file itself outranks nothing and duplicates the home,
     // unless the file is a link into the home or the home wrote it.
@@ -226,8 +256,10 @@ fn report_file(
         .filter(|l| !l.trim().is_empty() && !l.starts_with('@') && !l.starts_with("<!--"))
         .count();
     if body > 10 && !into_home && !ours {
-        println!(
-            "  {body} lines of rules live in this file, not in the home. Two sources of truth."
+        out::say(
+            &format!("{body} lines of rules live in this file, not in the home. That makes two sources of truth."),
+            2,
+            width,
         );
     }
     // A file the home wrote is a generator's, but it is ours, and status
@@ -243,8 +275,11 @@ fn report_file(
         })
         .take(2)
     {
-        println!("  OWNED BY A GENERATOR: {}:{l}", i + 1);
-        println!("  A regeneration will discard anything added here.");
+        println!(
+            "{}",
+            out::fit(&format!("  OWNED BY A GENERATOR: {}:{l}", i + 1), width)
+        );
+        println!("  A regeneration discards anything that you add here.");
     }
 }
 
@@ -254,7 +289,7 @@ fn canonical(p: &Path) -> PathBuf {
 
 /// A hook naming a path that is gone blocks the tool it guards, and the error
 /// names the script rather than the config that still calls for it.
-fn dead_hooks(settings: &Path) {
+fn dead_hooks(settings: &Path, width: usize) {
     let Ok(text) = fs::read_to_string(settings) else {
         return;
     };
@@ -278,15 +313,19 @@ fn dead_hooks(settings: &Path) {
     if gone.is_empty() {
         return;
     }
-    println!();
-    println!(
-        "hooks in {} naming a path that does not exist:",
-        tilde(settings)
+    out::section(
+        &format!("hooks in {} that name a missing path", tilde(settings)),
+        gone.len(),
+        width,
     );
     for t in &gone {
         println!("  {}", tilde(t));
     }
-    println!("  Each one fails the tool it guards. Remove the hook or restore the file.");
+    out::say(
+        "Each one fails the tool it guards. Remove the hook or restore the file.",
+        2,
+        width,
+    );
 }
 
 fn commands(v: &Value, f: &mut dyn FnMut(&str)) {
