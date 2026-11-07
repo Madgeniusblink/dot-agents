@@ -54,6 +54,85 @@ pub struct Skill {
     pub source: Source,
     pub lines: usize,
     pub hash: u64,
+    pub front: Option<Frontmatter>,
+    pub lint: Vec<Finding>,
+    pub files: Files,
+    pub refs: Refs,
+}
+
+impl Skill {
+    pub fn broken(&self) -> bool {
+        self.lint.iter().any(|f| f.level == Level::Error)
+    }
+
+    pub fn owner(&self) -> Option<&str> {
+        self.front
+            .as_ref()
+            .and_then(|f| f.metadata.get("owner"))
+            .map(String::as_str)
+    }
+}
+
+/// The frontmatter fields the Agent Skills standard defines. Any other
+/// top-level key is kept by name only.
+#[derive(Default, Debug, PartialEq)]
+pub struct Frontmatter {
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub license: Option<String>,
+    pub compatibility: Option<String>,
+    pub metadata: BTreeMap<String, String>,
+    /// `key: value` for each metadata value that YAML does not read as a
+    /// string, such as `version: 1.0`.
+    pub not_strings: Vec<String>,
+    pub allowed_tools: Vec<String>,
+    pub unknown_keys: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Level {
+    Error,
+    Warn,
+}
+
+impl Level {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Level::Error => "error",
+            Level::Warn => "warn",
+        }
+    }
+}
+
+/// One violated rule of the standard. `text` names the value.
+#[derive(Debug)]
+pub struct Finding {
+    pub rule: &'static str,
+    pub level: Level,
+    pub text: String,
+}
+
+impl std::fmt::Display for Finding {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{} {}: {}", self.level.as_str(), self.rule, self.text)
+    }
+}
+
+/// Files beside `SKILL.md`, by top directory, and their total size.
+#[derive(Default, Debug, PartialEq)]
+pub struct Files {
+    pub scripts: usize,
+    pub references: usize,
+    pub assets: usize,
+    pub other: usize,
+    pub bytes: u64,
+}
+
+/// Relative file references in the body: how many resolve, and the rest.
+#[derive(Default, Debug, PartialEq)]
+pub struct Refs {
+    pub ok: usize,
+    pub broken: Vec<String>,
 }
 
 pub fn find(home: Option<&Home>) -> Vec<Skill> {
@@ -93,18 +172,26 @@ fn collect(dir: &Path, source: Source, depth: usize, out: &mut Vec<Skill>) {
     {
         let skill_dir = e.path().parent().unwrap_or(dir).to_path_buf();
         let text = fs::read_to_string(e.path()).unwrap_or_default();
-        let (name, description, body) = frontmatter(&text);
+        let dir_name = skill_dir
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned();
+        let (front, body) = match parse(&text) {
+            Some((f, b)) => (Some(f), b),
+            None => (None, text.as_str()),
+        };
         let mut hasher = DefaultHasher::new();
         body.split_whitespace().for_each(|w| w.hash(&mut hasher));
+        let field =
+            |f: fn(&Frontmatter) -> &Option<String>| front.as_ref().and_then(|x| f(x).clone());
         out.push(Skill {
-            name: name.unwrap_or_else(|| {
-                skill_dir
-                    .file_name()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .into_owned()
-            }),
-            description: description.unwrap_or_default(),
+            name: field(|f| &f.name).unwrap_or_else(|| dir_name.clone()),
+            description: field(|f| &f.description).unwrap_or_default(),
+            lint: lint(front.as_ref(), &dir_name),
+            files: files(&skill_dir),
+            refs: refs(&skill_dir, body),
+            front,
             dir: skill_dir,
             source,
             lines: text.lines().count(),
@@ -113,23 +200,412 @@ fn collect(dir: &Path, source: Source, depth: usize, out: &mut Vec<Skill>) {
     }
 }
 
-/// `name`, `description`, and the body after the frontmatter.
-fn frontmatter(text: &str) -> (Option<String>, Option<String>, &str) {
-    let Some(rest) = text.strip_prefix("---") else {
-        return (None, None, text);
-    };
-    let Some(end) = rest.find("\n---") else {
-        return (None, None, text);
-    };
+/// The frontmatter and the body after it, or `None` when the file does not
+/// open with a `---` block. The YAML this reads is the subset the standard
+/// uses: top-level scalars, one map, and one list.
+pub fn parse(text: &str) -> Option<(Frontmatter, &str)> {
+    let rest = text.strip_prefix("---")?;
+    let end = rest.find("\n---")?;
     let (head, body) = rest.split_at(end);
-    let field = |key: &str| {
-        head.lines().find_map(|l| {
-            l.strip_prefix(key)
-                .and_then(|v| v.strip_prefix(':'))
-                .map(|v| v.trim().trim_matches(['"', '\'']).replace("\\\"", "\""))
-        })
+    let lines: Vec<&str> = head
+        .lines()
+        .skip(1)
+        .map(|l| l.trim_end_matches('\r'))
+        .collect();
+    let mut f = Frontmatter::default();
+    let mut i = 0;
+    while i < lines.len() {
+        let line = lines[i];
+        i += 1;
+        if line.starts_with([' ', '\t']) || line.trim_start().starts_with('#') {
+            continue;
+        }
+        let Some((key, value)) = line.split_once(':') else {
+            continue;
+        };
+        let start = i;
+        while i < lines.len() && (lines[i].starts_with([' ', '\t']) || lines[i].trim().is_empty()) {
+            i += 1;
+        }
+        let (key, value, block) = (key.trim(), value.trim(), &lines[start..i]);
+        match key {
+            "name" => f.name = Some(scalar(value, block).0),
+            "description" => f.description = Some(scalar(value, block).0),
+            "license" => f.license = Some(scalar(value, block).0),
+            "compatibility" => f.compatibility = Some(scalar(value, block).0),
+            "metadata" => metadata(value, block, &mut f),
+            "allowed-tools" => f.allowed_tools = tools(value, block),
+            _ => f.unknown_keys.push(key.to_string()),
+        }
+    }
+    Some((f, &body[4..]))
+}
+
+/// A YAML scalar: plain, quoted, or a `|` or `>` block. The flag is false
+/// when YAML reads the value as something other than a string.
+fn scalar(value: &str, block: &[&str]) -> (String, bool) {
+    if let Some(header) = value.strip_prefix(['|', '>']) {
+        return (block_scalar(value.starts_with('>'), header, block), true);
+    }
+    let joined = std::iter::once(value)
+        .chain(block.iter().map(|l| l.trim()))
+        .filter(|l| !l.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    if let Some(q) = joined.strip_prefix('"') {
+        let mut out = String::new();
+        let mut chars = q.chars();
+        while let Some(c) = chars.next() {
+            match c {
+                '"' => break,
+                '\\' => match chars.next() {
+                    Some('n') => out.push('\n'),
+                    Some('t') => out.push('\t'),
+                    Some(other) => out.push(other),
+                    None => {}
+                },
+                c => out.push(c),
+            }
+        }
+        return (out, true);
+    }
+    if let Some(q) = joined.strip_prefix('\'') {
+        let mut out = String::new();
+        let mut chars = q.chars().peekable();
+        while let Some(c) = chars.next() {
+            if c == '\'' {
+                if chars.peek() != Some(&'\'') {
+                    break;
+                }
+                chars.next();
+            }
+            out.push(c);
+        }
+        return (out, true);
+    }
+    let plain = match joined.find(" #") {
+        Some(j) => joined[..j].trim_end().to_string(),
+        None => joined,
     };
-    (field("name"), field("description"), &body[4..])
+    let string = !(plain.is_empty()
+        || plain.starts_with(['[', '{'])
+        || [
+            "null", "Null", "NULL", "~", "true", "True", "TRUE", "false", "False", "FALSE",
+        ]
+        .contains(&plain.as_str())
+        || [".inf", "-.inf", "+.inf", ".nan", ".NaN"].contains(&plain.as_str())
+        || (plain.chars().any(|c| c.is_ascii_digit())
+            && plain
+                .chars()
+                .all(|c| c.is_ascii_hexdigit() || "+-.xXoO".contains(c))
+            && (plain.parse::<f64>().is_ok()
+                || plain.starts_with("0x")
+                || plain.starts_with("0o"))));
+    (plain, string)
+}
+
+/// The text of a `|` (literal) or `>` (folded) block, with its chomping
+/// indicator: `-` drops the final line break, `+` keeps every trailing one.
+fn block_scalar(folded: bool, header: &str, block: &[&str]) -> String {
+    let indent = block
+        .iter()
+        .find(|l| !l.trim().is_empty())
+        .map(|l| l.len() - l.trim_start().len())
+        .unwrap_or(0);
+    let mut lines: Vec<&str> = block
+        .iter()
+        .map(|l| l.get(indent..).unwrap_or("").trim_end())
+        .collect();
+    let mut trailing = 0;
+    while lines.last().is_some_and(|l| l.is_empty()) {
+        lines.pop();
+        trailing += 1;
+    }
+    let mut out = String::new();
+    if folded {
+        let mut prev_text = false;
+        for l in &lines {
+            if l.is_empty() {
+                out.push('\n');
+                prev_text = false;
+            } else {
+                if prev_text {
+                    out.push(' ');
+                }
+                out.push_str(l);
+                prev_text = true;
+            }
+        }
+    } else {
+        out = lines.join("\n");
+    }
+    if lines.is_empty() {
+        return out;
+    }
+    if header.contains('+') {
+        out.push_str(&"\n".repeat(trailing + 1));
+    } else if !header.contains('-') {
+        out.push('\n');
+    }
+    out
+}
+
+/// `metadata` as a block map or a `{k: v}` flow map. A value YAML does not
+/// read as a string, or a nested value, goes to `not_strings`.
+fn metadata(value: &str, block: &[&str], f: &mut Frontmatter) {
+    let mut entries: Vec<(String, String, Vec<&str>)> = Vec::new();
+    if let Some(inner) = value.strip_prefix('{').and_then(|v| v.strip_suffix('}')) {
+        for pair in inner.split(',').filter(|p| !p.trim().is_empty()) {
+            let (k, v) = pair.split_once(':').unwrap_or((pair, ""));
+            entries.push((k.trim().to_string(), v.trim().to_string(), Vec::new()));
+        }
+    } else if !value.is_empty() {
+        f.not_strings.push(format!("metadata: {value}"));
+        return;
+    } else {
+        let base = block
+            .iter()
+            .find(|l| !l.trim().is_empty())
+            .map(|l| l.len() - l.trim_start().len())
+            .unwrap_or(0);
+        for l in block.iter().filter(|l| !l.trim().is_empty()) {
+            let indent = l.len() - l.trim_start().len();
+            if indent > base {
+                if let Some(e) = entries.last_mut() {
+                    e.2.push(l);
+                }
+                continue;
+            }
+            let (k, v) = l.trim().split_once(':').unwrap_or((l.trim(), ""));
+            entries.push((k.trim().to_string(), v.trim().to_string(), Vec::new()));
+        }
+    }
+    for (k, v, sub) in entries {
+        let k = k.trim_matches(['"', '\'']).to_string();
+        let nested = v.is_empty() && !sub.is_empty();
+        let (text, string) = scalar(&v, &sub);
+        if nested || !string {
+            f.not_strings
+                .push(format!("{k}: {}", if nested { "(nested)" } else { &v }));
+        } else {
+            f.metadata.insert(k, text);
+        }
+    }
+}
+
+/// `allowed-tools` as a space-separated string, a flow list, or a block
+/// list. A separator inside parentheses belongs to the tool, as in
+/// `Bash(git log:*)`. Commas also separate, since tools write them.
+fn tools(value: &str, block: &[&str]) -> Vec<String> {
+    let text = if value.is_empty() {
+        block
+            .iter()
+            .filter_map(|l| l.trim().strip_prefix('-'))
+            .map(|item| scalar(item.trim(), &[]).0)
+            .collect::<Vec<_>>()
+            .join(",")
+    } else if let Some(inner) = value.strip_prefix('[').and_then(|v| v.strip_suffix(']')) {
+        inner
+            .split(',')
+            .map(|item| scalar(item.trim(), &[]).0)
+            .collect::<Vec<_>>()
+            .join(",")
+    } else {
+        scalar(value, block).0
+    };
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    let mut depth = 0usize;
+    for c in text.chars() {
+        match c {
+            '(' => depth += 1,
+            ')' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+        if depth == 0 && (c.is_whitespace() || c == ',') {
+            if !cur.is_empty() {
+                out.push(std::mem::take(&mut cur));
+            }
+        } else {
+            cur.push(c);
+        }
+    }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
+    out
+}
+
+/// Every rule of the Agent Skills standard. A rule on a required field is
+/// an error, because a tool may refuse the skill; the rest warn.
+pub fn lint(front: Option<&Frontmatter>, dir_name: &str) -> Vec<Finding> {
+    let mut out = Vec::new();
+    let mut add = |rule, level, text: String| out.push(Finding { rule, level, text });
+    let Some(f) = front else {
+        add(
+            "frontmatter",
+            Level::Error,
+            "SKILL.md does not open with a block between --- lines".into(),
+        );
+        return out;
+    };
+    match &f.name {
+        None => add("name-required", Level::Error, "no name".into()),
+        Some(name) => {
+            let n = name.chars().count();
+            if !(1..=64).contains(&n) {
+                add(
+                    "name-length",
+                    Level::Error,
+                    format!("name has {n} characters, allowed 1 to 64: {name:?}"),
+                );
+            }
+            if name
+                .chars()
+                .any(|c| c != '-' && !(c.is_alphanumeric() && !c.is_uppercase()))
+            {
+                add(
+                    "name-chars",
+                    Level::Error,
+                    format!("name has a character that is not a lowercase letter, digit, or hyphen: {name:?}"),
+                );
+            }
+            if name.starts_with('-') || name.ends_with('-') || name.contains("--") {
+                add(
+                    "name-hyphens",
+                    Level::Error,
+                    format!("name starts or ends with a hyphen, or has two together: {name:?}"),
+                );
+            }
+            if name != dir_name {
+                add(
+                    "name-matches-dir",
+                    Level::Error,
+                    format!("name is {name}, directory is {dir_name}"),
+                );
+            }
+        }
+    }
+    match &f.description {
+        None => add(
+            "description-required",
+            Level::Error,
+            "no description".into(),
+        ),
+        Some(d) => {
+            let n = d.chars().count();
+            if !(1..=1024).contains(&n) {
+                add(
+                    "description-length",
+                    Level::Error,
+                    format!(
+                        "description has {n} characters, allowed 1 to 1024: {:?}",
+                        out::fit(d, 40)
+                    ),
+                );
+            }
+        }
+    }
+    if let Some(c) = &f.compatibility {
+        let n = c.chars().count();
+        if !(1..=500).contains(&n) {
+            add(
+                "compatibility-length",
+                Level::Warn,
+                format!(
+                    "compatibility has {n} characters, allowed 1 to 500: {:?}",
+                    out::fit(c, 40)
+                ),
+            );
+        }
+    }
+    for kv in &f.not_strings {
+        add(
+            "metadata-strings",
+            Level::Warn,
+            format!("metadata value is not a string: {kv}"),
+        );
+    }
+    out
+}
+
+/// Count every file under the skill directory except `SKILL.md`, by its
+/// top directory. A subdirectory with its own `SKILL.md` is another skill.
+fn files(dir: &Path) -> Files {
+    let mut f = Files::default();
+    let walk = WalkDir::new(dir)
+        .follow_links(false)
+        .into_iter()
+        .filter_entry(|e| {
+            e.depth() == 0 || !(e.file_type().is_dir() && e.path().join("SKILL.md").is_file())
+        });
+    for e in walk.flatten().filter(|e| e.file_type().is_file()) {
+        let rel = e.path().strip_prefix(dir).unwrap_or(e.path());
+        if rel == Path::new("SKILL.md") {
+            continue;
+        }
+        let top = rel.components().next().map(|c| c.as_os_str());
+        match top.and_then(|t| t.to_str()) {
+            Some("scripts") if rel.components().count() > 1 => f.scripts += 1,
+            Some("references") if rel.components().count() > 1 => f.references += 1,
+            Some("assets") if rel.components().count() > 1 => f.assets += 1,
+            _ => f.other += 1,
+        }
+        f.bytes += e.metadata().map(|m| m.len()).unwrap_or(0);
+    }
+    f
+}
+
+/// Resolve each relative file reference in the body against the skill
+/// directory. A reference is a Markdown link target, or a bare path with a
+/// slash whose last part has an extension, such as `scripts/run.py`.
+fn refs(dir: &Path, body: &str) -> Refs {
+    let mut found = std::collections::BTreeSet::new();
+    let mut rest = body;
+    while let Some(i) = rest.find("](") {
+        let after = &rest[i + 2..];
+        let Some(j) = after.find(')') else { break };
+        let target = after[..j].split_whitespace().next().unwrap_or("");
+        let target = target
+            .trim_matches(['<', '>'])
+            .split('#')
+            .next()
+            .unwrap_or("");
+        if !target.is_empty()
+            && !target.contains("://")
+            && !target.starts_with(['/', '~', '$'])
+            && !target.starts_with("mailto:")
+        {
+            found.insert(target.to_string());
+        }
+        rest = &after[j + 1..];
+    }
+    for word in body.split(|c: char| c.is_whitespace() || "`\"'()[]<>,;|*".contains(c)) {
+        let word = word.trim_end_matches(['.', ':', '!', '?']);
+        let path_chars = word
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "._-/+@".contains(c));
+        let mut parts = word.split('/');
+        let first = parts.next().unwrap_or("");
+        let last = word.rsplit('/').next().unwrap_or("");
+        if path_chars
+            && word.contains('/')
+            && !word.starts_with('/')
+            && (first == "." || first == ".." || !first.contains('.'))
+            && last.trim_start_matches('.').contains('.')
+        {
+            found.insert(word.to_string());
+        }
+    }
+    let mut r = Refs::default();
+    for target in found {
+        if dir.join(&target).exists() {
+            r.ok += 1;
+        } else {
+            r.broken.push(target);
+        }
+    }
+    r
 }
 
 pub fn list(home: Option<&Home>, long: bool) {
@@ -162,10 +638,19 @@ pub fn list(home: Option<&Home>, long: bool) {
             }
         }
         for s in &group {
+            let mark = if s.broken() { " BROKEN" } else { "" };
+            let text = if long {
+                details(s)
+            } else {
+                s.description
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            };
             items.push(out::Row::new(
                 &s.name,
-                format!("{:>4} lines", s.lines),
-                &s.description,
+                format!("{:>4} lines{mark}", s.lines),
+                text,
             ));
         }
         out::print(&items, long, width);
@@ -267,6 +752,27 @@ pub fn list(home: Option<&Home>, long: bool) {
     );
 }
 
+/// The `--long` text of a skill: its description, then each fact the
+/// listing found about it, one per line.
+fn details(s: &Skill) -> String {
+    let mut lines = vec![s.description.trim().to_string()];
+    if let Some(owner) = s.owner() {
+        lines.push(format!("owner: {owner}"));
+    }
+    let f = &s.files;
+    if f.scripts + f.references + f.assets + f.other > 0 {
+        lines.push(format!(
+            "files: {} scripts, {} references, {} assets, {} other, {} bytes",
+            f.scripts, f.references, f.assets, f.other, f.bytes
+        ));
+    }
+    for target in &s.refs.broken {
+        lines.push(format!("broken reference: {target}"));
+    }
+    lines.extend(s.lint.iter().map(Finding::to_string));
+    lines.join("\n")
+}
+
 fn aside(names: &[String], keep: bool, home: Option<&Home>) -> Plan {
     let mut plan = Plan::new();
     let skills = find(home);
@@ -341,4 +847,233 @@ pub fn remove(names: &[String], home: Option<&Home>) -> Plan {
 
 pub fn keep(names: &[String], home: Option<&Home>) -> Plan {
     aside(names, true, home)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn front(head: &str) -> Frontmatter {
+        parse(&format!("---\n{head}\n---\nbody\n")).unwrap().0
+    }
+
+    fn rules(head: &str, dir: &str) -> Vec<(&'static str, Level, String)> {
+        lint(Some(&front(head)), dir)
+            .into_iter()
+            .map(|f| (f.rule, f.level, f.text))
+            .collect()
+    }
+
+    #[test]
+    fn reads_every_field_in_each_form() {
+        let f = front(concat!(
+            "name: pdf-tools\n",
+            "description: \"Reads \\\"quoted\\\" PDFs\"\n",
+            "license: 'Apache-2.0, see ''LICENSE'''\n",
+            "compatibility: Needs python3 # a comment\n",
+            "allowed-tools: Bash(git log:*) Read\n",
+            "metadata:\n  owner: example-team\n  version: \"1.0\"\n",
+            "model: fast",
+        ));
+        assert_eq!(f.name.as_deref(), Some("pdf-tools"));
+        assert_eq!(f.description.as_deref(), Some("Reads \"quoted\" PDFs"));
+        assert_eq!(f.license.as_deref(), Some("Apache-2.0, see 'LICENSE'"));
+        assert_eq!(f.compatibility.as_deref(), Some("Needs python3"));
+        assert_eq!(f.allowed_tools, ["Bash(git log:*)", "Read"]);
+        assert_eq!(f.metadata["owner"], "example-team");
+        assert_eq!(f.metadata["version"], "1.0");
+        assert!(f.not_strings.is_empty());
+        assert_eq!(f.unknown_keys, ["model"]);
+    }
+
+    #[test]
+    fn reads_block_scalars_in_full() {
+        let folded = front("description: >\n  Line one\n  line two.\n\n  New paragraph.\nname: x");
+        assert_eq!(
+            folded.description.as_deref(),
+            Some("Line one line two.\nNew paragraph.\n")
+        );
+        assert_eq!(folded.name.as_deref(), Some("x"));
+        let literal = front("description: |-\n  one\n  two");
+        assert_eq!(literal.description.as_deref(), Some("one\ntwo"));
+        let plain = front("description: starts here\n  and goes on");
+        assert_eq!(
+            plain.description.as_deref(),
+            Some("starts here and goes on")
+        );
+    }
+
+    #[test]
+    fn reads_tool_lists() {
+        assert_eq!(
+            front("allowed-tools: [Read, \"Bash(ls:*)\"]").allowed_tools,
+            ["Read", "Bash(ls:*)"]
+        );
+        assert_eq!(
+            front("allowed-tools:\n  - Read\n  - Grep").allowed_tools,
+            ["Read", "Grep"]
+        );
+        assert_eq!(
+            front("allowed-tools: Read, Grep").allowed_tools,
+            ["Read", "Grep"]
+        );
+    }
+
+    #[test]
+    fn a_valid_skill_has_no_findings() {
+        assert!(rules("name: pdf-tools\ndescription: Reads PDFs.", "pdf-tools").is_empty());
+    }
+
+    #[test]
+    fn each_rule_fails_on_its_own_fixture() {
+        let cases: [(&str, &str, &str, Level, &str); 13] = [
+            (
+                "description: d",
+                "x",
+                "name-required",
+                Level::Error,
+                "no name",
+            ),
+            (
+                "name: ''\ndescription: d",
+                "",
+                "name-length",
+                Level::Error,
+                "0 characters",
+            ),
+            (
+                &format!("name: {}\ndescription: d", "a".repeat(65)),
+                &"a".repeat(65),
+                "name-length",
+                Level::Error,
+                "65 characters",
+            ),
+            (
+                "name: Pdf\ndescription: d",
+                "Pdf",
+                "name-chars",
+                Level::Error,
+                "\"Pdf\"",
+            ),
+            (
+                "name: pdf_x\ndescription: d",
+                "pdf_x",
+                "name-chars",
+                Level::Error,
+                "\"pdf_x\"",
+            ),
+            (
+                "name: -pdf\ndescription: d",
+                "-pdf",
+                "name-hyphens",
+                Level::Error,
+                "\"-pdf\"",
+            ),
+            (
+                "name: pdf-\ndescription: d",
+                "pdf-",
+                "name-hyphens",
+                Level::Error,
+                "\"pdf-\"",
+            ),
+            (
+                "name: pdf--x\ndescription: d",
+                "pdf--x",
+                "name-hyphens",
+                Level::Error,
+                "\"pdf--x\"",
+            ),
+            (
+                "name: data-query\ndescription: d",
+                "data_query",
+                "name-matches-dir",
+                Level::Error,
+                "name is data-query, directory is data_query",
+            ),
+            (
+                "name: x",
+                "x",
+                "description-required",
+                Level::Error,
+                "no description",
+            ),
+            (
+                &format!("name: x\ndescription: {}", "d".repeat(1025)),
+                "x",
+                "description-length",
+                Level::Error,
+                "1025 characters",
+            ),
+            (
+                &format!(
+                    "name: x\ndescription: d\ncompatibility: {}",
+                    "c".repeat(501)
+                ),
+                "x",
+                "compatibility-length",
+                Level::Warn,
+                "501 characters",
+            ),
+            (
+                "name: x\ndescription: d\nmetadata:\n  version: 1.0",
+                "x",
+                "metadata-strings",
+                Level::Warn,
+                "version: 1.0",
+            ),
+        ];
+        for (head, dir, rule, level, value) in cases {
+            let found = rules(head, dir);
+            assert!(
+                found
+                    .iter()
+                    .any(|(r, l, t)| *r == rule && *l == level && t.contains(value)),
+                "{rule} on {head:?}: {found:?}"
+            );
+        }
+        let missing = lint(None, "x");
+        assert_eq!(missing[0].rule, "frontmatter");
+        assert_eq!(missing[0].level, Level::Error);
+    }
+
+    #[test]
+    fn counts_files_and_resolves_references() {
+        let t = tempfile::tempdir().unwrap();
+        let dir = t.path().join("pdf-tools");
+        fs::create_dir_all(dir.join("scripts")).unwrap();
+        fs::create_dir_all(dir.join("references")).unwrap();
+        fs::write(dir.join("scripts").join("run.py"), "print()\n").unwrap();
+        fs::write(dir.join("references").join("GOOD.md"), "ok\n").unwrap();
+        fs::write(dir.join("notes.txt"), "n\n").unwrap();
+        let body = "See [the guide](references/GOOD.md).\nRun scripts/run.py, \
+                    then read references/MISSING.md and/or https://example.com/a.md.\n";
+        fs::write(
+            dir.join("SKILL.md"),
+            format!("---\nname: pdf-tools\ndescription: d\nmetadata:\n  owner: example-team\n---\n{body}"),
+        )
+        .unwrap();
+        let mut found = Vec::new();
+        collect(t.path(), Source::Home, 2, &mut found);
+        let s = &found[0];
+        assert_eq!(
+            s.files,
+            Files {
+                scripts: 1,
+                references: 1,
+                assets: 0,
+                other: 1,
+                bytes: 13
+            }
+        );
+        assert_eq!(
+            s.refs,
+            Refs {
+                ok: 2,
+                broken: vec!["references/MISSING.md".into()]
+            }
+        );
+        assert_eq!(s.owner(), Some("example-team"));
+        assert!(details(s).contains("owner: example-team"));
+        assert!(details(s).contains("broken reference: references/MISSING.md"));
+    }
 }
