@@ -39,6 +39,11 @@ fn fixture() -> tempfile::TempDir {
 
 /// Run `agents` in `home`, with `config` as the per-machine file when given.
 fn agents(home: &Path, config: Option<&str>, args: &[&str]) -> String {
+    agents_env(home, config, &[], args)
+}
+
+/// `agents`, with `env` set for the run.
+fn agents_env(home: &Path, config: Option<&str>, env: &[(&str, &str)], args: &[&str]) -> String {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_agents"));
     cmd.env("AGENTS_UPDATE_CHECK", "off")
         .arg("--home")
@@ -50,7 +55,9 @@ fn agents(home: &Path, config: Option<&str>, args: &[&str]) -> String {
         .env_remove("AGENTS_HOME")
         .env_remove("AGENTS_CONFIG")
         .env_remove("CODEX_HOME")
-        .env_remove("GROK_HOME");
+        .env_remove("GROK_HOME")
+        .env_remove("NO_COLOR")
+        .envs(env.iter().copied());
     if let Some(text) = config {
         let path = home.join("machine.toml");
         fs::write(&path, text).unwrap();
@@ -63,6 +70,25 @@ fn agents(home: &Path, config: Option<&str>, args: &[&str]) -> String {
         String::from_utf8_lossy(&out.stderr)
     );
     String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+#[test]
+fn o3_a_pipe_and_no_color_print_the_words_and_no_escape_byte() {
+    let t = fixture();
+    let h = t.path();
+    agents(h, None, &["wire", "--apply"]);
+    write(h, ".agents/rules/boundaries.md", "- Changed.\n");
+    fs::remove_dir(h.join(".agents/skills")).unwrap();
+    for args in [&["status"][..], &["status", "--long"][..]] {
+        let piped = agents(h, None, args);
+        let no_color = agents_env(h, None, &[("NO_COLOR", "1")], args);
+        assert!(piped.contains("STALE"), "{piped}");
+        assert!(!piped.contains('\x1b'), "{piped}");
+        assert!(!no_color.contains('\x1b'), "{no_color}");
+        assert_eq!(piped, no_color);
+    }
+    let long = agents(h, None, &["status", "--long"]);
+    assert!(long.contains("BROKEN ~/.claude/skills/agents"), "{long}");
 }
 
 #[test]

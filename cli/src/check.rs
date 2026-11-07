@@ -72,8 +72,12 @@ pub fn check(home: &Home, template: bool, as_json: bool) -> bool {
     }
     if faults.is_empty() {
         println!(
-            "check OK: always-on {} of {} bytes ({})",
-            cap.used, cap.bytes, cap.source
+            "check {}: {} {} of {} bytes ({})",
+            out::state(out::State::Ok),
+            out::state(out::State::AlwaysOn),
+            cap.used,
+            cap.bytes,
+            cap.source
         );
     }
     faults.is_empty()

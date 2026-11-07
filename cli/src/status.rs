@@ -91,7 +91,10 @@ fn brief(home: &Home, cfg: &Config) {
         .sum();
     let (cap, source) = check::cap(home);
     let over = if total > cap { ", OVER the cap" } else { "" };
-    println!("always-on: {total} of {cap} bytes ({source}){over}");
+    println!(
+        "{}: {total} of {cap} bytes ({source}){over}",
+        out::state(out::State::AlwaysOn)
+    );
 
     let claude = Claude::new();
     let reports = harness_files(home, cfg);
@@ -176,7 +179,7 @@ fn state(home: &Home, r: &Report) -> String {
     } else if !is_ours(&r.path) {
         "the file there is not the home's".to_string()
     } else if r.stale {
-        format!("STALE. {wire}")
+        format!("{}. {wire}", out::state(out::State::Stale))
     } else {
         "current".to_string()
     }
@@ -316,7 +319,12 @@ fn report(home: &Home, cfg: &Config) {
         if l.exists() {
             println!("  {} -> {}", tilde(l), tilde(&target));
         } else {
-            println!("  BROKEN {} -> {}", tilde(l), tilde(&target));
+            println!(
+                "  {} {} -> {}",
+                out::state(out::State::Broken),
+                tilde(l),
+                tilde(&target)
+            );
         }
     }
     if links.is_empty() {
@@ -592,7 +600,12 @@ fn print_report(r: &Report, width: usize) {
     }
     println!("{label}: {}", tilde(&r.path));
     for line in &r.broken {
-        println!("{}", out::fit(&format!("  BROKEN {line}"), width));
+        let mark = out::State::Broken;
+        println!(
+            "  {} {}",
+            out::state(mark),
+            out::fit(line, width.saturating_sub(mark.word().len() + 3))
+        );
     }
     if let Some(target) = &r.link {
         println!("  symlink -> {}", tilde(target));
@@ -622,7 +635,10 @@ fn print_report(r: &Report, width: usize) {
     }
     if r.stale {
         out::say(
-            "STALE: the home changed after wire wrote this file. Run: agents wire --apply",
+            &format!(
+                "{}: the home changed after wire wrote this file. Run: agents wire --apply",
+                out::state(out::State::Stale)
+            ),
             2,
             width,
         );

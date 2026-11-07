@@ -1,6 +1,8 @@
 //! How a listing prints: sections with a count, rows aligned by name, and
-//! each row cut to the terminal width so it never wraps. Plain text only, so
-//! the output reads the same in a pipe. `--json` prints one document instead.
+//! each row cut to the terminal width so it never wraps. A state is a word;
+//! on a terminal it also gets a glyph and a colour. The text never carries a
+//! fact that the words do not carry, so a pipe reads the same as a screen.
+//! `--json` prints one document instead.
 
 use crate::home::tilde;
 use crate::reset::rfc3339;
@@ -22,6 +24,91 @@ pub fn width() -> usize {
         .or_else(|| terminal_size::terminal_size().map(|(w, _)| w.0 as usize))
         .filter(|&n| n > 0)
         .unwrap_or(80)
+}
+
+/// A state a line names. The word always prints. On a terminal with
+/// `NO_COLOR` unset, a glyph and a colour go with it; a pipe gets the word.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum State {
+    Ok,
+    AlwaysOn,
+    Identical,
+    Different,
+    Broken,
+    Stale,
+}
+
+impl State {
+    /// The word, the one part that prints everywhere.
+    pub fn word(self) -> &'static str {
+        match self {
+            State::Ok => "ok",
+            State::AlwaysOn => "always-on",
+            State::Identical => "identical",
+            State::Different => "different",
+            State::Broken => "BROKEN",
+            State::Stale => "STALE",
+        }
+    }
+
+    /// The glyph before the word on a terminal.
+    fn glyph(self) -> Option<&'static str> {
+        match self {
+            State::Ok => Some("✓"),
+            State::AlwaysOn => None,
+            State::Identical => Some("="),
+            State::Different => Some("≠"),
+            State::Broken => Some("✗"),
+            State::Stale => Some("!"),
+        }
+    }
+
+    /// The SGR parameter that colours the token on a terminal.
+    fn colour(self) -> &'static str {
+        match self {
+            State::Ok => "32",
+            State::AlwaysOn => "36",
+            State::Identical => "2",
+            State::Different => "33",
+            State::Broken => "31",
+            State::Stale => "33",
+        }
+    }
+}
+
+/// Whether tokens get glyphs and colour: stdout is a terminal and `NO_COLOR`
+/// is unset or empty.
+pub fn styled() -> bool {
+    !std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty()) && std::io::stdout().is_terminal()
+}
+
+/// The token for `s`: the word alone, or the glyph and the word in colour.
+pub fn state(s: State) -> String {
+    render(s, styled())
+}
+
+fn render(s: State, styled: bool) -> String {
+    if !styled {
+        return s.word().to_string();
+    }
+    let glyph = s.glyph().map(|g| format!("{g} ")).unwrap_or_default();
+    format!("\x1b[{}m{glyph}{}\x1b[0m", s.colour(), s.word())
+}
+
+/// The characters a terminal shows: every one outside an escape sequence.
+pub fn visible(s: &str) -> usize {
+    let mut n = 0;
+    let mut esc = false;
+    for c in s.chars() {
+        if esc {
+            esc = c != 'm';
+        } else if c == '\x1b' {
+            esc = true;
+        } else {
+            n += 1;
+        }
+    }
+    n
 }
 
 /// `s` in at most `max` characters. A cut ends in one `…`.
@@ -110,11 +197,7 @@ pub fn rows(rows: &[Row], width: usize) -> Vec<String> {
         .max()
         .unwrap_or(0)
         .min(NAME_CAP);
-    let meta_w = rows
-        .iter()
-        .map(|r| r.meta.chars().count())
-        .max()
-        .unwrap_or(0);
+    let meta_w = rows.iter().map(|r| visible(&r.meta)).max().unwrap_or(0);
     rows.iter()
         .map(|r| {
             let mut line = String::from("  ");
@@ -122,11 +205,17 @@ pub fn rows(rows: &[Row], width: usize) -> Vec<String> {
                 line.push_str(&format!("{:<name_w$}  ", fit(&r.name, name_w)));
             }
             if meta_w > 0 {
-                line.push_str(&format!("{:<meta_w$}  ", r.meta));
+                line.push_str(&r.meta);
+                line.push_str(&" ".repeat(meta_w - visible(&r.meta) + 2));
             }
-            let room = width.saturating_sub(line.chars().count());
+            let room = width.saturating_sub(visible(&line));
             line.push_str(&fit(&r.text, room));
-            fit(line.trim_end(), width)
+            let line = line.trim_end();
+            if visible(line) <= width {
+                line.to_string()
+            } else {
+                fit(line, width)
+            }
         })
         .collect()
 }
@@ -258,6 +347,49 @@ mod tests {
     fn empty_columns_take_no_space() {
         let r = rows(&[Row::new("", "  5 lines", "CLAUDE.md")], 80);
         assert_eq!(r[0], "    5 lines  CLAUDE.md");
+    }
+
+    #[test]
+    fn o3_a_state_is_its_word_alone_without_a_styled_terminal() {
+        for s in [
+            State::Ok,
+            State::AlwaysOn,
+            State::Identical,
+            State::Different,
+            State::Broken,
+            State::Stale,
+        ] {
+            let plain = render(s, false);
+            assert_eq!(plain, s.word());
+            assert!(!plain.contains('\x1b'));
+            let styled = render(s, true);
+            assert!(
+                styled.starts_with("\x1b[") && styled.ends_with("\x1b[0m"),
+                "{styled:?}"
+            );
+            assert!(styled.contains(s.word()), "{styled:?}");
+        }
+        assert_eq!(render(State::Broken, true), "\x1b[31m✗ BROKEN\x1b[0m");
+        assert_eq!(
+            visible(&render(State::Broken, true)),
+            "✗ BROKEN".chars().count()
+        );
+        std::env::set_var("NO_COLOR", "1");
+        assert!(!styled());
+        assert_eq!(state(State::Stale), "STALE");
+    }
+
+    #[test]
+    fn rows_align_on_what_a_terminal_shows() {
+        let r = rows(
+            &[
+                Row::new("a", render(State::Broken, true), "x"),
+                Row::new("b", "plain", "y"),
+            ],
+            80,
+        );
+        assert_eq!(visible(&r[0]), visible(&r[1]));
+        assert_eq!(r[0].find('x').map(|i| visible(&r[0][..i])), r[1].find('y'));
     }
 
     #[test]

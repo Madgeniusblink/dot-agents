@@ -125,7 +125,7 @@ fn skills_lists_the_project_and_reports_copies() {
     );
     let beta = same.lines().find(|l| l.contains("beta")).unwrap();
     assert!(
-        beta.contains("DIFFERENT bodies") && beta.contains("project "),
+        beta.contains("different bodies") && beta.contains("project "),
         "{beta}"
     );
 }
