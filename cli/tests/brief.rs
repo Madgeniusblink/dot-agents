@@ -78,7 +78,8 @@ fn status_is_brief_and_says_stale() {
         lines[0].contains("config: ~/") && lines[0].contains("config.toml"),
         "{out}"
     );
-    assert!(lines[1].starts_with("home: ~/.agents"), "{out}");
+    assert!(lines[1].starts_with("agents 0."), "{out}");
+    assert!(lines[2].starts_with("home: ~/.agents"), "{out}");
     assert!(out.contains("always-on: 50 of 12288 bytes"), "{out}");
     assert!(out.contains("claude code: current\n"), "{out}");
     assert!(out.contains("codex: current\n"), "{out}");
