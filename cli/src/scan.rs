@@ -331,15 +331,18 @@ fn per_remote<'a>(
     group: &[&Hit],
     checkouts: &'a BTreeMap<&Path, Checkout>,
 ) -> Vec<(&'a str, usize)> {
-    let mut per: BTreeMap<&str, usize> = BTreeMap::new();
+    let mut per: BTreeMap<&str, std::collections::BTreeSet<&Path>> = BTreeMap::new();
     for h in group {
         if let Scope::Project(r) = &h.scope {
             if let Some(remote) = &checkouts[r.as_path()].remote {
-                *per.entry(remote).or_default() += 1;
+                per.entry(remote).or_default().insert(r.as_path());
             }
         }
     }
-    per.into_iter().filter(|(_, n)| *n > 1).collect()
+    per.into_iter()
+        .map(|(r, set)| (r, set.len()))
+        .filter(|(_, n)| *n > 1)
+        .collect()
 }
 
 /// The checkout under the root that still holds a record pointing back at

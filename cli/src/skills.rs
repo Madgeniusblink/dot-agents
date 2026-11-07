@@ -170,6 +170,83 @@ pub struct Refs {
     pub broken: Vec<String>,
 }
 
+/// The body without fenced code blocks, inline code spans, and the text
+/// part of Markdown links. Link targets are read separately.
+fn strip_code_and_link_text(body: &str) -> String {
+    let mut out = String::with_capacity(body.len());
+    let mut in_fence = false;
+    for line in body.lines() {
+        if line.trim_start().starts_with("```") {
+            in_fence = !in_fence;
+            continue;
+        }
+        if in_fence {
+            continue;
+        }
+        let mut rest = line;
+        while let Some(i) = rest.find('`') {
+            out.push_str(&rest[..i]);
+            let after = &rest[i + 1..];
+            match after.find('`') {
+                Some(j) => rest = &after[j + 1..],
+                None => {
+                    rest = "";
+                }
+            }
+            out.push(' ');
+        }
+        out.push_str(rest);
+        out.push('\n');
+    }
+    let mut cleaned = String::with_capacity(out.len());
+    let mut rest = out.as_str();
+    while let Some(i) = rest.find("](") {
+        let head = &rest[..i];
+        match head.rfind('[') {
+            Some(k) => {
+                cleaned.push_str(&head[..k]);
+                cleaned.push(' ');
+            }
+            None => cleaned.push_str(head),
+        }
+        rest = &rest[i..];
+        match rest.find(')') {
+            Some(j) => rest = &rest[j + 1..],
+            None => break,
+        }
+    }
+    cleaned.push_str(rest);
+    cleaned
+}
+
+/// `<plugin>@<marketplace>` keys that settings.json turns off.
+fn disabled_plugins() -> std::collections::BTreeSet<String> {
+    let path = user_home().join(".claude").join("settings.json");
+    let Ok(text) = fs::read_to_string(path) else {
+        return Default::default();
+    };
+    serde_json::from_str::<serde_json::Value>(&text)
+        .ok()
+        .and_then(|v| v.get("enabledPlugins").cloned())
+        .and_then(|v| v.as_object().cloned())
+        .map(|m| {
+            m.into_iter()
+                .filter(|(_, v)| v.as_bool() == Some(false))
+                .map(|(k, _)| k)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// `<plugin>@<marketplace>` for a skill under plugins/cache/<marketplace>/<plugin>/...
+fn plugin_key(cache: &Path, dir: &Path) -> Option<String> {
+    let rel = dir.strip_prefix(cache).ok()?;
+    let mut parts = rel.components().map(|c| c.as_os_str().to_string_lossy());
+    let marketplace = parts.next()?;
+    let plugin = parts.next()?;
+    Some(format!("{plugin}@{marketplace}"))
+}
+
 pub fn find(home: Option<&Home>) -> Vec<Skill> {
     let mut out = Vec::new();
     if let Some(h) = home {
@@ -187,7 +264,18 @@ pub fn find(home: Option<&Home>) -> Vec<Skill> {
         3,
         &mut out,
     );
-    collect(&claude.join("plugins"), Source::Plugin, 8, &mut out);
+    // Installed plugins live under plugins/cache; plugins/marketplaces is the
+    // catalogue of everything on offer and loads nothing. A plugin that
+    // settings.json turns off loads nothing either.
+    let cache = claude.join("plugins").join("cache");
+    let off = disabled_plugins();
+    let mut plugins = Vec::new();
+    collect(&cache, Source::Plugin, 6, &mut plugins);
+    out.extend(
+        plugins
+            .into_iter()
+            .filter(|s| plugin_key(&cache, &s.dir).is_none_or(|k| !off.contains(&k))),
+    );
     // A checkout that is also the home, or holds a user directory, is
     // listed once, under the scope that lets the user move it.
     if let Some(root) = project_root() {
@@ -671,7 +759,10 @@ fn refs(dir: &Path, body: &str) -> Refs {
         }
         rest = &after[j + 1..];
     }
-    for word in body.split(|c: char| c.is_whitespace() || "`\"'()[]<>,;|*".contains(c)) {
+    // A path inside a code span is a mention, not a reference, and a link's
+    // text is not its target, so both are removed before the bare-word scan.
+    let prose = strip_code_and_link_text(body);
+    for word in prose.split(|c: char| c.is_whitespace() || "`\"'()[]<>,;|*".contains(c)) {
         let word = word.trim_end_matches(['.', ':', '!', '?']);
         let path_chars = word
             .chars()
@@ -1279,6 +1370,24 @@ mod tests {
         let missing = lint(None, "x");
         assert_eq!(missing[0].rule, "frontmatter");
         assert_eq!(missing[0].level, Level::Error);
+    }
+
+    #[test]
+    fn ignores_code_spans_and_link_text() {
+        let tmp = tempfile::tempdir().unwrap();
+        let skill = tmp.path().join("skills").join("demo");
+        fs::create_dir_all(skill.join("references")).unwrap();
+        fs::write(skill.join("references").join("REAL.md"), "x").unwrap();
+        let body = "Send `SiteAudit/1.0` as the agent. See `docs/setup.md` later.\n\
+                    Read [rules/corrections.md](references/REAL.md) first.\n\
+                    ```sh\nls scripts/missing.sh\n```\n";
+        let r = refs(&skill, body);
+        assert_eq!(r.ok, 1, "the link target resolves");
+        assert!(
+            r.broken.is_empty(),
+            "nothing in a code span or link text is a reference: {:?}",
+            r.broken
+        );
     }
 
     #[test]
