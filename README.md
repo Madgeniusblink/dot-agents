@@ -16,7 +16,7 @@ Take later improvements with a merge:
 
 ```sh
 cd ~/.agents && git remote add upstream https://github.com/Madgeniusblink/dot-agents
-git fetch upstream && git merge upstream/main
+git fetch upstream && git merge --no-edit upstream/main
 ```
 
 A conflict is the point: it shows the line that moved under a rule you rewrote. There is no installer, no copy, and no manifest, because `git status` and `git diff` already answer every question one would need to reinvent ([adopt.md](standards/adopt.md)).

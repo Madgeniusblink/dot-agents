@@ -17,7 +17,7 @@ make your copy private, then clone that.
 ```sh
 cd ~/.agents
 git remote add upstream <this-repo>
-git fetch upstream && git merge upstream/main
+git fetch upstream && git merge --no-edit upstream/main
 ```
 
 A conflict is the point: it shows you the line that changed under a rule you
