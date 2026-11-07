@@ -80,6 +80,23 @@ for a directory of skills, so a link is the only live transport. Without one,
 name `~/.agents/skills/` in the tool's instruction file and accept that the
 model decides whether to look.
 
+## Codex
+
+Codex reads one global file, `~/.codex/AGENTS.md`, or `$CODEX_HOME/AGENTS.md`
+when that is set. It has no import syntax, so a symlink is the only live
+transport. It concatenates a parent's file into a child's and stops loading at
+32 KiB, so the always-on set has to fit inside that with room to spare;
+`scripts/context.sh` reports the running total.
+
+Source: [Custom instructions with AGENTS.md](https://learn.chatgpt.com/docs/agent-configuration/agents-md).
+
+## Cursor
+
+Cursor keeps user-level rules in its application settings rather than a file,
+so nothing here can read or write them. Paste the pointer line into
+Settings by hand, and accept that it is the weak transport. Project rules are
+per repository, in `.cursor/rules/*.mdc`.
+
 ## A tool with no import syntax
 
 Name the paths as text in the tool's global instruction file:

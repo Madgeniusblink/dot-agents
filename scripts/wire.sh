@@ -61,7 +61,8 @@ if [ "$remove" -eq 1 ]; then
       say "no import lines in ${target#$HOME/}"
     fi
   done
-  for l in "$HOME/.claude/rules/agents" "$HOME/.claude/skills/agents"; do
+  for l in "$HOME/.claude/rules/agents" "$HOME/.claude/skills/agents" \
+           "${CODEX_HOME:-$HOME/.codex}/AGENTS.md"; do
     if [ -L "$l" ]; then
       do_it "rm '$l'" "unlink ${l#$HOME/}"
     fi
@@ -84,12 +85,23 @@ if [ -d "$HOME/.claude" ]; then
   add_link "$HOME_DIR/skills" "$HOME/.claude/skills/agents"
 fi
 
-for d in .cursor .codex; do
-  [ -d "$HOME/$d" ] || continue
-  found=1; echo "${d#.}:"
-  say "no documented import syntax. add this line to its global instructions:"
+# Codex reads one global file and has no import syntax, so a link is the only
+# live transport. It concatenates parents into children and stops at 32 KiB.
+CODEX="${CODEX_HOME:-$HOME/.codex}"
+if [ -d "$CODEX" ]; then
+  found=1; echo "codex:"
+  add_link "$HOME_DIR/AGENTS.md" "$CODEX/AGENTS.md"
+  [ -e "$CODEX/AGENTS.md" ] && [ ! -L "$CODEX/AGENTS.md" ] &&
+    say "it already has its own AGENTS.md. Move your rules into the home first."
+fi
+
+# Cursor keeps user-level rules in its application settings, not in a file.
+if [ -d "$HOME/.cursor" ]; then
+  found=1; echo "cursor:"
+  say "user rules live in the app settings, not a file, so nothing here can"
+  say "wire them. Paste this into Settings -> Rules by hand:"
   say "  Read ~/.agents/AGENTS.md and every file in ~/.agents/rules/ before starting work."
-done
+fi
 
 [ "$found" -eq 1 ] || echo "  no known tool directory in \$HOME. see docs/setup.md."
 
