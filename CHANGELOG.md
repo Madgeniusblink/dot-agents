@@ -2,6 +2,12 @@
 
 Template semver tracks [upstream.json](context/upstream.json) `template_version`.
 
+## 0.17.0 — 2026-11-07
+
+- Codex and Grok Build now get the always-on set in full, per [decision 0010](docs/decisions/0010-generated-file-for-tools-without-imports.md). Codex expands no import, so a link to the router gave it only a table of paths, the weak transport; a review caught this after a reset on a real machine. `wire` now writes one file the home owns into Codex's slot and into `~/.grok/rules/`, holding `principles.md` and every `rules/*.md`, rewrites it whenever the home differs, and `status` says `STALE` until then. `unwire` deletes it. A file in that slot the home did not write is left alone. The ban on bare copies stands; this one is rewritten and checked.
+- `scripts/wire.sh` writes the same bytes, and the parity test now covers Codex and Grok.
+- `status` and `context.sh` no longer call a file the home wrote a second source of truth.
+
 ## 0.16.0 — 2026-11-07
 
 - New `agents memory`. The tool's auto memory is machine-local and never synced, so a habit taught on one machine does not exist on the next, and once it is moved into the home the copy left behind is a near-duplicate, the kind of distractor that hurts most. The command lists every repository's notes by type, scores each against the home's rule lines and memory files (overlap of distinctive words, covered at 0.5, similar at 0.3), and flags the same note in more than one repository. `prune <name>...` and `prune --covered` move notes to `~/.agents-reset/<timestamp>/` and drop their lines from the index. First run on the machine that prompted it: 99 notes in 16 repositories, 9 covered by the home, 18 pruned.

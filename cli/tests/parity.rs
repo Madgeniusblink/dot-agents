@@ -56,6 +56,7 @@ fn fixture() -> tempfile::TempDir {
     let t = tempfile::tempdir().unwrap();
     fs::create_dir_all(t.path().join(".claude")).unwrap();
     fs::create_dir_all(t.path().join(".codex")).unwrap();
+    fs::create_dir_all(t.path().join(".grok")).unwrap();
     fs::write(
         t.path().join(".claude").join("CLAUDE.md"),
         "# my own content\n@~/other.md\n@/elsewhere/.agents/principles.md\n",
@@ -70,6 +71,7 @@ fn script(home: &Path, args: &[&str]) -> String {
         .args(args)
         .env("HOME", home)
         .env_remove("CODEX_HOME")
+        .env_remove("GROK_HOME")
         .output()
         .expect("sh");
     assert!(
@@ -87,6 +89,7 @@ fn cli(home: &Path, args: &[&str]) -> String {
         .args(args)
         .env("HOME", home)
         .env_remove("CODEX_HOME")
+        .env_remove("GROK_HOME")
         .env_remove("AGENTS_HOME")
         .output()
         .expect("agents");
@@ -108,6 +111,23 @@ fn wire_and_unwire_match_the_scripts() {
     assert_eq!(snapshot(a.path()), snapshot(b.path()), "after wire");
     assert!(cli_out.contains("write .claude/rules/00-agents-home.md"));
     assert!(cli_out.contains("drop 1 import line(s) from .claude/CLAUDE.md"));
+    let codex = fs::read_to_string(b.path().join(".codex").join("AGENTS.md")).unwrap();
+    assert!(codex.starts_with("<!-- ") && codex.contains("owns this file"));
+    assert!(
+        codex.contains("# Principles"),
+        "the generated file carries the content"
+    );
+    assert_eq!(
+        codex,
+        fs::read_to_string(
+            b.path()
+                .join(".grok")
+                .join("rules")
+                .join("00-agents-home.md")
+        )
+        .unwrap(),
+        "codex and grok get the same generated file"
+    );
 
     let again = cli(b.path(), &["wire", "--apply"]);
     assert!(again.contains("present: .claude/rules/00-agents-home.md"));
