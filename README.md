@@ -19,6 +19,15 @@ cd ~/.agents && git remote add upstream https://github.com/Madgeniusblink/dot-ag
 git fetch upstream && git merge --no-edit upstream/main
 ```
 
+Or let the `agents` binary clone, add the upstream, and point every tool on the machine at the home in one step:
+
+```sh
+brew install madgeniusblink/tap/agents
+agents init <your-copy> --apply
+```
+
+The binary embeds no content and reads the same tree. Every command prints its plan and writes nothing without `--apply`. Without Homebrew, `cargo install --git` builds it, and the scripts in `scripts/` do the same with no binary ([docs/setup.md](docs/setup.md)).
+
 A conflict is the point: it shows the line that moved under a rule you rewrote. There is no installer, no copy, and no manifest, because `git status` and `git diff` already answer every question one would need to reinvent ([adopt.md](standards/adopt.md)).
 
 Customize by adding files: your own `rules/*.md`, `memory/*.md`, and skills. `AGENTS.md` is a router of links; there is nothing in it to edit.
@@ -57,7 +66,7 @@ The root of this repository is the tree. Clone it to `~/.agents` and the paths b
 ├── standards/
 ├── context/
 ├── scripts/           wire.sh, context.sh, check.sh
-├── cli/               the `agents` binary: status, tree, scan, skills, wire, check, reset
+├── cli/               the `agents` binary: status, tree, scan, skills, memory, wire, check, sync, reset
 ├── memory/            you own
 └── decisions/         you own
 ```
