@@ -19,6 +19,7 @@ Template semver tracks [upstream.json](context/upstream.json) `template_version`
 - `agents skills` now lists Codex's `$CODEX_HOME/skills/` and the skills Claude Code syncs from claude.ai under `~/.claude/skills/synced/`. The first run on a real machine missed 74 Codex copies and 48 synced skills. Synced skills are listed and left alone, like plugin skills; `remove` says where to remove them.
 - Run inside a git checkout, `agents skills` lists the project's skills from `.claude/skills`, `.agents/skills`, `.codex/skills`, and `skills`, and marks a user skill as `copy of <path> (declared)` when its `metadata.source` names one, or `(identical)` when the bodies match. An installer that renders each copy changes its hash, so hash alone missed those copies. `scan` counts the skills per place for each project, and `skills remove` and `skills keep` skip a project's skills: the CLI never writes inside a checkout.
 - Release pipeline, not yet run: `brew install madgeniusblink/tap/agents` from the first tag. A `v*` tag runs the `dist` workflow in [release.yml](.github/workflows/release.yml), which builds for macOS and Linux and writes the formula into the tap. `cargo install --git` stays as the path without Homebrew.
+- `agents memory` no longer has a person's first name in its stop-word list. The template holds no private names.
 
 ## 0.16.0 — 2026-11-07
 
