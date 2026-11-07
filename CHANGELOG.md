@@ -2,6 +2,11 @@
 
 Template semver tracks [upstream.json](context/upstream.json) `template_version`.
 
+## 0.14.0 — 2026-11-06
+
+- [wire.sh](scripts/wire.sh) no longer edits `~/.claude/CLAUDE.md`. Claude Code scans `~/.claude/rules/` and loads every file in it, so the home now drops one file it owns there, `00-agents-home.md`, holding one import line per always-on file. This is the rule every package manager settled on: never edit a file you do not own, put yours in their drop-in directory. `CLAUDE.md` belongs to the harness, and a generator that owns it discards anything appended, which is how an earlier install lost its wiring. `--apply` also removes the import lines an older version appended there, since the drop-in now carries them, and `--remove` deletes the drop-in.
+- [context.sh](scripts/context.sh) reports the drop-in beside `CLAUDE.md`, so a broken import shows where it now lives.
+
 ## 0.13.1 — 2026-11-06
 
 - Fix the dangling-hook check, which found only hooks written as an absolute path. A command may name its script as `/abs`, `$HOME/x`, `${HOME}/x` or `~/x`, and the check tested only the first, so it reported one dead hook out of seven and called the rest fine. A check that inspects a subset and reports a clean result is worse than no check.

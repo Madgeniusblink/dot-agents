@@ -53,16 +53,15 @@ tool it does not know, or to wire by hand.
 
 ## Claude Code
 
-User-level rules in `~/.claude/rules/` load in every project with no approval
-prompt. That directory supports symlinks.
+Claude Code scans `~/.claude/rules/` and loads every file in it, in every
+project, with no approval prompt. That is a drop-in directory, and the rule
+for one is the rule every package manager settled on: never edit a file you
+do not own, put your own file in their directory. `~/.claude/CLAUDE.md` is the
+harness's file. It may hold your own content or a generator's output, and a
+generator discards anything appended to it. Nothing here writes to it.
 
-```sh
-ln -s ~/.agents/rules ~/.claude/rules/agents
-ln -s ~/.agents/skills ~/.claude/skills/agents
-```
-
-Confirm with `claude --debug`. If the link does not resolve, put import lines
-in `~/.claude/CLAUDE.md` instead:
+`wire.sh` writes one file the home owns, `~/.claude/rules/00-agents-home.md`,
+holding one import line per always-on file:
 
 ```text
 @~/.agents/principles.md
@@ -71,7 +70,16 @@ in `~/.claude/CLAUDE.md` instead:
 ```
 
 Imports expand before the model sees anything and nest up to four hops, so an
-imported file may import others. Add a line when you add a rule file.
+imported file may import others. Re-run `wire.sh --apply` when you add a rule
+file; it rewrites the drop-in and nothing else. `--remove` deletes it.
+
+`--link` uses a symlink instead, since the directory follows them:
+
+```sh
+ln -s ~/.agents/rules ~/.claude/rules/agents
+```
+
+Confirm either with `claude --debug`.
 
 Source: [How Claude remembers your project](https://code.claude.com/docs/en/memory).
 

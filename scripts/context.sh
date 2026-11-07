@@ -87,7 +87,8 @@ report_file() {
 
 echo
 echo "what each harness loads:"
-report_file "$HOME/.claude/CLAUDE.md" "claude code" ""
+report_file "$HOME/.claude/rules/00-agents-home.md" "claude code, the home's drop-in" ""
+report_file "$HOME/.claude/CLAUDE.md" "claude code, the harness's own file" ""
 report_file "${CODEX_HOME:-$HOME/.codex}/AGENTS.md" "codex" 32768
 # Cursor keeps user-level rules in its application settings, not in a file, so
 # nothing here can read or wire them. Project rules are per repository.

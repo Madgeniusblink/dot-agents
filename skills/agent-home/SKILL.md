@@ -52,10 +52,10 @@ sh ~/.agents/scripts/wire.sh            # what it would change
 sh ~/.agents/scripts/wire.sh --apply    # write it
 ```
 
-It finds the tools in `$HOME`, adds one import line per always-on file, and
-links `skills/`, which no tool can import. `--link` uses symlinks for the rules
-too. Running it twice changes nothing. `~/.agents/docs/setup.md` covers the
-tools it does not know.
+It finds the tools in `$HOME`, drops one file it owns into each tool's rules
+directory with one import line per always-on file, and links `skills/`, which
+no tool can import. It never edits a file the tool owns. `--link` links the
+rules too. Running it twice changes nothing. `docs/setup.md` covers the rest.
 
 Every transport must resolve when the tool reads, so a symlink or an import
 line, never a copy. A copy goes stale and says nothing.
