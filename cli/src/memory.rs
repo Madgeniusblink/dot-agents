@@ -275,7 +275,7 @@ pub fn list(home: Option<&Home>, long: u8, json: bool) {
         ("prune covered", "agents memory prune --covered --apply"),
     ];
     if !long {
-        pairs.push(("read in full", "agents memory --long"));
+        pairs.push(("each in full", "agents memory --long --long"));
     }
     out::steps(
         &pairs,
