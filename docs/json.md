@@ -1,6 +1,6 @@
 # JSON output
 
-`agents status`, `scan`, `skills`, and `memory` take `--json`. With it, stdout
+`agents status`, `scan`, `skills`, `memory`, and `check` take `--json`. With it, stdout
 holds one JSON document and nothing else. The exit code does not change. Save
 the document to a file and hand it to another session for analysis.
 
@@ -14,7 +14,7 @@ The envelope comes first. The command's own keys follow it.
 | Key | Value |
 |---|---|
 | `agents` | The CLI version, such as `0.17.0` |
-| `command` | `status`, `scan`, `skills`, or `memory` |
+| `command` | `status`, `scan`, `skills`, `memory`, or `check` |
 | `generated` | When the document was made, RFC 3339 in UTC |
 | `home` | The agent home, or `null` when there is none |
 
@@ -121,3 +121,11 @@ Each object in `notes`:
 | `verdict` | `covered`, `similar`, or `none` |
 | `match` | The place in the home that matches best, or `null` |
 | `score` | The overlap score of that match, or `null` |
+
+## check
+
+| Key | Value |
+|---|---|
+| `ok` | `true` when the home has no fault |
+| `always_on` | `bytes`, the size of principles plus every rule file, the `cap` it must fit, and `cap_source`, `default cap` or `cap from context/upstream.json` |
+| `faults` | One object per fault: `path`, `line`, `rule`, `message`, and `fix`, the same fields as the text line. [check.md](check.md) lists every rule |
