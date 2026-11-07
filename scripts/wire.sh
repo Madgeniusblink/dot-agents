@@ -38,7 +38,7 @@ always_on() {
 DROPIN="$HOME/.claude/rules/00-agents-home.md"
 
 emit_dropin() {
-  echo "<!-- $(tilde "$HOME_DIR")/scripts/wire.sh writes this file and --remove deletes it. Add a rule as a file in $(tilde "$HOME_DIR")/rules/, then re-run wire.sh --apply. -->"
+  echo "<!-- $(tilde "$HOME_DIR") owns this file. wire writes it and unwire deletes it. Add a rule as a file in $(tilde "$HOME_DIR")/rules/, then run wire again. -->"
   always_on | while read -r f; do echo "@$(tilde "$f")"; done
 }
 
