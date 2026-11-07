@@ -22,11 +22,11 @@ git fetch upstream && git merge --no-edit upstream/main
 Or let the `agents` binary clone, add the upstream, and point every tool on the machine at the home in one step:
 
 ```sh
-brew install madgeniusblink/tap/agents
+cargo install --git https://github.com/Madgeniusblink/dot-agents dot-agents
 agents init <your-copy> --apply
 ```
 
-The binary embeds no content and reads the same tree. Every command prints its plan and writes nothing without `--apply`. Without Homebrew, `cargo install --git` builds it, and the scripts in `scripts/` do the same with no binary ([docs/setup.md](docs/setup.md)).
+The binary embeds no content and reads the same tree. Every command prints its plan and writes nothing without `--apply`. The first tagged release adds `brew install`; the scripts in `scripts/` do the same with no binary ([docs/setup.md](docs/setup.md)).
 
 A conflict is the point: it shows the line that moved under a rule you rewrote. There is no installer, no copy, and no manifest, because `git status` and `git diff` already answer every question one would need to reinvent ([adopt.md](standards/adopt.md)).
 
