@@ -181,8 +181,9 @@ fn git_at(dir: &Path, date: &str, args: &[&str]) {
     );
 }
 
-/// Two clones of one remote, a worktree of the first, and a worktree whose
-/// source directory was moved. The remote's one commit is old.
+/// Two clones of one remote, a worktree of the first, a submodule inside the
+/// second, and a worktree whose source directory was moved. The remote's one
+/// commit is old.
 fn checkouts() -> (tempfile::TempDir, std::path::PathBuf) {
     let tmp = tempfile::tempdir().unwrap();
     // git reports resolved long paths: macOS /var is a link, and a Windows
@@ -213,6 +214,20 @@ fn checkouts() -> (tempfile::TempDir, std::path::PathBuf) {
         &a,
         &["worktree", "add", "-q", "-b", "side", &s(&root.join("wt"))],
     );
+    let b = root.join("b");
+    git(
+        &b,
+        &[
+            "-c",
+            "protocol.file.allow=always",
+            "submodule",
+            "add",
+            "-q",
+            &s(&remote),
+            "sub",
+        ],
+    );
+    git_at(&b, "2020-01-03T00:00:00Z", &["commit", "-qm", "sub"]);
 
     let src = root.join("src");
     fs::create_dir_all(&src).unwrap();
@@ -270,10 +285,20 @@ fn scan_reports_each_checkout_without_the_network() {
         row("orphan").contains("remote none, orphan worktree"),
         "{out}"
     );
+    let sub = format!("b{}sub", std::path::MAIN_SEPARATOR);
+    assert!(
+        row(&sub).contains("remote team/app, submodule of ~/b, branch main"),
+        "{out}"
+    );
 
     // B3: an old commit with nothing ahead is stale; work ahead is not.
     assert!(
-        row("b").contains("0 ahead 0 behind, 0 uncommitted, last commit 2020-01-02, stale"),
+        row("b").contains("1 ahead 0 behind, 0 uncommitted, last commit 2020-01-03"),
+        "{out}"
+    );
+    assert!(!row("b").contains("stale"), "{out}");
+    assert!(
+        row(&sub).contains("0 ahead 0 behind, 0 uncommitted, last commit 2020-01-02, stale"),
         "{out}"
     );
     assert!(!a.contains("stale"), "{a}");
@@ -289,7 +314,7 @@ fn scan_reports_each_checkout_without_the_network() {
 
     // B4: the identical file is attributed to its checkouts.
     assert!(
-        out.contains("same file in 3 checkouts of team/app"),
+        out.contains("same file in 4 checkouts of team/app"),
         "{out}"
     );
 
@@ -340,19 +365,22 @@ fn scan_reports_each_checkout_without_the_network() {
     assert_eq!(wt["kind"], "worktree");
     assert_eq!(wt["main_checkout"], "~/a");
     assert!(wt["ahead"].is_null(), "{wt}");
-    assert_eq!(project("b")["last_commit"], "2020-01-02");
-    assert_eq!(project("b")["stale"], true);
+    let sub = project(&format!("b{}sub", std::path::MAIN_SEPARATOR));
+    assert_eq!(sub["kind"], "submodule");
+    assert_eq!(sub["main_checkout"], "~/b");
+    assert_eq!(sub["last_commit"], "2020-01-02");
+    assert_eq!(sub["stale"], true);
     let orphan = project("orphan");
     assert_eq!(orphan["kind"], "orphan worktree");
     assert_eq!(orphan["prune"], "git -C ~/src-moved worktree prune");
     assert_eq!(doc["same_remote"][0]["remote"], "team/app");
     assert_eq!(
         doc["same_remote"][0]["checkouts"].as_array().unwrap().len(),
-        3
+        4
     );
     assert!(doc["identical_remotes"]
         .as_array()
         .unwrap()
         .iter()
-        .any(|g| g[0]["remote"] == "team/app" && g[0]["checkouts"] == 3));
+        .any(|g| g[0]["remote"] == "team/app" && g[0]["checkouts"] == 4));
 }

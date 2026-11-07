@@ -489,6 +489,9 @@ struct Checkout {
 enum Kind {
     Clone,
     Worktree(PathBuf),
+    /// The `.git` file names a directory under the superproject's
+    /// `.git/modules`.
+    Submodule(PathBuf),
     /// The `.git` file names a directory that no longer exists.
     Orphan,
 }
@@ -507,7 +510,11 @@ impl Checkout {
                             _ => common,
                         })
                     }
-                    Err(_) => Kind::Orphan,
+                    Err(_) if !record.is_dir() => Kind::Orphan,
+                    Err(_) => match superproject(&record) {
+                        Some(root) => Kind::Submodule(root),
+                        None => Kind::Clone,
+                    },
                 }
             }
         };
@@ -567,6 +574,7 @@ impl Checkout {
         let kind = match &self.kind {
             Kind::Clone => "clone".to_string(),
             Kind::Worktree(main) => format!("worktree of {}", tilde(main)),
+            Kind::Submodule(root) => format!("submodule of {}", tilde(root)),
             Kind::Orphan => "orphan worktree".to_string(),
         };
         let mut parts = vec![
@@ -598,6 +606,19 @@ impl Checkout {
 /// A path git wrote, relative to `base` or absolute, in this system's form.
 /// Git writes `/` on every system; the path is rebuilt from its parts so it
 /// prints and compares like every path the walk found.
+/// The checkout whose `.git/modules` holds this submodule's git directory.
+fn superproject(record: &Path) -> Option<PathBuf> {
+    record
+        .ancestors()
+        .find(|a| {
+            a.file_name().is_some_and(|n| n == "modules")
+                && a.parent()
+                    .is_some_and(|p| p.file_name().is_some_and(|n| n == ".git"))
+        })
+        .and_then(|m| m.parent()?.parent())
+        .map(Path::to_path_buf)
+}
+
 fn native(base: &Path, git_path: &str) -> PathBuf {
     let mut out = PathBuf::new();
     for part in base.join(git_path).components() {
@@ -673,6 +694,7 @@ fn data(
             let (kind, main) = match &c.kind {
                 Kind::Clone => ("clone", None),
                 Kind::Worktree(m) => ("worktree", Some(tilde(m))),
+                Kind::Submodule(m) => ("submodule", Some(tilde(m))),
                 Kind::Orphan => ("orphan worktree", None),
             };
             json!({
