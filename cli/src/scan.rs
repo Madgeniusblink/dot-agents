@@ -3,15 +3,15 @@
 //! repository, so an unlisted one is behavior you did not choose.
 
 use crate::harness::Claude;
-use crate::home::{tilde, user_home, Home};
+use crate::home::{git_in, tilde, user_home, Home};
 use crate::{out, skills};
 use serde_json::{json, Value};
 use std::collections::hash_map::DefaultHasher;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fs;
 use std::hash::{Hash, Hasher};
-use std::path::{Path, PathBuf};
-use std::time::Instant;
+use std::path::{Component, Path, PathBuf};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use walkdir::{DirEntry, WalkDir};
 
 /// Directories that hold copies, caches, or vendored trees, never a file a
@@ -123,8 +123,22 @@ pub fn scan(root: PathBuf, all: bool, long: bool, json: bool, home: Option<&Home
         })
         .collect();
     hits.sort_by(|a, b| a.path.cmp(&b.path));
+    let mut projects: BTreeMap<&Path, Vec<&Hit>> = BTreeMap::new();
+    for h in &hits {
+        if let Scope::Project(r) = &h.scope {
+            projects.entry(r.as_path()).or_default().push(h);
+        }
+    }
+    let checkouts: BTreeMap<&Path, Checkout> =
+        projects.keys().map(|r| (*r, Checkout::read(r))).collect();
     if json {
-        let data = data(&root, all, started.elapsed().as_secs_f32(), &hits);
+        let data = data(
+            &root,
+            all,
+            started.elapsed().as_secs_f32(),
+            &hits,
+            &checkouts,
+        );
         out::json("scan", home.map(|h| h.dir.as_path()), data);
         return;
     }
@@ -159,18 +173,13 @@ pub fn scan(root: PathBuf, all: bool, long: bool, json: bool, home: Option<&Home
             hits.iter().filter(|h| matches!(h.scope, Scope::Home)),
         );
     }
-    let mut projects: BTreeMap<&Path, Vec<&Hit>> = BTreeMap::new();
-    for h in &hits {
-        if let Scope::Project(r) = &h.scope {
-            projects.entry(r.as_path()).or_default().push(h);
-        }
-    }
     for (repo, files) in &projects {
         view.section(
             &format!("project {}", tilde(repo)),
             Some(repo),
             files.iter().copied(),
         );
+        out::say(&checkouts[repo].line(), 2, width);
         let counts = skills::project_counts(repo);
         if counts.iter().any(|(_, n)| *n > 0) {
             let parts: Vec<String> = counts.iter().map(|(p, n)| format!("{p} {n}")).collect();
@@ -230,6 +239,19 @@ pub fn scan(root: PathBuf, all: bool, long: bool, json: bool, home: Option<&Home
         );
     }
 
+    let remotes = same_remote(&checkouts);
+    if !remotes.is_empty() {
+        out::section("same remote in more than one place", remotes.len(), width);
+        let mut items = Vec::new();
+        for (remote, group) in &remotes {
+            for repo in group {
+                let date = checkouts[*repo].when.as_ref().map_or("no commit", |w| &w.1);
+                items.push(out::Row::new(*remote, date, tilde(repo)));
+            }
+        }
+        out::print(&items, long, width);
+    }
+
     let groups = identical(&hits);
     if !groups.is_empty() {
         out::section("identical content", groups.len(), width);
@@ -244,7 +266,12 @@ pub fn scan(root: PathBuf, all: bool, long: bool, json: bool, home: Option<&Home
                 } else {
                     String::new()
                 };
-                out::Row::new(name, "", names.join(sep))
+                let mut text: Vec<String> = per_remote(g, &checkouts)
+                    .iter()
+                    .map(|(r, n)| format!("same file in {n} checkouts of {r}"))
+                    .collect();
+                text.push(names.join(sep));
+                out::Row::new(name, "", text.join(if long { "\n" } else { ": " }))
             })
             .collect();
         out::print(&items, long, width);
@@ -253,6 +280,225 @@ pub fn scan(root: PathBuf, all: bool, long: bool, json: bool, home: Option<&Home
             2,
             width,
         );
+    }
+
+    let orphans: Vec<&Path> = checkouts
+        .iter()
+        .filter(|(_, c)| matches!(c.kind, Kind::Orphan))
+        .map(|(r, _)| *r)
+        .collect();
+    if !orphans.is_empty() {
+        println!();
+    }
+    for repo in orphans {
+        let text = match orphan_source(repo, &checkouts) {
+            Some(s) => format!(
+                "{} is an orphan worktree. After you remove it, clear its record with: git -C {} worktree prune",
+                tilde(repo),
+                tilde(s)
+            ),
+            None => format!(
+                "{} is an orphan worktree. Its source repository is not under the root.",
+                tilde(repo)
+            ),
+        };
+        out::say(&text, 0, width);
+    }
+}
+
+/// Checkouts of one remote found in more than one place, each group newest
+/// last commit first.
+fn same_remote<'a>(checkouts: &'a BTreeMap<&Path, Checkout>) -> Vec<(&'a str, Vec<&'a Path>)> {
+    let mut remotes: BTreeMap<&str, Vec<&Path>> = BTreeMap::new();
+    for (repo, c) in checkouts {
+        if let Some(r) = &c.remote {
+            remotes.entry(r).or_default().push(repo);
+        }
+    }
+    remotes
+        .into_iter()
+        .filter(|(_, v)| v.len() > 1)
+        .map(|(r, mut v)| {
+            v.sort_by(|a, b| checkouts[b].when.cmp(&checkouts[a].when));
+            (r, v)
+        })
+        .collect()
+}
+
+/// How many files of one identical group sit in checkouts of each remote,
+/// for remotes with more than one.
+fn per_remote<'a>(
+    group: &[&Hit],
+    checkouts: &'a BTreeMap<&Path, Checkout>,
+) -> Vec<(&'a str, usize)> {
+    let mut per: BTreeMap<&str, usize> = BTreeMap::new();
+    for h in group {
+        if let Scope::Project(r) = &h.scope {
+            if let Some(remote) = &checkouts[r.as_path()].remote {
+                *per.entry(remote).or_default() += 1;
+            }
+        }
+    }
+    per.into_iter().filter(|(_, n)| *n > 1).collect()
+}
+
+/// The checkout under the root that still holds a record pointing back at
+/// this orphan worktree.
+fn orphan_source<'a>(repo: &Path, checkouts: &'a BTreeMap<&Path, Checkout>) -> Option<&'a Path> {
+    let me = fs::canonicalize(repo.join(".git")).ok();
+    checkouts.keys().copied().find(|s| {
+        fs::read_dir(s.join(".git").join("worktrees"))
+            .into_iter()
+            .flatten()
+            .flatten()
+            .any(|w| {
+                fs::read_to_string(w.path().join("gitdir"))
+                    .ok()
+                    .and_then(|g| fs::canonicalize(g.trim()).ok())
+                    .is_some_and(|g| Some(g) == me)
+            })
+    })
+}
+
+/// What a project root is, read from local files and refs only. Nothing
+/// here fetches: ahead and behind are against the upstream ref on disk.
+struct Checkout {
+    remote: Option<String>,
+    kind: Kind,
+    branch: Option<String>,
+    /// Ahead and behind, or None when the branch has no upstream ref.
+    ab: Option<(u64, u64)>,
+    dirty: usize,
+    /// Commit time in seconds, and the date as `YYYY-MM-DD`.
+    when: Option<(u64, String)>,
+}
+
+enum Kind {
+    Clone,
+    Worktree(PathBuf),
+    /// The `.git` file names a directory that no longer exists.
+    Orphan,
+}
+
+impl Checkout {
+    fn read(dir: &Path) -> Checkout {
+        let kind = match fs::read_to_string(dir.join(".git")) {
+            Err(_) => Kind::Clone,
+            Ok(text) => {
+                let record = dir.join(text.trim().trim_start_matches("gitdir:").trim());
+                match fs::read_to_string(record.join("commondir")) {
+                    Ok(rel) => {
+                        let mut common = record.clone();
+                        for part in Path::new(rel.trim()).components() {
+                            match part {
+                                Component::ParentDir => {
+                                    common.pop();
+                                }
+                                Component::CurDir => {}
+                                p => common.push(p),
+                            }
+                        }
+                        Kind::Worktree(match common.file_name() {
+                            Some(n) if n == ".git" => common.parent().unwrap_or(&common).into(),
+                            _ => common,
+                        })
+                    }
+                    Err(_) => Kind::Orphan,
+                }
+            }
+        };
+        let mut c = Checkout {
+            remote: None,
+            kind,
+            branch: None,
+            ab: None,
+            dirty: 0,
+            when: None,
+        };
+        if matches!(c.kind, Kind::Orphan) {
+            return c;
+        }
+        c.remote = git_in(dir, &["config", "--get", "remote.origin.url"]).map(|u| owner_repo(&u));
+        let status = git_in(
+            dir,
+            &[
+                "--no-optional-locks",
+                "status",
+                "--porcelain=v2",
+                "--branch",
+            ],
+        )
+        .unwrap_or_default();
+        for l in status.lines() {
+            if let Some(b) = l.strip_prefix("# branch.head ") {
+                c.branch = Some(b.to_string());
+            } else if let Some(ab) = l.strip_prefix("# branch.ab ") {
+                let mut n = ab.split(' ').map(|x| x[1..].parse().unwrap_or(0));
+                c.ab = Some((n.next().unwrap_or(0), n.next().unwrap_or(0)));
+            } else if !l.starts_with('#') {
+                c.dirty += 1;
+            }
+        }
+        c.when = git_in(dir, &["log", "-1", "--format=%ct %cs"]).and_then(|l| {
+            let (t, d) = l.split_once(' ')?;
+            Some((t.parse().ok()?, d.to_string()))
+        });
+        c
+    }
+
+    /// Older than 30 days and nothing to push. An orphan is always stale.
+    fn stale(&self) -> bool {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
+        matches!(self.kind, Kind::Orphan)
+            || (self.ab.is_some_and(|(a, _)| a == 0)
+                && self
+                    .when
+                    .as_ref()
+                    .is_some_and(|(t, _)| now.saturating_sub(*t) > 30 * 86400))
+    }
+
+    fn line(&self) -> String {
+        let kind = match &self.kind {
+            Kind::Clone => "clone".to_string(),
+            Kind::Worktree(main) => format!("worktree of {}", tilde(main)),
+            Kind::Orphan => "orphan worktree".to_string(),
+        };
+        let mut parts = vec![
+            format!("remote {}", self.remote.as_deref().unwrap_or("none")),
+            kind,
+        ];
+        if !matches!(self.kind, Kind::Orphan) {
+            parts.push(format!(
+                "branch {}",
+                self.branch.as_deref().unwrap_or("unknown")
+            ));
+            parts.push(match self.ab {
+                Some((a, b)) => format!("{a} ahead {b} behind"),
+                None => "no upstream".to_string(),
+            });
+            parts.push(format!("{} uncommitted", self.dirty));
+            parts.push(match &self.when {
+                Some((_, d)) => format!("last commit {d}"),
+                None => "no commit".to_string(),
+            });
+        }
+        if self.stale() {
+            parts.push("stale".to_string());
+        }
+        format!("checkout: {}", parts.join(", "))
+    }
+}
+
+/// `owner/repo` from a remote URL or path: its last two parts, without
+/// `.git`.
+fn owner_repo(url: &str) -> String {
+    let url = url.trim_end_matches('/').trim_end_matches(".git");
+    let parts: Vec<&str> = url.rsplit(['/', ':', '\\']).take(2).collect();
+    match parts.as_slice() {
+        [repo, owner] => format!("{owner}/{repo}"),
+        _ => url.to_string(),
     }
 }
 
@@ -266,7 +512,13 @@ fn identical(hits: &[Hit]) -> Vec<Vec<&Hit>> {
 }
 
 /// The same facts the text shows, as data.
-fn data(root: &Path, all: bool, seconds: f32, hits: &[Hit]) -> Value {
+fn data(
+    root: &Path,
+    all: bool,
+    seconds: f32,
+    hits: &[Hit],
+    checkouts: &BTreeMap<&Path, Checkout>,
+) -> Value {
     let files: Vec<Value> = hits
         .iter()
         .map(|h| {
@@ -289,22 +541,40 @@ fn data(root: &Path, all: bool, seconds: f32, hits: &[Hit]) -> Value {
             })
         })
         .collect();
-    let repos: BTreeSet<&Path> = hits
+    let projects: Vec<Value> = checkouts
         .iter()
-        .filter_map(|h| match &h.scope {
-            Scope::Project(r) => Some(r.as_path()),
-            _ => None,
-        })
-        .collect();
-    let projects: Vec<Value> = repos
-        .iter()
-        .map(|r| {
+        .map(|(r, c)| {
             let skills: serde_json::Map<String, Value> = skills::project_counts(r)
                 .into_iter()
                 .map(|(p, n)| (p.to_string(), json!(n)))
                 .collect();
-            json!({"root": tilde(r), "skills": skills})
+            let (kind, main) = match &c.kind {
+                Kind::Clone => ("clone", None),
+                Kind::Worktree(m) => ("worktree", Some(tilde(m))),
+                Kind::Orphan => ("orphan worktree", None),
+            };
+            json!({
+                "root": tilde(r),
+                "skills": skills,
+                "remote": c.remote,
+                "kind": kind,
+                "main_checkout": main,
+                "branch": c.branch,
+                "ahead": c.ab.map(|a| a.0),
+                "behind": c.ab.map(|a| a.1),
+                "uncommitted": c.dirty,
+                "last_commit": c.when.as_ref().map(|w| &w.1),
+                "stale": c.stale(),
+                "prune": matches!(c.kind, Kind::Orphan)
+                    .then(|| orphan_source(r, checkouts))
+                    .flatten()
+                    .map(|s| format!("git -C {} worktree prune", tilde(s))),
+            })
         })
+        .collect();
+    let same_remote: Vec<Value> = same_remote(checkouts)
+        .iter()
+        .map(|(r, v)| json!({"remote": r, "checkouts": v.iter().map(|p| tilde(p)).collect::<Vec<_>>()}))
         .collect();
     let claude = Claude::new();
     let auto_memory: Vec<Value> = claude
@@ -318,7 +588,18 @@ fn data(root: &Path, all: bool, seconds: f32, hits: &[Hit]) -> Value {
             json!({"index": tilde(&index), "lines": lines})
         })
         .collect();
-    let identical: Vec<Vec<String>> = identical(hits)
+    let groups = identical(hits);
+    let identical_remotes: Vec<Value> = groups
+        .iter()
+        .map(|g| {
+            let per = per_remote(g, checkouts);
+            json!(per
+                .iter()
+                .map(|(r, n)| json!({"remote": r, "checkouts": n}))
+                .collect::<Vec<_>>())
+        })
+        .collect();
+    let identical: Vec<Vec<String>> = groups
         .iter()
         .map(|g| g.iter().map(|h| tilde(&h.path)).collect())
         .collect();
@@ -331,6 +612,8 @@ fn data(root: &Path, all: bool, seconds: f32, hits: &[Hit]) -> Value {
         "projects": projects,
         "auto_memory": {"root": tilde(&claude.auto_memory_root()), "indexes": auto_memory},
         "identical": identical,
+        "identical_remotes": identical_remotes,
+        "same_remote": same_remote,
     })
 }
 

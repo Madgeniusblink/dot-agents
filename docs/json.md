@@ -55,9 +55,27 @@ Each object in `harnesses`:
 | `skipped` | The directory names the walk skipped; empty with `--all` |
 | `count` | How many instruction files it found |
 | `files` | One object per file, below |
-| `projects` | One object per checkout: `root`, and `skills`, a count per place a tool reads |
+| `projects` | One object per checkout, below |
 | `auto_memory` | `root`, and `indexes`, each with `index` and `lines` |
 | `identical` | Groups of paths with the same content |
+| `identical_remotes` | One list per group in `identical`: each `remote` with more than one file in the group, and `checkouts`, the count |
+| `same_remote` | One object per remote in more than one place: `remote`, and `checkouts`, the paths, newest last commit first |
+
+Each object in `projects`:
+
+| Key | Value |
+|---|---|
+| `root` | The checkout |
+| `skills` | A count per place a tool reads |
+| `remote` | `owner/repo` from `origin`, or `null` |
+| `kind` | `clone`, `worktree`, or `orphan worktree` |
+| `main_checkout` | The main checkout of a worktree, else `null` |
+| `branch` | The branch, or `null` |
+| `ahead`, `behind` | Counts against the upstream ref on disk, or `null` with no upstream |
+| `uncommitted` | How many files have changes not committed |
+| `last_commit` | The date of the last commit, `YYYY-MM-DD`, or `null` |
+| `stale` | `true` for an orphan, or a last commit older than 30 days with nothing ahead |
+| `prune` | For an orphan, the command that clears its record from the source, else `null` |
 
 Each object in `files`:
 
