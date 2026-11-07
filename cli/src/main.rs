@@ -78,6 +78,9 @@ enum Cmd {
         /// Print one JSON document instead of the text
         #[arg(long)]
         json: bool,
+        /// The settings files each tool reads in a session started here, in order
+        #[arg(long, value_name = "DIR")]
+        from: Option<PathBuf>,
     },
 
     /// The tool's auto memory per repository, what the home already covers, and what to prune
@@ -237,8 +240,13 @@ fn run() -> Result<ExitCode> {
             all,
             long,
             json,
+            from,
         } => {
             let home = Home::locate(cli.home).ok();
+            if let Some(dir) = from {
+                scan::from(&std::path::absolute(dir)?, json, home.as_ref(), &cfg);
+                return Ok(ok);
+            }
             let roots = match root {
                 Some(r) => vec![r],
                 None if !cfg.roots.is_empty() => cfg.roots(),
