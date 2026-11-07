@@ -18,6 +18,7 @@ mod scan;
 mod skills;
 mod status;
 mod tree;
+mod version;
 mod wire;
 
 use anyhow::Result;
@@ -28,7 +29,7 @@ use std::process::ExitCode;
 use home::Home;
 
 #[derive(Parser)]
-#[command(name = "agents", version, about, long_about = None)]
+#[command(name = "agents", version = version::VERSION, about, long_about = None)]
 struct Cli {
     /// The agent home. Default: $AGENTS_HOME, then ~/.agents
     #[arg(long, global = true, value_name = "DIR")]
@@ -204,13 +205,15 @@ enum SkillsAction {
 }
 
 fn main() -> ExitCode {
-    match run() {
+    let code = match run() {
         Ok(code) => code,
         Err(e) => {
             eprintln!("agents: {e:#}");
             ExitCode::from(2)
         }
-    }
+    };
+    version::warn();
+    code
 }
 
 fn run() -> Result<ExitCode> {

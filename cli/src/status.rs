@@ -46,6 +46,7 @@ fn brief(home: &Home, cfg: &Config) {
         0,
         width,
     );
+    out::say(&crate::version::line(), 0, width);
     let mut line = format!("home: {}", tilde(&home.dir));
     if home.git(&["rev-parse", "--is-inside-work-tree"]).is_some() {
         let branch = home
@@ -190,6 +191,7 @@ fn findings(r: &Report) -> usize {
 /// Today's report, in full.
 fn report(home: &Home, cfg: &Config) {
     let width = out::width();
+    println!("{}", crate::version::line());
     println!("home: {}", tilde(&home.dir));
     if home.git(&["rev-parse", "--is-inside-work-tree"]).is_some() {
         let branch = home

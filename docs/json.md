@@ -14,6 +14,7 @@ The envelope comes first. The command's own keys follow it.
 | Key | Value |
 |---|---|
 | `agents` | The CLI version, such as `0.17.0` |
+| `build` | `commit`, the short commit the binary was built from, and `main_ahead`, how many commits `main` is ahead of it from the once-a-day check, or `null` when the check is off or did not answer |
 | `command` | `status`, `scan`, `skills`, `memory`, or `check` |
 | `generated` | When the document was made, RFC 3339 in UTC |
 | `home` | The agent home, or `null` when there is none |

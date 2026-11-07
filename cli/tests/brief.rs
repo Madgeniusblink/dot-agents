@@ -40,7 +40,8 @@ fn fixture() -> tempfile::TempDir {
 /// Run `agents` in `home`, with `config` as the per-machine file when given.
 fn agents(home: &Path, config: Option<&str>, args: &[&str]) -> String {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_agents"));
-    cmd.arg("--home")
+    cmd.env("AGENTS_UPDATE_CHECK", "off")
+        .arg("--home")
         .arg(home.join(".agents"))
         .args(args)
         .current_dir(home)
@@ -77,7 +78,8 @@ fn status_is_brief_and_says_stale() {
         lines[0].contains("config: ~/") && lines[0].contains("config.toml"),
         "{out}"
     );
-    assert!(lines[1].starts_with("home: ~/.agents"), "{out}");
+    assert!(lines[1].starts_with("agents 0."), "{out}");
+    assert!(lines[2].starts_with("home: ~/.agents"), "{out}");
     assert!(out.contains("always-on: 50 of 12288 bytes"), "{out}");
     assert!(out.contains("claude code: current\n"), "{out}");
     assert!(out.contains("codex: current\n"), "{out}");
@@ -235,6 +237,7 @@ fn init_writes_the_config_file() {
     git(&src, &["add", "-A"]);
     git(&src, &["commit", "-qm", "init"]);
     let out = Command::new(env!("CARGO_BIN_EXE_agents"))
+        .env("AGENTS_UPDATE_CHECK", "off")
         .arg("--home")
         .arg(h.join("new-home"))
         .args(["init", &src.to_string_lossy(), "--apply"])

@@ -66,6 +66,7 @@ fn fixture() -> (tempfile::TempDir, tempfile::TempDir) {
 
 fn agents(home: &Path, cwd: &Path, args: &[&str]) -> String {
     let out = Command::new(env!("CARGO_BIN_EXE_agents"))
+        .env("AGENTS_UPDATE_CHECK", "off")
         .args(args)
         .current_dir(cwd)
         .env("HOME", home)
@@ -248,6 +249,7 @@ fn scan_reports_each_checkout_without_the_network() {
     let (_tmp, root) = checkouts();
     let trace = root.join("trace.log");
     let out = Command::new(env!("CARGO_BIN_EXE_agents"))
+        .env("AGENTS_UPDATE_CHECK", "off")
         .args(["scan", "--long", "--root"])
         .arg(&root)
         .env("HOME", &root)
@@ -332,6 +334,7 @@ fn scan_reports_each_checkout_without_the_network() {
 
     // B7: the same fields and groups under --json.
     let doc = Command::new(env!("CARGO_BIN_EXE_agents"))
+        .env("AGENTS_UPDATE_CHECK", "off")
         .args(["scan", "--json", "--root"])
         .arg(&root)
         .env("HOME", &root)
