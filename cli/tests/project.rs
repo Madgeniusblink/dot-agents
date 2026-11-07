@@ -180,13 +180,12 @@ fn git_at(dir: &Path, date: &str, args: &[&str]) {
 /// source directory was moved. The remote's one commit is old.
 fn checkouts() -> (tempfile::TempDir, std::path::PathBuf) {
     let tmp = tempfile::tempdir().unwrap();
-    // git writes resolved paths, so resolve a link such as macOS /var. On
-    // Windows that gives a `\\?\` path git cannot use.
-    let root = if cfg!(windows) {
-        tmp.path().to_path_buf()
-    } else {
-        tmp.path().canonicalize().unwrap()
-    };
+    // git reports resolved long paths: macOS /var is a link, and a Windows
+    // temp dir can be an 8.3 short name. Resolve it, then drop the `\\?\`
+    // prefix Windows adds, which git cannot use.
+    let resolved = tmp.path().canonicalize().unwrap();
+    let text = resolved.to_string_lossy();
+    let root = std::path::PathBuf::from(text.strip_prefix(r"\\?\").unwrap_or(&text));
     let s = |p: &Path| p.to_string_lossy().into_owned();
     let seed = root.join("seed");
     fs::create_dir_all(&seed).unwrap();
