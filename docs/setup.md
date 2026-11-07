@@ -84,11 +84,17 @@ model decides whether to look.
 
 Codex reads one global file, `~/.codex/AGENTS.md`, or `$CODEX_HOME/AGENTS.md`
 when that is set. It has no import syntax, so a symlink is the only live
-transport. It concatenates a parent's file into a child's and stops loading at
-32 KiB, so the always-on set has to fit inside that with room to spare;
-`scripts/context.sh` reports the running total.
+transport.
 
-Source: [Custom instructions with AGENTS.md](https://learn.chatgpt.com/docs/agent-configuration/agents-md).
+`project_doc_max_bytes` defaults to 32 KiB. It truncates **project** files
+only; the global file is not cut off. Codex does compare global plus thread
+instructions against that number and warns when they exceed it, and whatever
+they use is pressure on what project files get. `scripts/context.sh` reports
+the running total for that reason, not because the file is capped.
+
+Sources: [Custom instructions with AGENTS.md](https://learn.chatgpt.com/docs/agent-configuration/agents-md),
+and the wording in `codex-rs/core/src/agents_md_manager.rs`: "The limit applies
+only to project files."
 
 ## Cursor
 
