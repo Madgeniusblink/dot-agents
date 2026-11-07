@@ -178,6 +178,7 @@ pub fn steps(pairs: &[(&str, &str)], notes: &[&str], width: usize) {
 pub fn document(command: &str, home: Option<&Path>, data: Value) -> Value {
     let mut doc = json!({
         "agents": env!("CARGO_PKG_VERSION"),
+        "build": crate::version::json(),
         "command": command,
         "generated": rfc3339(),
         "home": home.map(tilde),
@@ -205,7 +206,11 @@ mod tests {
         let d = document("skills", None, json!({"skills": []}));
         let mut keys: Vec<&str> = d.as_object().unwrap().keys().map(String::as_str).collect();
         keys.sort();
-        assert_eq!(keys, ["agents", "command", "generated", "home", "skills"]);
+        assert_eq!(
+            keys,
+            ["agents", "build", "command", "generated", "home", "skills"]
+        );
+        assert_eq!(d["build"]["commit"], env!("AGENTS_COMMIT"));
         assert_eq!(d["command"], "skills");
         assert_eq!(d["agents"], env!("CARGO_PKG_VERSION"));
         assert_eq!(d["home"], Value::Null);

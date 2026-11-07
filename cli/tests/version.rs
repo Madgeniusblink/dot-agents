@@ -76,6 +76,48 @@ fn stays_silent_when_current_or_off() {
 }
 
 #[test]
+fn status_and_json_carry_the_build() {
+    let tmp = home();
+    cache(tmp.path(), 2);
+    let run = |args: &[&str]| {
+        let out = Command::new(env!("CARGO_BIN_EXE_agents"))
+            .arg("--home")
+            .arg(tmp.path().join(".agents"))
+            .args(args)
+            .env("HOME", tmp.path())
+            .env_remove("CI")
+            .env_remove("AGENTS_UPDATE_CHECK")
+            .env_remove("AGENTS_HOME")
+            .env_remove("AGENTS_CONFIG")
+            .output()
+            .expect("agents");
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    let text = run(&["status"]);
+    assert!(
+        text.contains(&format!(
+            "agents {} ({}), main is 2 commits ahead\n",
+            env!("CARGO_PKG_VERSION"),
+            env!("AGENTS_COMMIT")
+        )),
+        "{text}"
+    );
+    let doc: serde_json::Value = serde_json::from_str(&run(&["status", "--json"])).unwrap();
+    assert_eq!(doc["build"]["commit"], env!("AGENTS_COMMIT"));
+    assert_eq!(doc["build"]["main_ahead"], 2);
+    let off = Command::new(env!("CARGO_BIN_EXE_agents"))
+        .arg("--home")
+        .arg(tmp.path().join(".agents"))
+        .args(["status", "--json"])
+        .env("HOME", tmp.path())
+        .env("AGENTS_UPDATE_CHECK", "off")
+        .output()
+        .expect("agents");
+    let doc: serde_json::Value = serde_json::from_slice(&off.stdout).unwrap();
+    assert!(doc["build"]["main_ahead"].is_null(), "{doc}");
+}
+
+#[test]
 fn version_names_the_commit() {
     let out = Command::new(env!("CARGO_BIN_EXE_agents"))
         .env("AGENTS_UPDATE_CHECK", "off")

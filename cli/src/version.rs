@@ -6,6 +6,7 @@
 
 use crate::home::user_home;
 use serde_json::{json, Value};
+use std::cell::Cell;
 use std::fs;
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -16,13 +17,45 @@ const REPO: &str = "Madgeniusblink/dot-agents";
 const INSTALL: &str = "cargo install --git https://github.com/Madgeniusblink/dot-agents dot-agents";
 const DAY: u64 = 86_400;
 
+thread_local! {
+    static AHEAD: Cell<Option<Option<u64>>> = const { Cell::new(None) };
+}
+
 pub fn warn() {
-    if let Some(line) = behind() {
+    if let Some(line) = ahead().and_then(|n| message(COMMIT, n)) {
         eprintln!("agents: {line}");
     }
 }
 
-fn behind() -> Option<String> {
+/// The `build` object of a `--json` document: the commit, and how many
+/// commits main is ahead, or `null` when the check is off or failed.
+pub fn json() -> Value {
+    json!({"commit": COMMIT, "main_ahead": ahead()})
+}
+
+/// `agents 0.17.0 (0e2c48a)`, then `, main is N commits ahead` when it is.
+pub fn line() -> String {
+    let mut s = format!("agents {VERSION}");
+    if let Some(n) = ahead().filter(|n| *n > 0) {
+        let plural = if n == 1 { "" } else { "s" };
+        s.push_str(&format!(", main is {n} commit{plural} ahead"));
+    }
+    s
+}
+
+/// How many commits main is ahead of this build, found once per process.
+fn ahead() -> Option<u64> {
+    AHEAD.with(|a| match a.get() {
+        Some(n) => n,
+        None => {
+            let n = behind();
+            a.set(Some(n));
+            n
+        }
+    })
+}
+
+fn behind() -> Option<u64> {
     let off = std::env::var("AGENTS_UPDATE_CHECK").is_ok_and(|v| v == "off")
         || std::env::var_os("CI").is_some();
     if off || COMMIT == "unknown" {
@@ -44,7 +77,7 @@ fn behind() -> Option<String> {
                     .as_u64()
                     .is_some_and(|t| now.saturating_sub(t) < DAY)
         });
-    let ahead = match cached {
+    match cached {
         Some(c) => c["ahead"].as_u64(),
         None => {
             let ahead = fetch();
@@ -57,8 +90,7 @@ fn behind() -> Option<String> {
             );
             ahead
         }
-    };
-    message(COMMIT, ahead?)
+    }
 }
 
 /// How many commits main has that the build does not, from GitHub's compare.
