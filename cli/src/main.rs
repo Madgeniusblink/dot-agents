@@ -40,7 +40,11 @@ struct Cli {
 #[derive(Subcommand)]
 enum Cmd {
     /// What each tool loads, from where, and what is broken
-    Status,
+    Status {
+        /// Print one JSON document instead of the text
+        #[arg(long)]
+        json: bool,
+    },
 
     /// The home, or any directory, as a tree: structure and sizes, not content
     Tree {
@@ -66,6 +70,9 @@ enum Cmd {
         /// Print each file in full, one block per file
         #[arg(long)]
         long: bool,
+        /// Print one JSON document instead of the text
+        #[arg(long)]
+        json: bool,
     },
 
     /// The tool's auto memory per repository, what the home already covers, and what to prune
@@ -73,6 +80,9 @@ enum Cmd {
         /// Print each note in full, one block per note
         #[arg(long)]
         long: bool,
+        /// Print one JSON document instead of the text
+        #[arg(long)]
+        json: bool,
         #[command(subcommand)]
         action: Option<MemoryAction>,
     },
@@ -82,6 +92,9 @@ enum Cmd {
         /// Print each description in full, one block per skill
         #[arg(long)]
         long: bool,
+        /// Print one JSON document instead of the text
+        #[arg(long)]
+        json: bool,
         #[command(subcommand)]
         action: Option<SkillsAction>,
     },
@@ -189,8 +202,8 @@ fn run() -> Result<ExitCode> {
     let cli = Cli::parse();
     let ok = ExitCode::SUCCESS;
     match cli.cmd {
-        Cmd::Status => {
-            status::status(&Home::locate(cli.home)?);
+        Cmd::Status { json } => {
+            status::status(&Home::locate(cli.home)?, json);
             Ok(ok)
         }
         Cmd::Tree { root, depth, all } => {
@@ -203,20 +216,26 @@ fn run() -> Result<ExitCode> {
             tree::tree(&root, depth, all, home.as_ref());
             Ok(ok)
         }
-        Cmd::Scan { root, all, long } => {
+        Cmd::Scan {
+            root,
+            all,
+            long,
+            json,
+        } => {
             let home = Home::locate(cli.home).ok();
             scan::scan(
                 root.unwrap_or_else(home::user_home),
                 all,
                 long,
+                json,
                 home.as_ref(),
             );
             Ok(ok)
         }
-        Cmd::Memory { long, action } => {
+        Cmd::Memory { long, json, action } => {
             let home = Home::locate(cli.home).ok();
             match action {
-                None => memory::list(home.as_ref(), long),
+                None => memory::list(home.as_ref(), long, json),
                 Some(MemoryAction::Prune {
                     names,
                     covered,
@@ -228,10 +247,10 @@ fn run() -> Result<ExitCode> {
             }
             Ok(ok)
         }
-        Cmd::Skills { long, action } => {
+        Cmd::Skills { long, json, action } => {
             let home = Home::locate(cli.home).ok();
             match action {
-                None => skills::list(home.as_ref(), long),
+                None => skills::list(home.as_ref(), long, json),
                 Some(SkillsAction::Remove { names, apply }) => {
                     plan::banner(apply);
                     skills::remove(&names, home.as_ref()).run(apply)?;

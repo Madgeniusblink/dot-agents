@@ -1,6 +1,11 @@
 //! How a listing prints: sections with a count, rows aligned by name, and
 //! each row cut to the terminal width so it never wraps. Plain text only, so
-//! the output reads the same in a pipe.
+//! the output reads the same in a pipe. `--json` prints one document instead.
+
+use crate::home::tilde;
+use crate::reset::rfc3339;
+use serde_json::{json, Value};
+use std::path::Path;
 
 /// The widest the name column gets. A longer name is cut.
 pub const NAME_CAP: usize = 28;
@@ -168,9 +173,48 @@ pub fn steps(pairs: &[(&str, &str)], notes: &[&str], width: usize) {
     }
 }
 
+/// The one JSON document a `--json` listing prints: the envelope every
+/// command shares, then the keys of `data`, which must be an object.
+pub fn document(command: &str, home: Option<&Path>, data: Value) -> Value {
+    let mut doc = json!({
+        "agents": env!("CARGO_PKG_VERSION"),
+        "command": command,
+        "generated": rfc3339(),
+        "home": home.map(tilde),
+    });
+    if let (Some(d), Value::Object(m)) = (doc.as_object_mut(), data) {
+        d.extend(m);
+    }
+    doc
+}
+
+/// Print `document` on stdout and nothing else.
+pub fn json(command: &str, home: Option<&Path>, data: Value) {
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&document(command, home, data)).unwrap_or_default()
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn document_has_the_envelope_then_the_data() {
+        let d = document("skills", None, json!({"skills": []}));
+        let mut keys: Vec<&str> = d.as_object().unwrap().keys().map(String::as_str).collect();
+        keys.sort();
+        assert_eq!(keys, ["agents", "command", "generated", "home", "skills"]);
+        assert_eq!(d["command"], "skills");
+        assert_eq!(d["agents"], env!("CARGO_PKG_VERSION"));
+        assert_eq!(d["home"], Value::Null);
+        let g = d["generated"].as_str().unwrap();
+        assert!(
+            g.len() == 20 && g.ends_with('Z') && &g[10..11] == "T",
+            "{g}"
+        );
+    }
 
     #[test]
     fn fit_cuts_with_one_ellipsis() {

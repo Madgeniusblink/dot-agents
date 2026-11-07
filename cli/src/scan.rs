@@ -5,8 +5,9 @@
 use crate::harness::Claude;
 use crate::home::{tilde, user_home, Home};
 use crate::{out, skills};
+use serde_json::{json, Value};
 use std::collections::hash_map::DefaultHasher;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
@@ -60,7 +61,7 @@ struct Hit {
     scope: Scope,
 }
 
-pub fn scan(root: PathBuf, all: bool, long: bool, home: Option<&Home>) {
+pub fn scan(root: PathBuf, all: bool, long: bool, json: bool, home: Option<&Home>) {
     let width = out::width();
     let started = Instant::now();
     let user = user_home();
@@ -122,6 +123,11 @@ pub fn scan(root: PathBuf, all: bool, long: bool, home: Option<&Home>) {
         })
         .collect();
     hits.sort_by(|a, b| a.path.cmp(&b.path));
+    if json {
+        let data = data(&root, all, started.elapsed().as_secs_f32(), &hits);
+        out::json("scan", home.map(|h| h.dir.as_path()), data);
+        return;
+    }
 
     println!(
         "scanned {} in {:.1}s: {} instruction files.",
@@ -224,11 +230,7 @@ pub fn scan(root: PathBuf, all: bool, long: bool, home: Option<&Home>) {
         );
     }
 
-    let mut same: BTreeMap<u64, Vec<&Hit>> = BTreeMap::new();
-    for h in hits.iter().filter(|h| h.bytes > 0 && h.link.is_none()) {
-        same.entry(h.hash).or_default().push(h);
-    }
-    let groups: Vec<&Vec<&Hit>> = same.values().filter(|v| v.len() > 1).collect();
+    let groups = identical(&hits);
     if !groups.is_empty() {
         out::section("identical content", groups.len(), width);
         let sep = if long { "\n" } else { " = " };
@@ -252,6 +254,84 @@ pub fn scan(root: PathBuf, all: bool, long: bool, home: Option<&Home>) {
             width,
         );
     }
+}
+
+/// Files with the same content, each group in path order.
+fn identical(hits: &[Hit]) -> Vec<Vec<&Hit>> {
+    let mut same: BTreeMap<u64, Vec<&Hit>> = BTreeMap::new();
+    for h in hits.iter().filter(|h| h.bytes > 0 && h.link.is_none()) {
+        same.entry(h.hash).or_default().push(h);
+    }
+    same.into_values().filter(|v| v.len() > 1).collect()
+}
+
+/// The same facts the text shows, as data.
+fn data(root: &Path, all: bool, seconds: f32, hits: &[Hit]) -> Value {
+    let files: Vec<Value> = hits
+        .iter()
+        .map(|h| {
+            let (scope, project) = match &h.scope {
+                Scope::Home => ("home", None),
+                Scope::Global => ("global", None),
+                Scope::Project(r) => ("project", Some(tilde(r))),
+                Scope::PluginCache => ("plugin-cache", None),
+                Scope::MovedAside => ("moved-aside", None),
+                Scope::Loose => ("loose", None),
+            };
+            json!({
+                "path": tilde(&h.path),
+                "scope": scope,
+                "project": project,
+                "lines": h.lines,
+                "bytes": h.bytes,
+                "link": h.link.as_deref().map(tilde),
+                "generated": h.generated,
+            })
+        })
+        .collect();
+    let repos: BTreeSet<&Path> = hits
+        .iter()
+        .filter_map(|h| match &h.scope {
+            Scope::Project(r) => Some(r.as_path()),
+            _ => None,
+        })
+        .collect();
+    let projects: Vec<Value> = repos
+        .iter()
+        .map(|r| {
+            let skills: serde_json::Map<String, Value> = skills::project_counts(r)
+                .into_iter()
+                .map(|(p, n)| (p.to_string(), json!(n)))
+                .collect();
+            json!({"root": tilde(r), "skills": skills})
+        })
+        .collect();
+    let claude = Claude::new();
+    let auto_memory: Vec<Value> = claude
+        .auto_memory_dirs()
+        .iter()
+        .map(|d| {
+            let index = d.join("MEMORY.md");
+            let lines = fs::read_to_string(&index)
+                .map(|t| t.lines().count())
+                .unwrap_or(0);
+            json!({"index": tilde(&index), "lines": lines})
+        })
+        .collect();
+    let identical: Vec<Vec<String>> = identical(hits)
+        .iter()
+        .map(|g| g.iter().map(|h| tilde(&h.path)).collect())
+        .collect();
+    json!({
+        "root": tilde(root),
+        "seconds": (seconds * 10.0).round() / 10.0,
+        "skipped": if all { Vec::new() } else { SKIP.to_vec() },
+        "count": hits.len(),
+        "files": files,
+        "projects": projects,
+        "auto_memory": {"root": tilde(&claude.auto_memory_root()), "indexes": auto_memory},
+        "identical": identical,
+    })
 }
 
 struct View {

@@ -128,6 +128,15 @@ pub fn restore(dir: &Path) -> Plan {
 
 /// `YYYYMMDD-HHMMSS` in UTC, without a date crate.
 pub fn timestamp() -> String {
+    now("", "-", "")
+}
+
+/// RFC 3339 in UTC, such as `2026-11-06T09:30:00Z`.
+pub fn rfc3339() -> String {
+    format!("{}Z", now("-", "T", ":"))
+}
+
+fn now(date_sep: &str, mid: &str, time_sep: &str) -> String {
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -135,7 +144,7 @@ pub fn timestamp() -> String {
     let (y, m, d) = civil_from_days((secs / 86400) as i64);
     let rem = secs % 86400;
     format!(
-        "{y:04}{m:02}{d:02}-{:02}{:02}{:02}",
+        "{y:04}{date_sep}{m:02}{date_sep}{d:02}{mid}{:02}{time_sep}{:02}{time_sep}{:02}",
         rem / 3600,
         rem % 3600 / 60,
         rem % 60
