@@ -231,12 +231,9 @@ fn check_fails_on_a_skill_name_that_is_not_its_directory() {
         .lines()
         .find(|l| l.contains("name-matches-dir"))
         .unwrap_or_else(|| panic!("no lint line in:\n{stdout}"));
-    assert!(
-        line.contains("data_query") && line.contains("SKILL.md"),
-        "{line}"
-    );
-    assert!(
-        line.ends_with("error name-matches-dir: name is data-query, directory is data_query"),
-        "{line}"
+    assert_eq!(
+        line,
+        "skills/data_query/SKILL.md:1 skill.name-matches-dir: name is data-query, \
+         directory is data_query. fix: edit the frontmatter to meet the Agent Skills standard"
     );
 }

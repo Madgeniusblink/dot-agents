@@ -49,4 +49,9 @@ jobs:
           cargo clippy --all-targets -- -D warnings
           cargo test
 
+      - name: agents check on the template
+        working-directory: cli
+        shell: bash
+        run: cargo run --quiet -- --home .. check --template
+
 
