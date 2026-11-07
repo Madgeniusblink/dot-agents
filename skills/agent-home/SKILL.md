@@ -13,8 +13,19 @@ you reach the home when it did not reach you.
 ## Is it there, and did it load?
 
 ```sh
-test -d ~/.agents && git -C ~/.agents log --oneline -1
+sh ~/.agents/scripts/context.sh
 ```
+
+It reports the home's branch and state, the always-on files and their byte
+cost, and for each tool what it loads, what resolves, and what does not. Three
+findings mean the wiring is not what it looks like:
+
+- **BROKEN** — an import points at a file that is not there, so that rule
+  never loads and nothing says so.
+- **lines of rules live in this file** — the tool's own config holds rules the
+  home should own. Two sources of truth, and they will disagree.
+- **OWNED BY A GENERATOR** — another tool writes this file. Anything added to
+  it is discarded on the next run. Take the file over before wiring it.
 
 The home loaded this session only if you can already see `principles.md` and
 the files in `rules/` in your context. Judge by that, not by the directory

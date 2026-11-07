@@ -2,6 +2,12 @@
 
 Template semver tracks [upstream.json](context/upstream.json) `template_version`.
 
+## 0.11.0 — 2026-11-06
+
+- New [scripts/context.sh](scripts/context.sh). It reports what loads into an agent's context and from where: the home's branch and state, the always-on files and their byte cost, the directories the router leaves for later, and for each tool which imports resolve. Reads only.
+- It names three failures that are silent otherwise. An import pointing at a missing file, so the rule never loads. Rules living in the tool's own config instead of the home, which is two sources of truth. And a config file owned by another tool's generator, which discards anything added to it on the next run.
+- That third one is why this exists. A home can be correct, the wiring can report success, and a generator can still erase it between sessions with no error anywhere.
+
 ## 0.10.0 — 2026-11-06
 
 - New [scripts/wire.sh](scripts/wire.sh). It points the agent tools on a machine at the home: it finds the tool directories in `$HOME`, adds one import line per always-on file, and links `skills/`. It prints what it would change and writes nothing until `--apply`, because wiring edits files outside the home. `--link` uses symlinks for the rules too. Running it twice changes nothing.
