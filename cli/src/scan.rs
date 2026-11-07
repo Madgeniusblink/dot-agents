@@ -4,6 +4,7 @@
 
 use crate::harness::Claude;
 use crate::home::{tilde, user_home, Home};
+use crate::out;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeMap;
 use std::fs;
@@ -59,7 +60,8 @@ struct Hit {
     scope: Scope,
 }
 
-pub fn scan(root: PathBuf, all: bool, home: Option<&Home>) {
+pub fn scan(root: PathBuf, all: bool, long: bool, home: Option<&Home>) {
+    let width = out::width();
     let started = Instant::now();
     let user = user_home();
     let globals = [
@@ -121,25 +123,33 @@ pub fn scan(root: PathBuf, all: bool, home: Option<&Home>) {
         .collect();
     hits.sort_by(|a, b| a.path.cmp(&b.path));
 
-    let skipped = if all {
-        String::new()
-    } else {
-        format!(" (skipped {}; --all walks them)", SKIP.join(", "))
-    };
     println!(
-        "scanned {} in {:.1}s: {} instruction files{skipped}",
+        "scanned {} in {:.1}s: {} instruction files.",
         tilde(&root),
         started.elapsed().as_secs_f32(),
         hits.len()
     );
+    if !all {
+        out::say(
+            &format!(
+                "The scan skipped {}. To walk them too, add --all.",
+                SKIP.join(", ")
+            ),
+            0,
+            width,
+        );
+    }
+    let view = View { long, width };
 
-    section(
-        "global (loaded in every session)",
+    view.section(
+        "global, loaded in every session",
+        None,
         hits.iter().filter(|h| matches!(h.scope, Scope::Global)),
     );
     if let Some(h) = home {
-        section(
+        view.section(
             &format!("home {}", tilde(&h.dir)),
+            Some(&h.dir),
             hits.iter().filter(|h| matches!(h.scope, Scope::Home)),
         );
     }
@@ -150,38 +160,63 @@ pub fn scan(root: PathBuf, all: bool, home: Option<&Home>) {
         }
     }
     for (repo, files) in &projects {
-        section(&format!("project {}", tilde(repo)), files.iter().copied());
+        view.section(
+            &format!("project {}", tilde(repo)),
+            Some(repo),
+            files.iter().copied(),
+        );
     }
-    section(
-        "loose (no git repository)",
+    view.section(
+        "loose, in no git repository",
+        None,
         hits.iter().filter(|h| matches!(h.scope, Scope::Loose)),
     );
-    section(
-        "moved aside by agents reset",
+    view.section(
+        &format!("moved aside by agents reset, under {}", tilde(&aside)),
+        Some(&aside),
         hits.iter().filter(|h| matches!(h.scope, Scope::MovedAside)),
     );
-    section(
-        "plugin caches (loaded only through the plugin that ships them)",
+    view.section(
+        "plugin caches",
+        None,
         hits.iter()
             .filter(|h| matches!(h.scope, Scope::PluginCache)),
     );
+    if hits.iter().any(|h| matches!(h.scope, Scope::PluginCache)) {
+        out::say(
+            "A tool loads these only through the plugin that ships them.",
+            2,
+            width,
+        );
+    }
 
     // Not an instruction file, but it loads like one: the tool's own notes
     // per repository, machine-local, the first 200 lines of each index.
-    let memory = Claude::new().auto_memory_dirs();
+    let claude = Claude::new();
+    let memory = claude.auto_memory_dirs();
     if !memory.is_empty() {
-        println!();
-        println!(
-            "claude code auto memory ({} repositories; the first 200 lines of each index load every session there; agents reset --memory moves them):",
-            memory.len()
+        let base = claude.auto_memory_root();
+        out::section(
+            &format!("claude code auto memory, under {}", tilde(&base)),
+            memory.len(),
+            width,
         );
-        for d in &memory {
-            let index = d.join("MEMORY.md");
-            let lines = fs::read_to_string(&index)
-                .map(|t| t.lines().count())
-                .unwrap_or(0);
-            println!("  {:>5} lines  {}", lines, tilde(&index));
-        }
+        let items: Vec<out::Row> = memory
+            .iter()
+            .map(|d| {
+                let index = d.join("MEMORY.md");
+                let lines = fs::read_to_string(&index)
+                    .map(|t| t.lines().count())
+                    .unwrap_or(0);
+                view.row(&index, Some(&base), lines, String::new())
+            })
+            .collect();
+        out::print(&items, long, width);
+        out::say(
+            "The first 200 lines of each index load in every session in that repository. To move them aside, run: agents reset --memory",
+            2,
+            width,
+        );
     }
 
     let mut same: BTreeMap<u64, Vec<&Hit>> = BTreeMap::new();
@@ -190,30 +225,71 @@ pub fn scan(root: PathBuf, all: bool, home: Option<&Home>) {
     }
     let groups: Vec<&Vec<&Hit>> = same.values().filter(|v| v.len() > 1).collect();
     if !groups.is_empty() {
-        println!();
-        println!("identical content ({} groups). A copy goes stale in silence; keep one and link or import it:", groups.len());
-        for g in groups {
-            let names: Vec<String> = g.iter().map(|h| tilde(&h.path)).collect();
-            println!("  {}", names.join(" = "));
-        }
+        out::section("identical content", groups.len(), width);
+        let sep = if long { "\n" } else { " = " };
+        let items: Vec<out::Row> = groups
+            .iter()
+            .enumerate()
+            .map(|(i, g)| {
+                let names: Vec<String> = g.iter().map(|h| tilde(&h.path)).collect();
+                let name = if long {
+                    format!("group {}", i + 1)
+                } else {
+                    String::new()
+                };
+                out::Row::new(name, "", names.join(sep))
+            })
+            .collect();
+        out::print(&items, long, width);
+        out::say(
+            "A copy goes stale in silence. Keep one, and link or import it.",
+            2,
+            width,
+        );
     }
 }
 
-fn section<'a>(title: &str, items: impl Iterator<Item = &'a Hit>) {
-    let items: Vec<&Hit> = items.collect();
-    if items.is_empty() {
-        return;
-    }
-    println!();
-    println!("{title}:");
-    for h in items {
-        let mut note = String::new();
-        if let Some(t) = &h.link {
-            note = format!("  -> {}", tilde(t));
-        } else if let Some(g) = &h.generated {
-            note = format!("  GENERATED: {g}");
+struct View {
+    long: bool,
+    width: usize,
+}
+
+impl View {
+    /// A file, shown relative to `base` when it is under it. `--long`
+    /// shows the full path.
+    fn row(&self, path: &Path, base: Option<&Path>, lines: usize, note: String) -> out::Row {
+        let shown = match base.and_then(|b| path.strip_prefix(b).ok()) {
+            Some(r) if !self.long => r.display().to_string(),
+            _ => tilde(path),
+        };
+        if self.long {
+            out::Row::new(shown, format!("{lines} lines"), note)
+        } else {
+            out::Row::new("", format!("{lines:>5} lines"), format!("{shown}{note}"))
         }
-        println!("  {:>5} lines  {}{note}", h.lines, tilde(&h.path));
+    }
+
+    fn section<'a>(&self, title: &str, base: Option<&Path>, items: impl Iterator<Item = &'a Hit>) {
+        let items: Vec<&Hit> = items.collect();
+        if items.is_empty() {
+            return;
+        }
+        out::section(title, items.len(), self.width);
+        let sep = if self.long { "" } else { "  " };
+        let rows: Vec<out::Row> = items
+            .iter()
+            .map(|h| {
+                let note = if let Some(t) = &h.link {
+                    format!("{sep}-> {}", tilde(t))
+                } else if let Some(g) = &h.generated {
+                    format!("{sep}GENERATED: {g}")
+                } else {
+                    String::new()
+                };
+                self.row(&h.path, base, h.lines, note)
+            })
+            .collect();
+        out::print(&rows, self.long, self.width);
     }
 }
 
