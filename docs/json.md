@@ -27,7 +27,7 @@ The envelope comes first. The command's own keys follow it.
 | `config` | The config file for this machine, below |
 | `git` | `null` when the home is not a git checkout; else `branch`, `sha`, `uncommitted` (a count), and `behind_upstream` (a count, or `null` with no `upstream/main`) |
 | `merge_ours_unset` | `true` when `.gitattributes` marks files `merge=ours` and `merge.ours.driver` is not set |
-| `always_on` | `files`, each with `name` and `bytes`, and `bytes`, the total |
+| `always_on` | `files`, each with `name` and `bytes`; `bytes`, the total; the `cap` it must fit; and `cap_source`, as in `check` |
 | `on_demand` | One object per directory: `dir` and `files`, a count |
 | `harnesses` | One object per harness file, below |
 | `manual` | `null`, or `label` and `line`, the pointer line to paste into a tool that keeps rules in app settings |
@@ -54,7 +54,7 @@ Each object in `harnesses`:
 | `link` | The link target, or `null` when the file is not a link |
 | `lines`, `bytes` | The size of the file |
 | `imports` | `home` and `elsewhere` (counts), and `broken`, each import line whose target is gone |
-| `over_cap` | `null`, or `bytes` (with the always-on set) and the `cap` they pass |
+| `over_cap` | `null`, or `bytes`, the size of the file, and the `cap` they pass |
 | `stale` | `true` when the home changed after `wire` wrote the file |
 | `own_rule_lines` | `null`, or the count of rule lines kept in the file instead of the home |
 | `generator_lines` | Each `line:text` that says a generator owns the file |

@@ -94,6 +94,29 @@ fn status_is_brief_and_says_stale() {
 }
 
 #[test]
+fn codex_cap_counts_the_generated_file_once() {
+    let t = fixture();
+    let h = t.path();
+    write(
+        h,
+        ".agents/rules/big.md",
+        &format!("- {}\n", "x".repeat(17000)),
+    );
+    write(
+        h,
+        ".agents/context/upstream.json",
+        r#"{"budget":{"always_on_bytes":20000}}"#,
+    );
+    agents(h, None, &["wire", "--apply"]);
+    let bytes = fs::metadata(h.join(".codex/AGENTS.md")).unwrap().len();
+    assert!(bytes < 32768, "{bytes}");
+    let doc: Value = serde_json::from_str(&agents(h, None, &["status", "--json"])).unwrap();
+    assert_eq!(doc["harnesses"][2]["over_cap"], Value::Null, "{doc}");
+    let long = agents(h, None, &["status", "--long"]);
+    assert!(!long.contains("project_doc_max_bytes"), "{long}");
+}
+
+#[test]
 fn skills_collapse_managed_sources() {
     let t = fixture();
     let h = t.path();
@@ -159,6 +182,27 @@ fn git(dir: &Path, args: &[&str]) {
         .expect("git")
         .success();
     assert!(ok, "git {args:?}");
+}
+
+#[test]
+fn status_takes_no_lock_in_the_home() {
+    let t = fixture();
+    let h = t.path();
+    let home = h.join(".agents");
+    git(&home, &["init", "-q"]);
+    git(&home, &["add", "-A"]);
+    git(&home, &["commit", "-qm", "home"]);
+    let modified = || fs::metadata(home.join(".git")).unwrap().modified().unwrap();
+    let before = modified();
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    for args in [
+        &["status"][..],
+        &["status", "--long"],
+        &["status", "--json"],
+    ] {
+        agents(h, None, args);
+    }
+    assert_eq!(modified(), before, "status wrote into the home's .git");
 }
 
 /// Two clones of one remote under `work/`, and one checkout under `tasks/`.
