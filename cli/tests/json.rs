@@ -159,6 +159,13 @@ fn status_json_matches_the_text() {
         .unwrap();
     assert_eq!(doc["always_on"]["bytes"], number_before(total, " bytes"));
     assert_eq!(doc["always_on"]["files"].as_array().unwrap().len(), 2);
+    let brief = agents(t.path(), &["status"]);
+    assert!(brief.contains("bytes (default cap)"), "{brief}");
+    assert_eq!(
+        doc["always_on"]["cap"],
+        number_before(&brief, " bytes (default cap)")
+    );
+    assert_eq!(doc["always_on"]["cap_source"], "default cap");
 }
 
 #[test]

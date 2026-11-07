@@ -335,6 +335,7 @@ fn data(home: &Home, cfg: &Config) -> Value {
             json!({"name": f.file_name().unwrap_or_default().to_string_lossy(), "bytes": n})
         })
         .collect();
+    let (cap, source) = check::cap(home);
     let on_demand: Vec<Value> = ON_DEMAND
         .iter()
         .map(|d| home.dir.join(d))
@@ -393,7 +394,7 @@ fn data(home: &Home, cfg: &Config) -> Value {
         "config": cfg.json(),
         "git": git,
         "merge_ours_unset": merge_ours_unset,
-        "always_on": {"files": always_on, "bytes": total},
+        "always_on": {"files": always_on, "bytes": total, "cap": cap, "cap_source": source},
         "on_demand": on_demand,
         "harnesses": harnesses,
         "manual": (cursor_dir().is_dir() && cfg.tool("cursor")).then(|| json!({"label": "cursor", "line": CURSOR_LINE})),
