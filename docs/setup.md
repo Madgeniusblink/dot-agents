@@ -20,6 +20,17 @@ Only `AGENTS.md` and `rules/` need to load every session. The router names
 `memory/`, `templates/`, and `skills/`, so the model opens those when the task
 matches.
 
+## Take it back out
+
+```sh
+sh scripts/wire.sh --remove            # what it would undo
+sh scripts/wire.sh --remove --apply    # undo it
+```
+
+It drops its own import lines and its own links, nothing else. Do this before
+deleting a home. A deleted home whose wiring stayed behind leaves every tool
+pointing at a path that is gone.
+
 ## See what loads now
 
 ```sh

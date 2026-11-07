@@ -61,7 +61,9 @@ Every transport must resolve when the tool reads, so a symlink or an import
 line, never a copy. A copy goes stale and says nothing.
 
 Wiring writes outside the home. Get the user's approval first, and name the
-exact file you will change.
+exact file you will change. `--remove` takes out exactly what `--apply` added
+and leaves the rest of the file alone, so a home can be removed without
+stranding the half that pointed at it.
 
 ## Read it without wiring
 
