@@ -11,7 +11,7 @@ Thanks for improving the shared template.
 
 ## Merging
 
-`main` requires the four CI checks and a branch that is up to date. Squash merge. When `main` moves under your PR, update the branch on GitHub rather than rebasing and force-pushing:
+`main` requires the four CI checks and a branch that is up to date. Squash merge. The paths a PR changes set its tier: green merges on green CI, yellow also needs the `review` job, and red needs a code owner ([merge tiers](docs/merge-tiers.md)). When `main` moves under your PR, update the branch on GitHub rather than rebasing and force-pushing:
 
 ```sh
 gh api -X PUT repos/Madgeniusblink/dot-agents/pulls/<N>/update-branch

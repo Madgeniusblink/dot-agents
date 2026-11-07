@@ -1,0 +1,9 @@
+# The red paths in .github/merge-tiers.yml. A PR that touches one needs a code owner's review.
+/.github/CODEOWNERS @Madgeniusblink
+/.github/merge-tiers.yml @Madgeniusblink
+/.github/workflows/review.yml @Madgeniusblink
+/.github/workflows/release.yml @Madgeniusblink
+/scripts/merge-tier.sh @Madgeniusblink
+/scripts/merge-tier-test.sh @Madgeniusblink
+/scripts/githooks/review-prompt.md @Madgeniusblink
+/rules/boundaries.md @Madgeniusblink
