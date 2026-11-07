@@ -46,6 +46,7 @@ writes prints its plan and writes nothing without `--apply`.
 | `agents check` | Budget, links, and the frontmatter of the home's skills |
 | `agents update` | Merge the template's main into the home; `sync` does update, wire, and status |
 | `agents reset` | Move each tool's own instruction files aside, then wire; `--memory` includes the tool's auto memory; `--restore` puts them back |
+| `--json` | On `status`, `scan`, `skills`, and `memory`: one JSON document instead of the text. [json.md](json.md) lists the keys |
 
 Nothing deletes. `reset`, `skills remove`, and `skills keep` move files to
 `~/.agents-reset/<timestamp>/` with a manifest, and print the line that puts

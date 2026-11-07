@@ -6,6 +6,7 @@ use crate::home::{expand_home, rel, tilde, user_home, Home};
 use crate::out;
 use crate::plan::{Action, Plan};
 use crate::reset::timestamp;
+use serde_json::{json, Value};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeMap;
 use std::fs;
@@ -47,6 +48,18 @@ impl Source {
         }
     }
 
+    /// The `source` key of a JSON record.
+    fn key(self) -> &'static str {
+        match self {
+            Source::Home => "home",
+            Source::User => "claude-user",
+            Source::Codex => "codex-user",
+            Source::Synced => "claude-synced",
+            Source::Plugin => "claude-plugin",
+            Source::Project => "project",
+        }
+    }
+
     fn label(self) -> &'static str {
         match self {
             Source::Home => "home",
@@ -65,6 +78,8 @@ pub struct Skill {
     pub dir: PathBuf,
     pub source: Source,
     pub lines: usize,
+    /// The bytes of the body after the frontmatter.
+    pub bytes: usize,
     pub hash: u64,
     pub front: Option<Frontmatter>,
     pub lint: Vec<Finding>,
@@ -270,6 +285,7 @@ fn collect(dir: &Path, source: Source, depth: usize, out: &mut Vec<Skill>) {
             dir: skill_dir,
             source,
             lines: text.lines().count(),
+            bytes: body.len(),
             hash: hasher.finish(),
         });
     }
@@ -715,7 +731,7 @@ fn copy_note(s: &Skill, project: &[&Skill], root: Option<&Path>) -> Option<Strin
     (local && !expand_home(o).exists()).then(|| "source missing".to_string())
 }
 
-pub fn list(home: Option<&Home>, long: bool) {
+pub fn list(home: Option<&Home>, long: bool, json: bool) {
     let width = out::width();
     let skills = find(home);
     let links = fs::read_dir(user_home().join(".claude").join("skills"))
@@ -732,6 +748,11 @@ pub fn list(home: Option<&Home>, long: bool) {
         .iter()
         .filter(|s| s.source == Source::Project)
         .collect();
+    if json {
+        let data = data(&skills, &links, &project, root.as_deref());
+        out::json("skills", home.map(|h| h.dir.as_path()), data);
+        return;
+    }
 
     println!("tools can load {} skills.", skills.len());
     for source in SOURCES {
@@ -806,24 +827,7 @@ pub fn list(home: Option<&Home>, long: bool) {
         }
     }
 
-    let mut by_name: BTreeMap<&str, Vec<&Skill>> = BTreeMap::new();
-    let mut by_hash: BTreeMap<u64, Vec<&Skill>> = BTreeMap::new();
-    for s in &skills {
-        by_name.entry(&s.name).or_default().push(s);
-        by_hash.entry(s.hash).or_default().push(s);
-    }
-    let same_name: Vec<_> = by_name.values().filter(|v| v.len() > 1).collect();
-    let same_body: Vec<_> = by_hash
-        .values()
-        .filter(|v| {
-            v.len() > 1
-                && v.iter()
-                    .map(|s| &s.name)
-                    .collect::<std::collections::BTreeSet<_>>()
-                    .len()
-                    > 1
-        })
-        .collect();
+    let (same_name, same_body) = duplicates(&skills);
     if same_name.is_empty() && same_body.is_empty() {
         println!();
         println!("no duplicates: every name and every body appears once.");
@@ -882,6 +886,111 @@ pub fn list(home: Option<&Home>, long: bool) {
         &["Both commands move the skill to ~/.agents-reset/<timestamp>/. They never delete."],
         width,
     );
+}
+
+/// One name in more than one place, and one body under more than one name.
+type Groups<'a> = Vec<Vec<&'a Skill>>;
+
+fn duplicates(skills: &[Skill]) -> (Groups<'_>, Groups<'_>) {
+    let mut by_name: BTreeMap<&str, Vec<&Skill>> = BTreeMap::new();
+    let mut by_hash: BTreeMap<u64, Vec<&Skill>> = BTreeMap::new();
+    for s in skills {
+        by_name.entry(&s.name).or_default().push(s);
+        by_hash.entry(s.hash).or_default().push(s);
+    }
+    let same_name = by_name.into_values().filter(|v| v.len() > 1).collect();
+    let same_body = by_hash
+        .into_values()
+        .filter(|v| {
+            v.len() > 1
+                && v.iter()
+                    .map(|s| &s.name)
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .len()
+                    > 1
+        })
+        .collect();
+    (same_name, same_body)
+}
+
+/// One skill in the record shape of the spec, plus `copy`, the note the
+/// text shows on a copy of a project skill.
+fn record(s: &Skill, project: &[&Skill], root: Option<&Path>) -> Value {
+    let front = s.front.as_ref().map(|f| {
+        json!({
+            "name": f.name,
+            "description": f.description,
+            "license": f.license,
+            "compatibility": f.compatibility,
+            "metadata": f.metadata,
+            "allowed_tools": f.allowed_tools,
+            "unknown_keys": f.unknown_keys,
+        })
+    });
+    let lint: Vec<Value> = s
+        .lint
+        .iter()
+        .map(|f| json!({"rule": f.rule, "level": f.level.as_str(), "text": f.text}))
+        .collect();
+    let f = &s.files;
+    json!({
+        "name": s.name,
+        "dir": tilde(&s.dir),
+        "scope": s.source.scope(),
+        "source": s.source.key(),
+        "project": root.filter(|_| s.source == Source::Project).map(tilde),
+        "owner": s.owner(),
+        "frontmatter": front,
+        "lint": lint,
+        "body": {"lines": s.lines, "bytes": s.bytes, "hash": format!("{:016x}", s.hash)},
+        "files": {
+            "scripts": f.scripts,
+            "references": f.references,
+            "assets": f.assets,
+            "other": f.other,
+            "bytes": f.bytes,
+        },
+        "refs": {"ok": s.refs.ok, "broken": s.refs.broken},
+        "copy": copy_note(s, project, root),
+    })
+}
+
+/// The same facts the text shows, as data.
+fn data(skills: &[Skill], links: &[PathBuf], project: &[&Skill], root: Option<&Path>) -> Value {
+    let (same_name, same_body) = duplicates(skills);
+    let same_name: Vec<Value> = same_name
+        .iter()
+        .map(|g| {
+            let places: Vec<Value> = g
+                .iter()
+                .map(|s| json!({"scope": s.source.scope(), "dir": tilde(&s.dir)}))
+                .collect();
+            json!({
+                "name": g[0].name,
+                "identical": g.iter().all(|s| s.hash == g[0].hash),
+                "places": places,
+            })
+        })
+        .collect();
+    let same_body: Vec<Value> = same_body
+        .iter()
+        .map(|g| {
+            let names: Vec<&str> = g.iter().map(|s| s.name.as_str()).collect();
+            let dirs: Vec<String> = g.iter().map(|s| tilde(&s.dir)).collect();
+            json!({"names": names, "dirs": dirs})
+        })
+        .collect();
+    let links: Vec<Value> = links
+        .iter()
+        .map(|l| json!({"path": tilde(l), "target": tilde(&fs::read_link(l).unwrap_or_default())}))
+        .collect();
+    let records: Vec<Value> = skills.iter().map(|s| record(s, project, root)).collect();
+    json!({
+        "count": skills.len(),
+        "skills": records,
+        "links": links,
+        "duplicates": {"same_name": same_name, "same_body": same_body},
+    })
 }
 
 /// The `--long` text of a skill: its description, then each fact the

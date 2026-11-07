@@ -9,6 +9,7 @@ use crate::home::{rel, tilde, user_home, Home};
 use crate::out;
 use crate::plan::{Action, Plan};
 use crate::reset::timestamp;
+use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -169,10 +170,18 @@ fn best_match<'a>(e: &Entry, units: &'a [Unit]) -> Option<(f32, &'a str)> {
         .filter(|(s, _)| *s >= SIMILAR)
 }
 
-pub fn list(home: Option<&Home>, long: bool) {
+pub fn list(home: Option<&Home>, long: bool, json: bool) {
     let width = out::width();
     let claude = Claude::new();
     let entries = entries(&claude);
+    if json {
+        out::json(
+            "memory",
+            home.map(|h| h.dir.as_path()),
+            data(home, &claude, &entries),
+        );
+        return;
+    }
     if entries.is_empty() {
         println!(
             "no auto memory under {}.",
@@ -224,17 +233,7 @@ pub fn list(home: Option<&Home>, long: bool) {
         out::print(&items, long, width);
     }
 
-    let mut by_file: BTreeMap<String, Vec<&Entry>> = BTreeMap::new();
-    for e in &entries {
-        let f = e
-            .file
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .into_owned();
-        by_file.entry(f).or_default().push(e);
-    }
-    let dup: Vec<_> = by_file.iter().filter(|(_, v)| v.len() > 1).collect();
+    let dup = same_file(&entries);
     if !dup.is_empty() {
         out::section(
             "the same note in more than one repository",
@@ -276,6 +275,70 @@ pub fn list(home: Option<&Home>, long: bool) {
         &["Both commands move the note to ~/.agents-reset/<timestamp>/ and drop its line from MEMORY.md."],
         width,
     );
+}
+
+/// Each note file name found in more than one repository.
+fn same_file(entries: &[Entry]) -> Vec<(String, Vec<&Entry>)> {
+    let mut by_file: BTreeMap<String, Vec<&Entry>> = BTreeMap::new();
+    for e in entries {
+        let f = e
+            .file
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned();
+        by_file.entry(f).or_default().push(e);
+    }
+    by_file.into_iter().filter(|(_, v)| v.len() > 1).collect()
+}
+
+/// The same facts the text shows, as data.
+fn data(home: Option<&Home>, claude: &Claude, entries: &[Entry]) -> Value {
+    let units = home.map(home_units).unwrap_or_default();
+    let repos: BTreeSet<&Path> = entries.iter().map(|e| e.dir.as_path()).collect();
+    let notes: Vec<Value> = entries
+        .iter()
+        .map(|e| {
+            let (verdict, place, score) = match best_match(e, &units) {
+                Some((s, place)) => (
+                    if s >= COVERED { "covered" } else { "similar" },
+                    Some(place),
+                    Some((s * 100.0).round() / 100.0),
+                ),
+                None => ("none", None, None),
+            };
+            json!({
+                "name": e.name,
+                "repository": tilde(&e.dir),
+                "file": tilde(&e.file),
+                "type": e.kind,
+                "lines": e.lines,
+                "description": e.description,
+                "verdict": verdict,
+                "match": place,
+                "score": score,
+            })
+        })
+        .collect();
+    let same: Vec<Value> = same_file(entries)
+        .iter()
+        .map(|(f, v)| {
+            let places: Vec<String> = v.iter().map(|e| tilde(&e.dir)).collect();
+            json!({"file": f, "repositories": places})
+        })
+        .collect();
+    let covered = entries
+        .iter()
+        .filter(|e| best_match(e, &units).is_some_and(|(s, _)| s >= COVERED))
+        .count();
+    json!({
+        "root": tilde(&claude.auto_memory_root()),
+        "repositories": repos.len(),
+        "count": entries.len(),
+        "covered": covered,
+        "notes": notes,
+        "same_note": same,
+    })
 }
 
 pub fn prune(names: &[String], covered: bool, home: Option<&Home>) -> Plan {

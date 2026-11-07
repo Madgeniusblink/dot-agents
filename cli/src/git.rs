@@ -101,7 +101,7 @@ pub fn update(home: &Home, apply: bool) -> Result<()> {
     plan.run(apply)?;
     if apply {
         println!();
-        status::status(home);
+        status::status(home, false);
     }
     Ok(())
 }
@@ -113,7 +113,7 @@ pub fn sync(home: &Home, apply: bool) -> Result<()> {
     wire::wire(home, false).run(apply)?;
     if apply {
         println!();
-        status::status(home);
+        status::status(home, false);
     }
     Ok(())
 }
