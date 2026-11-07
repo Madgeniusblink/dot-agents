@@ -26,13 +26,14 @@ matches.
 ## Do it with the CLI
 
 ```sh
-cargo install --git https://github.com/Madgeniusblink/dot-agents dot-agents
+brew install madgeniusblink/tap/agents
 agents init <your-copy> --apply    # clone to ~/.agents, add upstream, wire
 ```
 
-Until the first release, `cargo install` builds the binary from this
-repository. The binary embeds no content: the home stays a git checkout. Every
-command that writes prints its plan and writes nothing without `--apply`.
+Without Homebrew, `cargo install --git https://github.com/Madgeniusblink/dot-agents dot-agents`
+builds the same binary from this repository. The binary embeds no content: the
+home stays a git checkout. Every command that writes prints its plan and
+writes nothing without `--apply`.
 
 | Command | Does |
 |---|---|

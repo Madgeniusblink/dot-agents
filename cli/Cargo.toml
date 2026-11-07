@@ -5,7 +5,8 @@ edition = "2021"
 description = "Point every agent tool on a machine at one ~/.agents home"
 license = "MIT"
 repository = "https://github.com/Madgeniusblink/dot-agents"
-readme = "README.md"
+homepage = "https://github.com/Madgeniusblink/dot-agents"
+readme = "../README.md"
 keywords = ["agents", "claude", "codex", "cursor", "context"]
 categories = ["command-line-utilities", "development-tools"]
 
@@ -21,3 +22,12 @@ walkdir = "2"
 
 [dev-dependencies]
 tempfile = "3"
+
+[package.metadata.dist]
+# The formula carries the binary's name: brew install madgeniusblink/tap/agents
+formula = "agents"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
