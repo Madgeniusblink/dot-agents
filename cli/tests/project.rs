@@ -285,9 +285,8 @@ fn scan_reports_each_checkout_without_the_network() {
         row("orphan").contains("remote none, orphan worktree"),
         "{out}"
     );
-    let sub = format!("b{}sub", std::path::MAIN_SEPARATOR);
     assert!(
-        row(&sub).contains("remote team/app, submodule of ~/b, branch main"),
+        row("b/sub").contains("remote team/app, submodule of ~/b, branch main"),
         "{out}"
     );
 
@@ -298,7 +297,7 @@ fn scan_reports_each_checkout_without_the_network() {
     );
     assert!(!row("b").contains("stale"), "{out}");
     assert!(
-        row(&sub).contains("0 ahead 0 behind, 0 uncommitted, last commit 2020-01-02, stale"),
+        row("b/sub").contains("0 ahead 0 behind, 0 uncommitted, last commit 2020-01-02, stale"),
         "{out}"
     );
     assert!(!a.contains("stale"), "{a}");
@@ -365,7 +364,7 @@ fn scan_reports_each_checkout_without_the_network() {
     assert_eq!(wt["kind"], "worktree");
     assert_eq!(wt["main_checkout"], "~/a");
     assert!(wt["ahead"].is_null(), "{wt}");
-    let sub = project(&format!("b{}sub", std::path::MAIN_SEPARATOR));
+    let sub = project("b/sub");
     assert_eq!(sub["kind"], "submodule");
     assert_eq!(sub["main_checkout"], "~/b");
     assert_eq!(sub["last_commit"], "2020-01-02");

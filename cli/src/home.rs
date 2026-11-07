@@ -12,11 +12,18 @@ pub fn user_home() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("/"))
 }
 
-/// `~/x` for a path under the user's home, else the path as given.
+/// `~/x` for a path under the user's home, else the path as given. The
+/// part under `~` always uses `/`, on every platform.
 pub fn tilde(p: &Path) -> String {
     match p.strip_prefix(user_home()) {
         Ok(rest) if rest.as_os_str().is_empty() => "~".to_string(),
-        Ok(rest) => format!("~/{}", rest.display()),
+        Ok(rest) => {
+            let parts: Vec<_> = rest
+                .components()
+                .map(|c| c.as_os_str().to_string_lossy())
+                .collect();
+            format!("~/{}", parts.join("/"))
+        }
         Err(_) => p.display().to_string(),
     }
 }
