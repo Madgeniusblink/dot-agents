@@ -116,8 +116,16 @@ enum Cmd {
         apply: bool,
     },
 
-    /// Context budget and relative links inside the home
-    Check,
+    /// Every rule standards/ writes, the always-on budget, and links
+    Check {
+        /// Also hold the home to the template budget: at most 3 skills,
+        /// nothing in memory/ or decisions/ beyond a README
+        #[arg(long)]
+        template: bool,
+        /// Print one JSON document instead of the text
+        #[arg(long)]
+        json: bool,
+    },
 
     /// Clone your home, add the template as upstream, then wire
     Init {
@@ -274,8 +282,8 @@ fn run() -> Result<ExitCode> {
             wire::unwire(&home).run(apply)?;
             Ok(ok)
         }
-        Cmd::Check => {
-            let passed = check::check(&Home::locate(cli.home)?);
+        Cmd::Check { template, json } => {
+            let passed = check::check(&Home::locate(cli.home)?, template, json);
             Ok(if passed { ok } else { ExitCode::FAILURE })
         }
         Cmd::Init { url, apply } => {

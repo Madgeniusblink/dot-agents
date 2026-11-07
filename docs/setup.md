@@ -43,10 +43,10 @@ writes prints its plan and writes nothing without `--apply`.
 | `agents skills` | Every skill each tool can load, from the home, Claude Code, Codex, claude.ai sync, and plugins, with duplicates and `BROKEN` on a skill that fails the standard; `remove` and `keep` move skills aside |
 | `agents memory` | The tool's own notes per repository, scored against the home so a note the home already states shows as covered; `prune` moves notes aside and drops their index lines |
 | `agents wire` | Point this machine's tools at the home; `unwire` takes out exactly that |
-| `agents check` | Budget, links, and the frontmatter of the home's skills |
+| `agents check` | Every rule in `standards/`, the always-on budget, and links; one line per fault. [check.md](check.md) lists the rules |
 | `agents update` | Merge the template's main into the home; `sync` does update, wire, and status |
 | `agents reset` | Move each tool's own instruction files aside, then wire; `--memory` includes the tool's auto memory; `--restore` puts them back |
-| `--json` | On `status`, `scan`, `skills`, and `memory`: one JSON document instead of the text. [json.md](json.md) lists the keys |
+| `--json` | On `status`, `scan`, `skills`, `memory`, and `check`: one JSON document instead of the text. [json.md](json.md) lists the keys |
 
 Nothing deletes. `reset`, `skills remove`, and `skills keep` move files to
 `~/.agents-reset/<timestamp>/` with a manifest, and print the line that puts

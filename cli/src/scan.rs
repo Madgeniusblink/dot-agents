@@ -385,19 +385,10 @@ impl Checkout {
         let kind = match fs::read_to_string(dir.join(".git")) {
             Err(_) => Kind::Clone,
             Ok(text) => {
-                let record = dir.join(text.trim().trim_start_matches("gitdir:").trim());
+                let record = native(dir, text.trim().trim_start_matches("gitdir:").trim());
                 match fs::read_to_string(record.join("commondir")) {
                     Ok(rel) => {
-                        let mut common = record.clone();
-                        for part in Path::new(rel.trim()).components() {
-                            match part {
-                                Component::ParentDir => {
-                                    common.pop();
-                                }
-                                Component::CurDir => {}
-                                p => common.push(p),
-                            }
-                        }
+                        let common = native(&record, rel.trim());
                         Kind::Worktree(match common.file_name() {
                             Some(n) if n == ".git" => common.parent().unwrap_or(&common).into(),
                             _ => common,
@@ -489,6 +480,23 @@ impl Checkout {
         }
         format!("checkout: {}", parts.join(", "))
     }
+}
+
+/// A path git wrote, relative to `base` or absolute, in this system's form.
+/// Git writes `/` on every system; the path is rebuilt from its parts so it
+/// prints and compares like every path the walk found.
+fn native(base: &Path, git_path: &str) -> PathBuf {
+    let mut out = PathBuf::new();
+    for part in base.join(git_path).components() {
+        match part {
+            Component::ParentDir => {
+                out.pop();
+            }
+            Component::CurDir => {}
+            p => out.push(p),
+        }
+    }
+    out
 }
 
 /// `owner/repo` from a remote URL or path: its last two parts, without
