@@ -454,11 +454,19 @@ fn brief(
         count(|s| matches!(s, Scope::Global))
     );
     if let Some(h) = home {
-        println!(
-            "home {}: {} files",
-            tilde(&h.dir),
-            count(|s| matches!(s, Scope::Home))
-        );
+        let fixtures = h.dir.join("cli/tests/fixtures");
+        let (fixtures, files): (Vec<&Hit>, Vec<&Hit>) = hits
+            .iter()
+            .filter(|x| matches!(x.scope, Scope::Home))
+            .partition(|x| x.path.starts_with(&fixtures));
+        let unit = if files.len() == 1 { "file" } else { "files" };
+        let mut line = format!("home {}: {} {unit}", tilde(&h.dir), files.len());
+        match fixtures.len() {
+            0 => {}
+            1 => line.push_str(", 1 test fixture"),
+            n => line.push_str(&format!(", {n} test fixtures")),
+        }
+        println!("{line}");
     }
     let claude = Claude::new();
     println!(
