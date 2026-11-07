@@ -497,6 +497,8 @@ struct Report {
     /// The bytes of the file, and the cap they pass.
     over_cap: Option<(u64, u64)>,
     stale: bool,
+    /// True when the file there is not the home's, in a place wire writes.
+    not_ours: bool,
     /// Lines of rules in the file itself, when that makes two sources.
     own_rules: Option<usize>,
     /// `line:text` of each line that says a generator owns the file.
@@ -568,6 +570,7 @@ fn read_file(
         broken,
         over_cap,
         stale: ours && expected.is_some_and(|want| want != text),
+        not_ours: exists && expected.is_some() && !ours && !into_home,
         own_rules: (body > 10 && !into_home && !ours).then_some(body),
         generator,
     }
@@ -606,6 +609,13 @@ fn print_report(r: &Report, width: usize) {
             &format!(
                 "{total} bytes. That is over the {cap} byte project_doc_max_bytes setting. The harness does not truncate this file, but it warns. Project files then compete for what is left."
             ),
+            2,
+            width,
+        );
+    }
+    if r.not_ours {
+        out::say(
+            "The file here is not the home's. wire leaves it alone.",
             2,
             width,
         );
