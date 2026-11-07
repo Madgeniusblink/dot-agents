@@ -8,6 +8,7 @@ Thanks for improving the shared template.
 2. Run the same checks as CI locally if you can: neutrality greps, link check, budget check, the checks in [.github/workflows/check.yml](.github/workflows/check.yml).
 3. Do not name vendors in shipped files. Say "your tool."
 4. Record **template** design choices in [docs/decisions/](docs/decisions/), not in `decisions/` (yours).
+5. To add a crate, add each new package name in `cli/Cargo.lock` to [cli/crates.txt](cli/crates.txt) and record the reason in a numbered decision in [docs/decisions/](docs/decisions/).
 
 ## Merging
 
