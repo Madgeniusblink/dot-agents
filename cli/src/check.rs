@@ -1,14 +1,39 @@
 //! The checks that apply to any agent home: the context budget, relative
-//! links, and documented merge commands. One exit code.
+//! links, documented merge commands, and skill frontmatter. One exit code.
 
 use crate::home::Home;
+use crate::skills;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 pub fn check(home: &Home) -> bool {
     let budget_ok = budget(home);
     let links_ok = links(home);
-    budget_ok && links_ok
+    let skills_ok = skill_lint(home);
+    budget_ok && links_ok && skills_ok
+}
+
+/// Each home skill against the Agent Skills standard. A warning prints; an
+/// error fails the check.
+fn skill_lint(home: &Home) -> bool {
+    let root = &home.dir;
+    let mut ok = true;
+    for f in md_files(&root.join("skills"), true) {
+        if f.file_name().is_none_or(|n| n != "SKILL.md") {
+            continue;
+        }
+        let dir = f.parent().and_then(Path::file_name).unwrap_or_default();
+        let text = fs::read_to_string(&f).unwrap_or_default();
+        let front = skills::parse(&text).map(|(front, _)| front);
+        for finding in skills::lint(front.as_ref(), &dir.to_string_lossy()) {
+            println!("{}: {finding}", display(root, &f));
+            ok &= finding.level != skills::Level::Error;
+        }
+    }
+    if ok {
+        println!("skill lint OK");
+    }
+    ok
 }
 
 /// Router <= 50 lines, one line per rule, skill <= 120 lines, every

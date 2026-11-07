@@ -178,3 +178,65 @@ fn crate_version_is_the_template_version() {
         "cli/Cargo.toml and context/upstream.json must carry the same version"
     );
 }
+
+/// A skill whose name is not its directory, with an owner, one reference
+/// that resolves and one that does not.
+fn broken_skill(skills: &Path) {
+    let dir = skills.join("data_query");
+    fs::create_dir_all(dir.join("references")).unwrap();
+    fs::write(dir.join("references").join("GOOD.md"), "ok\n").unwrap();
+    fs::write(
+        dir.join("SKILL.md"),
+        "---\nname: data-query\ndescription: Query the example database.\n\
+         metadata:\n  owner: example-team\n---\n\
+         Read [the guide](references/GOOD.md) and references/MISSING.md.\n",
+    )
+    .unwrap();
+}
+
+#[test]
+fn skills_marks_a_broken_skill_and_long_says_why() {
+    let t = fixture();
+    broken_skill(&t.path().join(".claude").join("skills"));
+    let row = cli(t.path(), &["skills"]);
+    assert!(
+        row.lines()
+            .any(|l| l.contains("data-query") && l.contains("BROKEN")),
+        "{row}"
+    );
+    let long = cli(t.path(), &["skills", "--long"]);
+    for want in [
+        "error name-matches-dir: name is data-query, directory is data_query",
+        "owner: example-team",
+        "broken reference: references/MISSING.md",
+    ] {
+        assert!(long.contains(want), "{want} not in:\n{long}");
+    }
+}
+
+#[test]
+fn check_fails_on_a_skill_name_that_is_not_its_directory() {
+    let t = tempfile::tempdir().unwrap();
+    fs::write(t.path().join("AGENTS.md"), "# Agent rules\n").unwrap();
+    broken_skill(&t.path().join("skills"));
+    let out = Command::new(env!("CARGO_BIN_EXE_agents"))
+        .arg("--home")
+        .arg(t.path())
+        .arg("check")
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(!out.status.success(), "{stdout}");
+    let line = stdout
+        .lines()
+        .find(|l| l.contains("name-matches-dir"))
+        .unwrap_or_else(|| panic!("no lint line in:\n{stdout}"));
+    assert!(
+        line.contains("data_query") && line.contains("SKILL.md"),
+        "{line}"
+    );
+    assert!(
+        line.ends_with("error name-matches-dir: name is data-query, directory is data_query"),
+        "{line}"
+    );
+}
