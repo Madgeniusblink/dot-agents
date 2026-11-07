@@ -96,3 +96,16 @@ impl Claude {
         dirs
     }
 }
+
+/// Grok Build scans `$GROK_HOME/rules/` (default `~/.grok/rules/`) in every
+/// project and loads each file in full. It documents no import syntax, so
+/// the home's drop-in there carries the content.
+pub fn grok_dir() -> PathBuf {
+    std::env::var_os("GROK_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| user_home().join(".grok"))
+}
+
+pub fn grok_dropin() -> PathBuf {
+    grok_dir().join("rules").join("00-agents-home.md")
+}

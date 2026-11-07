@@ -9,12 +9,15 @@ Your agent home is a git checkout, so after that a rule you edit is live at once
 |---|---|---|
 | Symlink | when the tool reads | first choice |
 | Import line | when the tool reads | when links are not followed |
+| A generated file, rewritten by `wire` and reported stale by `status` | when `wire` runs | when the tool follows neither |
 | A sentence naming the path | the model chooses to open it | last resort |
-| A copy of the content | never again | not at all |
+| A bare copy | never again | not at all |
 
-A copy is a snapshot. Edit a rule and nothing happens until you reinstall, and
-nothing tells you the copy is stale. That failure is silent, which makes it
-worse than a pointer the model sometimes skips.
+A bare copy is a snapshot. Edit a rule and nothing happens until you reinstall,
+and nothing tells you the copy is stale. That failure is silent, which makes it
+worse than a pointer the model sometimes skips. The generated file differs in
+the two ways that matter: the same command that wires rewrites it, and `status`
+says when it no longer matches the home.
 
 Only `AGENTS.md` and `rules/` need to load every session. The router names
 `memory/`, `templates/`, and `skills/`, so the model opens those when the task
@@ -106,8 +109,15 @@ model decides whether to look.
 ## Codex
 
 Codex reads one global file, `~/.codex/AGENTS.md`, or `$CODEX_HOME/AGENTS.md`
-when that is set. It has no import syntax, so a symlink is the only live
-transport.
+when that is set, and expands no import. A link to the home's `AGENTS.md`
+gives it only the router, a table of paths it must choose to open, which
+is the weak transport. So `wire` writes that slot as a generated file: one
+header, then `principles.md` and every `rules/*.md` in full. The file changes
+only when `wire` runs. After you edit a rule, Claude Code reads the new text
+at its next start, and Codex reads the old file until the next
+`agents wire --apply` or `agents sync --apply`. `status` says `STALE` in
+between. `unwire` deletes the file. A file in that slot that the home did not
+write is left alone and reported.
 
 `project_doc_max_bytes` defaults to 32 KiB. It truncates **project** files
 only; the global file is not cut off. Codex does compare global plus thread
@@ -118,6 +128,19 @@ the running total for that reason, not because the file is capped.
 Sources: [Custom instructions with AGENTS.md](https://learn.chatgpt.com/docs/agent-configuration/agents-md),
 and the wording in `codex-rs/core/src/agents_md_manager.rs`: "The limit applies
 only to project files."
+
+## Grok Build
+
+Grok Build scans `~/.grok/rules/` (or `$GROK_HOME/rules/`) in every project
+and loads each file in full, with no character cap. It documents no import
+syntax, so the home's drop-in there, `~/.grok/rules/00-agents-home.md`, is
+the same generated file Codex gets, rewritten by `wire` and reported stale by
+`status`. Grok also reads `~/.claude/rules/` when its Claude compatibility is
+on, so it sees the Claude drop-in's import lines as plain text; that is
+harmless. Its own memory lives under `~/.grok/memory-v2/`.
+
+Source: the user guide shipped with the tool, `12-project-rules.md` and
+`13-memory.md` under `crates/codegen/xai-grok-pager/docs/user-guide/`.
 
 ## Cursor
 

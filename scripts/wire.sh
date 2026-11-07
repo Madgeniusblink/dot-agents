@@ -73,14 +73,43 @@ add_link() {
   fi
 }
 
+# The file for a tool that follows neither links nor imports: one header,
+# then every always-on file in full. wire rewrites it; status reports it stale.
+emit_generated() {
+  echo "<!-- $(tilde "$HOME_DIR") owns this file. wire writes it from principles.md and rules/*.md because this tool follows no import; unwire deletes it. Edit those files, then run wire again; status reports when this is stale. -->"
+  always_on | while read -r f; do
+    echo; echo "<!-- $(tilde "$f") -->"; cat "$f"
+    [ -n "$(tail -c1 "$f")" ] && echo
+  done
+}
+
+is_ours() { [ -f "$1" ] && head -1 "$1" | grep -q 'owns this file'; }
+
+write_generated() {
+  dst="$1"; was_link=0
+  if [ -L "$dst" ] && case "$(readlink "$dst")" in "$HOME_DIR"/*) true ;; *) false ;; esac; then
+    was_link=1
+    do_it "rm '$dst'" "unlink ${dst#$HOME/} (a link to the router, which this tool cannot follow)"
+  elif [ -e "$dst" ] && ! is_ours "$dst"; then
+    say "SKIP ${dst#$HOME/} exists and is not the home's. Move your rules into the home first."
+    return
+  fi
+  if [ "$was_link" -eq 0 ] && [ -f "$dst" ] && [ "$(cat "$dst")" = "$(emit_generated)" ]; then
+    say "present: ${dst#$HOME/}"
+  else
+    do_it "mkdir -p '$(dirname "$dst")' && emit_generated > '$dst'" \
+          "write ${dst#$HOME/} ($(always_on | wc -l | tr -d ' ') files)"
+  fi
+}
+
 # Undo: delete our drop-in, our legacy import lines, and our links. Leave
 # everything else alone.
 if [ "$remove" -eq 1 ]; then
-  if [ -f "$DROPIN" ]; then
-    do_it "rm '$DROPIN'" "delete ${DROPIN#$HOME/}"
-  else
-    say "no file at ${DROPIN#$HOME/}"
-  fi
+  for f in "$DROPIN" "${CODEX_HOME:-$HOME/.codex}/AGENTS.md" "${GROK_HOME:-$HOME/.grok}/rules/00-agents-home.md"; do
+    if [ -f "$f" ] && [ ! -L "$f" ] && is_ours "$f"; then
+      do_it "rm '$f'" "delete ${f#$HOME/}"
+    fi
+  done
   drop_legacy_imports "$HOME/.claude/CLAUDE.md"
   for l in "$HOME/.claude/rules/agents" "$HOME/.claude/skills/agents" \
            "${CODEX_HOME:-$HOME/.codex}/AGENTS.md"; do
@@ -107,14 +136,20 @@ if [ -d "$HOME/.claude" ]; then
   add_link "$HOME_DIR/skills" "$HOME/.claude/skills/agents"
 fi
 
-# Codex reads one global file and has no import syntax, so a link is the only
-# live transport. It concatenates parents into children and stops at 32 KiB.
+# Codex reads one global file and expands no import, so that slot gets the
+# generated file.
 CODEX="${CODEX_HOME:-$HOME/.codex}"
 if [ -d "$CODEX" ]; then
   found=1; echo "codex:"
-  add_link "$HOME_DIR/AGENTS.md" "$CODEX/AGENTS.md"
-  [ -e "$CODEX/AGENTS.md" ] && [ ! -L "$CODEX/AGENTS.md" ] &&
-    say "it already has its own AGENTS.md. Move your rules into the home first."
+  write_generated "$CODEX/AGENTS.md"
+fi
+
+# Grok Build scans ~/.grok/rules/ in every project and loads each file in
+# full, with no import, so its drop-in holds the content.
+GROK="${GROK_HOME:-$HOME/.grok}"
+if [ -d "$GROK" ]; then
+  found=1; echo "grok:"
+  write_generated "$GROK/rules/00-agents-home.md"
 fi
 
 # Cursor keeps user-level rules in its application settings, not in a file.
