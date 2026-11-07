@@ -22,9 +22,10 @@ loads each file in full, and it documents no import syntax.
 For a tool that follows neither a link to content nor an import line, `wire`
 writes one file the home owns into the tool's slot or scanned directory,
 holding `principles.md` and every `rules/*.md` in full under a header that
-names the home. `wire` rewrites it whenever the home differs, `status` reports
-it stale until then, `unwire` deletes it, and a file in that slot the home did
-not write is left alone and reported.
+names the home. The file changes only when `wire` runs. Each run rewrites
+it when the home differs, `status` reports it stale until then, `unwire`
+deletes it, and a file in that slot the home did not write is left alone and
+reported.
 
 The ban on copies stands. A bare copy goes stale in silence. This file is
 rewritten by the same command that wires and checked by the same command
@@ -36,9 +37,10 @@ content comes from the checkout at the moment `wire` runs.
 ## Consequences
 
 Codex and Grok Build get the always-on set in full, the same bytes Claude
-Code gets through its imports. `sync` keeps them current. A home edited
-without a `wire` afterwards shows as stale in `status` and in the next
-`wire` dry run.
+Code gets through its imports, one step later. Claude Code sees a rule edit
+at its next start. Codex and Grok Build see it after the next `wire --apply`
+or `sync --apply`. Between the two, `status` and the `wire` dry run say the
+file is stale, and nothing warns at edit time.
 
 `scripts/wire.sh` writes the same bytes, and the parity test holds the two
 together until the scripts retire.

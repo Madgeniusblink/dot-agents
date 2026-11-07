@@ -4,7 +4,7 @@ Template semver tracks [upstream.json](context/upstream.json) `template_version`
 
 ## 0.17.0 — 2026-11-07
 
-- Codex and Grok Build now get the always-on set in full, per [decision 0010](docs/decisions/0010-generated-file-for-tools-without-imports.md). Codex expands no import, so a link to the router gave it only a table of paths, the weak transport; a review caught this after a reset on a real machine. `wire` now writes one file the home owns into Codex's slot and into `~/.grok/rules/`, holding `principles.md` and every `rules/*.md`, rewrites it whenever the home differs, and `status` says `STALE` until then. `unwire` deletes it. A file in that slot the home did not write is left alone. The ban on bare copies stands; this one is rewritten and checked.
+- Codex and Grok Build now get the always-on set in full, per [decision 0010](docs/decisions/0010-generated-file-for-tools-without-imports.md). Codex expands no import, so a link to the router gave it only a table of paths, the weak transport; a review caught this after a reset on a real machine. `wire` now writes one file the home owns into Codex's slot and into `~/.grok/rules/`, holding `principles.md` and every `rules/*.md`, and rewrites it on each run when the home differs; between runs `status` says `STALE`. `unwire` deletes it. A file in that slot the home did not write is left alone. The ban on bare copies stands; this one is rewritten and checked.
 - `scripts/wire.sh` writes the same bytes, and the parity test now covers Codex and Grok.
 - `status` and `context.sh` no longer call a file the home wrote a second source of truth.
 

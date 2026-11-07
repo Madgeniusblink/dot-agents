@@ -112,10 +112,12 @@ Codex reads one global file, `~/.codex/AGENTS.md`, or `$CODEX_HOME/AGENTS.md`
 when that is set, and expands no import. A link to the home's `AGENTS.md`
 gives it only the router, a table of paths it must choose to open, which
 is the weak transport. So `wire` writes that slot as a generated file: one
-header, then `principles.md` and every `rules/*.md` in full. `wire` rewrites
-it whenever the home changes and `status` reports it stale until then;
-`unwire` deletes it. A file in that slot that the home did not write is left
-alone and reported.
+header, then `principles.md` and every `rules/*.md` in full. The file changes
+only when `wire` runs. After you edit a rule, Claude Code reads the new text
+at its next start, and Codex reads the old file until the next
+`agents wire --apply` or `agents sync --apply`. `status` says `STALE` in
+between. `unwire` deletes the file. A file in that slot that the home did not
+write is left alone and reported.
 
 `project_doc_max_bytes` defaults to 32 KiB. It truncates **project** files
 only; the global file is not cut off. Codex does compare global plus thread
