@@ -7,11 +7,11 @@ description: Set up, wire, verify, or update the shared agent home at ~/.agents.
 
 The home is a git checkout at `~/.agents`. The `agents` binary does every step below. Without the binary, the scripts in `scripts/` do the same with no build.
 
-Run the brief command first, then ask for one item with `--long`.
-
 ## Did it load?
 
 Run `agents status`, or `sh ~/.agents/scripts/context.sh`. It says what each tool loads, from where, and whether a generated file is STALE. If `~/.agents` is missing, get it.
+
+Read the brief report first. Add `--long` only when one line of it needs the full report.
 
 ## Get it
 
