@@ -297,7 +297,7 @@ fn report(home: &Home, cfg: &Config) {
         if l.exists() {
             println!("  {} -> {}", tilde(l), tilde(&target));
         } else {
-            println!("  BROKEN {} -> {}", tilde(l), target.display());
+            println!("  BROKEN {} -> {}", tilde(l), tilde(&target));
         }
     }
     if links.is_empty() {

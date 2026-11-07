@@ -123,6 +123,19 @@ fn skills_collapse_managed_sources() {
 }
 
 #[test]
+fn a_broken_link_names_its_target_from_the_user_home() {
+    let t = fixture();
+    let h = t.path();
+    agents(h, None, &["wire", "--apply"]);
+    fs::remove_dir(h.join(".agents/skills")).unwrap();
+    let long = agents(h, None, &["status", "--long"]);
+    assert!(
+        long.contains("BROKEN ~/.claude/skills/agents -> ~/.agents/skills\n"),
+        "{long}"
+    );
+}
+
+#[test]
 fn memory_shows_only_flagged_notes() {
     let t = fixture();
     let h = t.path();
