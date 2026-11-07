@@ -668,7 +668,7 @@ fn missing_hook_paths(settings: &Value) -> BTreeSet<PathBuf> {
     gone
 }
 
-fn commands(v: &Value, f: &mut dyn FnMut(&str)) {
+pub fn commands(v: &Value, f: &mut dyn FnMut(&str)) {
     match v {
         Value::Object(m) => {
             for (k, x) in m {
