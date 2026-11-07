@@ -54,7 +54,7 @@ Each object in `harnesses`:
 | `link` | The link target, or `null` when the file is not a link |
 | `lines`, `bytes` | The size of the file |
 | `imports` | `home` and `elsewhere` (counts), and `broken`, each import line whose target is gone |
-| `over_cap` | `null`, or `bytes` (with the always-on set) and the `cap` they pass |
+| `over_cap` | `null`, or `bytes`, the size of the file, and the `cap` they pass |
 | `stale` | `true` when the home changed after `wire` wrote the file |
 | `own_rule_lines` | `null`, or the count of rule lines kept in the file instead of the home |
 | `generator_lines` | Each `line:text` that says a generator owns the file |
