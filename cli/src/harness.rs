@@ -64,3 +64,35 @@ pub fn cursor_dir() -> PathBuf {
 
 pub const CURSOR_LINE: &str =
     "Read ~/.agents/AGENTS.md and every file in ~/.agents/rules/ before starting work.";
+
+impl Claude {
+    /// Where Claude Code keeps auto memory: its own per-repository notes.
+    /// `autoMemoryDirectory` in settings.json relocates it.
+    pub fn auto_memory_root(&self) -> PathBuf {
+        let settings = std::fs::read_to_string(self.settings()).unwrap_or_default();
+        serde_json::from_str::<serde_json::Value>(&settings)
+            .ok()
+            .and_then(|v| {
+                v["autoMemoryDirectory"]
+                    .as_str()
+                    .map(crate::home::expand_home)
+            })
+            .unwrap_or_else(|| self.root.join("projects"))
+    }
+
+    /// Every `memory/` directory with a `MEMORY.md` index. The first 200
+    /// lines of that index load at the start of every session in its
+    /// repository, so it shapes behavior like an instruction file does.
+    pub fn auto_memory_dirs(&self) -> Vec<PathBuf> {
+        let mut dirs: Vec<PathBuf> = std::fs::read_dir(self.auto_memory_root())
+            .map(|rd| {
+                rd.flatten()
+                    .map(|e| e.path().join("memory"))
+                    .filter(|m| m.join("MEMORY.md").is_file())
+                    .collect()
+            })
+            .unwrap_or_default();
+        dirs.sort();
+        dirs
+    }
+}

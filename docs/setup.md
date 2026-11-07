@@ -40,7 +40,7 @@ command that writes prints its plan and writes nothing without `--apply`.
 | `agents wire` | Point this machine's tools at the home; `unwire` takes out exactly that |
 | `agents check` | Budget and links |
 | `agents update` | Merge the template's main into the home; `sync` does update, wire, and status |
-| `agents reset` | Move each tool's own instruction files aside, then wire; `--restore` puts them back |
+| `agents reset` | Move each tool's own instruction files aside, then wire; `--memory` includes the tool's auto memory; `--restore` puts them back |
 
 Nothing deletes. `reset`, `skills remove`, and `skills keep` move files to
 `~/.agents-reset/<timestamp>/` with a manifest, and print the line that puts

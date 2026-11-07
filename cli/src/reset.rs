@@ -4,14 +4,15 @@
 //! and `--restore` puts it back.
 
 use crate::harness::{codex_dir, Claude};
-use crate::home::{rel, tilde, user_home, Home};
+use crate::home::{rel, tilde, user_home};
 use crate::plan::{Action, Plan};
-use crate::wire;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub fn reset(home: &Home) -> Plan {
+/// The moves only. The caller wires afterwards, because a link into a slot
+/// that a move empties can only be planned once the move has happened.
+pub fn reset(memory: bool) -> Plan {
     let mut plan = Plan::new();
     let user = user_home();
     let stamp = timestamp();
@@ -19,7 +20,22 @@ pub fn reset(home: &Home) -> Plan {
     let claude = Claude::new();
 
     let mut candidates: Vec<PathBuf> = Vec::new();
+    let mut memory_note = None;
     if claude.exists() {
+        // Auto memory is the tool's own per-repository notes, machine-local,
+        // and it loads every session. It is not yours, so it moves only on
+        // request.
+        let dirs = claude.auto_memory_dirs();
+        if memory {
+            candidates.extend(dirs);
+        } else if !dirs.is_empty() {
+            memory_note = Some(format!(
+                "auto memory stays: {} repositories have notes under {}/*/memory/. \
+                 Each MEMORY.md loads every session in its repository. --memory moves them too.",
+                dirs.len(),
+                tilde(&claude.auto_memory_root())
+            ));
+        }
         for f in [claude.own_file(), claude.root.join("CLAUDE.local.md")] {
             if f.is_file() && fs::metadata(&f).map(|m| m.len()).unwrap_or(0) > 0 {
                 candidates.push(f);
@@ -70,10 +86,9 @@ pub fn reset(home: &Home) -> Plan {
             tilde(&aside)
         ));
     }
-
-    plan.blank();
-    let wiring = wire::wire(home, false);
-    plan.append(wiring);
+    if let Some(note) = memory_note {
+        plan.say(note);
+    }
     plan
 }
 

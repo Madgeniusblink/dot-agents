@@ -117,8 +117,11 @@ enum Cmd {
         /// Write the plan. Without it, print only
         #[arg(long)]
         apply: bool,
+        /// Move the tool's auto memory (its own per-repository notes) aside too
+        #[arg(long)]
+        memory: bool,
         /// Put back what an earlier reset moved aside
-        #[arg(long, value_name = "DIR")]
+        #[arg(long, value_name = "DIR", conflicts_with = "memory")]
         restore: Option<PathBuf>,
     },
 }
@@ -217,12 +220,24 @@ fn run() -> Result<ExitCode> {
             git::sync(&Home::locate(cli.home)?, apply)?;
             Ok(ok)
         }
-        Cmd::Reset { apply, restore } => {
+        Cmd::Reset {
+            apply,
+            memory,
+            restore,
+        } => {
             let home = Home::locate(cli.home)?;
             plan::banner(apply);
-            match restore {
-                Some(dir) => reset::restore(&dir).run(apply)?,
-                None => reset::reset(&home).run(apply)?,
+            if let Some(dir) = restore {
+                reset::restore(&dir).run(apply)?;
+                return Ok(ok);
+            }
+            reset::reset(memory).run(apply)?;
+            println!();
+            if apply {
+                // Planned after the moves, so a slot a move emptied can be linked.
+                wire::wire(&home, false).run(true)?;
+            } else {
+                println!("then the wiring plan, planned after the moves, so a slot a move empties can be linked.");
             }
             Ok(ok)
         }

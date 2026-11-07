@@ -77,10 +77,6 @@ impl Plan {
         self.steps.push(Step::Do(action, s.into()));
     }
 
-    pub fn append(&mut self, other: Plan) {
-        self.steps.extend(other.steps);
-    }
-
     pub fn run(&self, apply: bool) -> Result<()> {
         for step in &self.steps {
             match step {
