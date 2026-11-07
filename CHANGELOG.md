@@ -2,6 +2,12 @@
 
 Template semver tracks [upstream.json](context/upstream.json) `template_version`.
 
+## 0.15.1 — 2026-11-07
+
+- `agents scan` lists the tool's auto memory: one `MEMORY.md` per repository under `~/.claude/projects/<project>/memory/`, or wherever `autoMemoryDirectory` points. The first 200 lines of each load at the start of every session in that repository, so a scan that skipped them reported control it did not have.
+- `agents reset` leaves auto memory in place and says how many repositories have it. Those are the tool's own machine-local notes, not yours, so they move only with `--memory`.
+- `agents reset` now wires after the moves, not before. The first run on a real machine moved Codex's file aside and then reported the link as skipped, because the link was planned while the file still existed.
+
 ## 0.15.0 — 2026-11-06
 
 - New [cli/](cli/), one Rust crate, binary `agents`, per [decision 0009](docs/decisions/0009-cli-in-tree.md). It embeds no content and is versioned with the template; a test fails when `cli/Cargo.toml` and `context/upstream.json` disagree. `status`, `wire`, `unwire`, and `check` port the four scripts; `init`, `update`, and `sync` run git; `tree` shows a directory as structure and sizes without content; `scan` finds every instruction file on the machine by scope and reports identical copies; `skills` lists every skill each tool can load, flags a name in two places or one body under two names, and `remove` or `keep` moves skills aside. `reset` moves each tool's own instruction files aside with a manifest and `--restore` puts them back. Nothing in the binary deletes.

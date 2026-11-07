@@ -2,6 +2,7 @@
 //! in every session and the project ones when a session starts inside that
 //! repository, so an unlisted one is behavior you did not choose.
 
+use crate::harness::Claude;
 use crate::home::{tilde, user_home, Home};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeMap;
@@ -164,6 +165,24 @@ pub fn scan(root: PathBuf, all: bool, home: Option<&Home>) {
         hits.iter()
             .filter(|h| matches!(h.scope, Scope::PluginCache)),
     );
+
+    // Not an instruction file, but it loads like one: the tool's own notes
+    // per repository, machine-local, the first 200 lines of each index.
+    let memory = Claude::new().auto_memory_dirs();
+    if !memory.is_empty() {
+        println!();
+        println!(
+            "claude code auto memory ({} repositories; the first 200 lines of each index load every session there; agents reset --memory moves them):",
+            memory.len()
+        );
+        for d in &memory {
+            let index = d.join("MEMORY.md");
+            let lines = fs::read_to_string(&index)
+                .map(|t| t.lines().count())
+                .unwrap_or(0);
+            println!("  {:>5} lines  {}", lines, tilde(&index));
+        }
+    }
 
     let mut same: BTreeMap<u64, Vec<&Hit>> = BTreeMap::new();
     for h in hits.iter().filter(|h| h.bytes > 0 && h.link.is_none()) {
