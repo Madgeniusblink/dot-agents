@@ -39,6 +39,7 @@ fn fixture() -> tempfile::TempDir {
 
 fn agents(home: &Path, args: &[&str]) -> String {
     let out = Command::new(env!("CARGO_BIN_EXE_agents"))
+        .env("AGENTS_UPDATE_CHECK", "off")
         .arg("--home")
         .arg(home.join(".agents"))
         .args(args)
