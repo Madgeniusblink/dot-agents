@@ -1,6 +1,10 @@
 //! The shell scripts stay until the CLI has shipped on every channel. Until
 //! then each script and its command run against the same temporary `$HOME`
 //! and any difference in the resulting tree is a failure.
+//!
+//! The round-trip tests need `sh`, so they run on unix only. On Windows the
+//! helpers below are unused, and that is expected, not a warning.
+#![cfg_attr(not(unix), allow(dead_code))]
 
 use std::collections::BTreeMap;
 use std::fs;
