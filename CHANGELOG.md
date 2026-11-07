@@ -2,6 +2,13 @@
 
 Template semver tracks [upstream.json](context/upstream.json) `template_version`.
 
+## 0.13.0 — 2026-11-06
+
+- [context.sh](scripts/context.sh) reports every harness it knows, not only Claude Code: the file each one loads, its byte count, whether it is a symlink, and whether it exists at all. A harness that loads nothing is now stated rather than omitted.
+- Codex reads `~/.codex/AGENTS.md` (or `$CODEX_HOME`) and stops loading at 32 KiB. The report adds the always-on set to that file and says when the total goes over, because past the cap the last files never arrive and nothing reports it.
+- [wire.sh](scripts/wire.sh) knows Codex's real file. It previously said Codex had no documented import syntax and stopped, which was true about imports and wrong about the path: a symlink works. `--remove` takes that link back out.
+- Cursor keeps user rules in its application settings, not a file. Both scripts now say so and print the line to paste, instead of implying a file they could wire.
+
 ## 0.12.0 — 2026-11-06
 
 - [wire.sh](scripts/wire.sh) gains `--remove`. It drops the import lines and links it added and touches nothing else, so a home can be taken out without leaving tools pointing at a path that is gone. Verified by a round trip: a config with the user's own content and an unrelated import comes back byte-identical after wire then remove.

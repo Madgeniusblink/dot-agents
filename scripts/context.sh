@@ -46,8 +46,12 @@ done
 
 # An import line that resolves to nothing is the failure this report exists for.
 report_file() {
-  f="$1"; label="$2"
-  [ -f "$f" ] || return 0
+  f="$1"; label="$2"; cap="$3"
+  if [ ! -e "$f" ]; then
+    echo
+    echo "$label: no file at $(tilde "$f"). This harness loads nothing from here."
+    return 0
+  fi
   echo
   echo "$label: $(tilde "$f")"
   mine=0; foreign=0; broken=0
@@ -62,7 +66,14 @@ report_file() {
     esac
   done < "$f"
   own=$(wc -l < "$f" | tr -d ' ')
-  echo "  $own lines: $mine imports from this home, $foreign from elsewhere, $broken broken"
+  bytes=$(wc -c < "$f" | tr -d ' ')
+  [ -L "$f" ] && echo "  symlink -> $(tilde "$(readlink "$f")")"
+  echo "  $own lines, $bytes bytes: $mine imports from this home, $foreign from elsewhere, $broken broken"
+  # A harness with a documented ceiling silently truncates past it.
+  if [ -n "$cap" ] && [ "$((bytes + total))" -gt "$cap" ]; then
+    echo "  $((bytes + total)) bytes with the always-on set, over the $cap byte cap."
+    echo "  It stops loading at the cap, so the last files never arrive."
+  fi
   # Content in the file itself outranks nothing and duplicates the home.
   # grep -c exits 1 on no match, so `|| echo 0` would append a second count.
   body=$(grep -cvE '^[[:space:]]*$|^@|^<!--' "$f" 2>/dev/null) || body=0
@@ -71,7 +82,18 @@ report_file() {
     while IFS= read -r g; do echo "  OWNED BY A GENERATOR: $g"; echo "  A regeneration will discard anything added here."; done
 }
 
-report_file "$HOME/.claude/CLAUDE.md" "claude code"
+echo
+echo "what each harness loads:"
+report_file "$HOME/.claude/CLAUDE.md" "claude code" ""
+report_file "${CODEX_HOME:-$HOME/.codex}/AGENTS.md" "codex" 32768
+# Cursor keeps user-level rules in its application settings, not in a file, so
+# nothing here can read or wire them. Project rules are per repository.
+if [ -d "$HOME/.cursor" ]; then
+  echo
+  echo "cursor: user rules live in the app settings, not a file."
+  echo "  Nothing here can read or wire them. Paste the pointer line by hand:"
+  echo "    Read ~/.agents/AGENTS.md and every file in ~/.agents/rules/ before starting work."
+fi
 
 # A hook naming a path that is gone blocks the tool it guards, and the error
 # names the script rather than the config that still calls for it.
