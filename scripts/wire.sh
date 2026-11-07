@@ -1,11 +1,12 @@
 #!/usr/bin/env sh
 # Point the agent tools on this machine at this home, or take it back out.
 # Prints what it would change. Pass --apply to write.
-# --remove undoes exactly what this script added: its import lines and its
+# --remove undoes exactly what this script added: its drop-in file and its
 # links, and nothing else. Anything that writes without an undo leaves the
 # other half behind when half is deleted.
-# Default transport is an import line; --link uses a symlink where the tool
-# follows one. Never a copy: a copy is a snapshot and goes stale in silence.
+# Never edit a file the tool owns. Where the tool scans a directory, drop one
+# file of ours into it; where it follows a link, link. Never a copy: a copy is
+# a snapshot and goes stale in silence.
 
 HOME_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 apply=0; link=0; remove=0
@@ -22,6 +23,7 @@ done
 
 say() { echo "  $1"; }
 do_it() { [ "$apply" -eq 1 ] && eval "$1"; say "$2"; }
+tilde() { echo "$1" | sed "s|^$HOME|~|"; }
 
 # One import line per always-on file. The router names the rest.
 always_on() {
@@ -29,16 +31,38 @@ always_on() {
   for f in "$HOME_DIR"/rules/*.md; do [ -e "$f" ] && echo "$f"; done
 }
 
-add_imports() {
+# Claude Code scans ~/.claude/rules/ and loads every file in it, so that is
+# the drop-in directory. This is the one file in it that the home owns.
+# ~/.claude/CLAUDE.md belongs to the harness and to whatever the user or a
+# generator put there; nothing here writes to it.
+DROPIN="$HOME/.claude/rules/00-agents-home.md"
+
+emit_dropin() {
+  echo "<!-- $(tilde "$HOME_DIR")/scripts/wire.sh writes this file and --remove deletes it. Add a rule as a file in $(tilde "$HOME_DIR")/rules/, then re-run wire.sh --apply. -->"
+  always_on | while read -r f; do echo "@$(tilde "$f")"; done
+}
+
+write_dropin() {
+  if [ -f "$DROPIN" ] && [ "$(cat "$DROPIN")" = "$(emit_dropin)" ]; then
+    say "present: ${DROPIN#$HOME/}"
+  else
+    do_it "mkdir -p '$(dirname "$DROPIN")' && emit_dropin > '$DROPIN'" \
+          "write ${DROPIN#$HOME/} ($(always_on | wc -l | tr -d ' ') import lines)"
+  fi
+}
+
+# An earlier version appended import lines to the harness's own file. Drop
+# only those, so the drop-in is the one place they live.
+drop_legacy_imports() {
   target="$1"
-  always_on | while read -r f; do
-    rel=$(echo "$f" | sed "s|^$HOME|~|")
-    if [ -f "$target" ] && grep -qF "@$rel" "$target"; then
-      say "present: @$rel"
-    else
-      do_it "mkdir -p '$(dirname "$target")' && printf '@%s\n' '$rel' >> '$target'" "add @$rel -> ${target#$HOME/}"
-    fi
-  done
+  [ -f "$target" ] || return 0
+  n=$(grep -c "^@.*/\.agents/" "$target" 2>/dev/null) || n=0
+  if [ "$n" -gt 0 ]; then
+    # grep -v exits 1 when it filters every line, which is the case where the
+    # file held nothing but our lines, so treat 1 as success and 2 as failure.
+    do_it "{ grep -v '^@.*/\.agents/' '$target' || [ \$? -eq 1 ]; } > '$target.tmp' && mv '$target.tmp' '$target'" \
+          "drop $n import line(s) from ${target#$HOME/}"
+  fi
 }
 
 add_link() {
@@ -49,18 +73,15 @@ add_link() {
   fi
 }
 
-# Undo: drop our import lines and our links. Leave everything else alone.
+# Undo: delete our drop-in, our legacy import lines, and our links. Leave
+# everything else alone.
 if [ "$remove" -eq 1 ]; then
-  for target in "$HOME/.claude/CLAUDE.md"; do
-    [ -f "$target" ] || continue
-    n=$(grep -c "^@.*/\.agents/" "$target" 2>/dev/null) || n=0
-    if [ "$n" -gt 0 ]; then
-      do_it "grep -v '^@.*/\.agents/' '$target' > '$target.tmp' && mv '$target.tmp' '$target'" \
-            "drop $n import line(s) from ${target#$HOME/}"
-    else
-      say "no import lines in ${target#$HOME/}"
-    fi
-  done
+  if [ -f "$DROPIN" ]; then
+    do_it "rm '$DROPIN'" "delete ${DROPIN#$HOME/}"
+  else
+    say "no file at ${DROPIN#$HOME/}"
+  fi
+  drop_legacy_imports "$HOME/.claude/CLAUDE.md"
   for l in "$HOME/.claude/rules/agents" "$HOME/.claude/skills/agents" \
            "${CODEX_HOME:-$HOME/.codex}/AGENTS.md"; do
     if [ -L "$l" ]; then
@@ -79,8 +100,9 @@ if [ -d "$HOME/.claude" ]; then
   if [ "$link" -eq 1 ]; then
     add_link "$HOME_DIR/rules" "$HOME/.claude/rules/agents"
   else
-    add_imports "$HOME/.claude/CLAUDE.md"
+    write_dropin
   fi
+  drop_legacy_imports "$HOME/.claude/CLAUDE.md"
   # Skills have no import syntax. A link is the only live transport.
   add_link "$HOME_DIR/skills" "$HOME/.claude/skills/agents"
 fi
