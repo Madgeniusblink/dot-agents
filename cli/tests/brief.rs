@@ -298,7 +298,7 @@ fn o2_scan_counts_test_fixtures_under_the_home_on_their_own() {
     );
     let long = agents(h, None, &["scan", "--long", "--root", &root]);
     assert!(
-        long.contains("fixtures/a/AGENTS.md") && long.contains("fixtures/b/CLAUDE.md"),
+        long.contains("home ~/.agents (3):") && long.contains("CLAUDE.md"),
         "{long}"
     );
 }
