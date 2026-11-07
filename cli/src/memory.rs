@@ -24,7 +24,7 @@ const STOP: &[&str] = &[
     "your", "other", "does", "done", "each", "over", "under", "will", "would", "should", "must",
     "more", "most", "some", "same", "such", "like", "just", "here", "where", "while", "these",
     "those", "been", "being", "were", "through", "because", "without", "instead", "always",
-    "related", "apply", "user", "cris", "claude", "session", "sessions",
+    "related", "apply", "user", "claude", "session", "sessions",
 ];
 
 pub struct Entry {
