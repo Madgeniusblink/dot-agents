@@ -91,6 +91,7 @@ fn cli(home: &Path, args: &[&str]) -> String {
         .env_remove("CODEX_HOME")
         .env_remove("GROK_HOME")
         .env_remove("AGENTS_HOME")
+        .env_remove("AGENTS_CONFIG")
         .output()
         .expect("agents");
     assert!(
@@ -204,7 +205,7 @@ fn skills_marks_a_broken_skill_and_long_says_why() {
             .any(|l| l.contains("data-query") && l.contains("BROKEN")),
         "{row}"
     );
-    let long = cli(t.path(), &["skills", "--long"]);
+    let long = cli(t.path(), &["skills", "--long", "--long"]);
     for want in [
         "error name-matches-dir: name is data-query, directory is data_query",
         "owner: example-team",

@@ -170,7 +170,9 @@ fn best_match<'a>(e: &Entry, units: &'a [Unit]) -> Option<(f32, &'a str)> {
         .filter(|(s, _)| *s >= SIMILAR)
 }
 
-pub fn list(home: Option<&Home>, long: bool, json: bool) {
+/// No `long`: counts per repository and the notes the home covers or
+/// resembles. Once: every note. Twice: each note in full.
+pub fn list(home: Option<&Home>, long: u8, json: bool) {
     let width = out::width();
     let claude = Claude::new();
     let entries = entries(&claude);
@@ -191,6 +193,11 @@ pub fn list(home: Option<&Home>, long: bool, json: bool) {
     }
     let units = home.map(home_units).unwrap_or_default();
     let repos: BTreeSet<&Path> = entries.iter().map(|e| e.dir.as_path()).collect();
+    if long == 0 {
+        brief(&entries, &units, &repos, width);
+        return;
+    }
+    let long = long >= 2;
     out::say(
         &format!(
             "claude code auto memory: {} repositories, {} notes. The notes stay on this machine. Each MEMORY.md loads in every session in its repository.",
@@ -273,6 +280,69 @@ pub fn list(home: Option<&Home>, long: bool, json: bool) {
     out::steps(
         &pairs,
         &["Both commands move the note to ~/.agents-reset/<timestamp>/ and drop its line from MEMORY.md."],
+        width,
+    );
+}
+
+fn brief(entries: &[Entry], units: &[Unit], repos: &BTreeSet<&Path>, width: usize) {
+    out::say(
+        &format!(
+            "claude code auto memory: {} repositories, {} notes. Each MEMORY.md loads in every session in its repository.",
+            repos.len(),
+            entries.len()
+        ),
+        0,
+        width,
+    );
+    if units.is_empty() {
+        println!("no home found, so there is nothing to compare against.");
+    }
+    let verdicts: Vec<(&Entry, Option<(f32, &str)>)> =
+        entries.iter().map(|e| (e, best_match(e, units))).collect();
+    out::section("repositories", repos.len(), width);
+    let items: Vec<out::Row> = repos
+        .iter()
+        .map(|dir| {
+            let mine: Vec<f32> = verdicts
+                .iter()
+                .filter(|(e, _)| e.dir == *dir)
+                .map(|(_, v)| v.map_or(0.0, |(s, _)| s))
+                .collect();
+            let covered = mine.iter().filter(|s| **s >= COVERED).count();
+            let similar = mine.iter().filter(|s| **s >= SIMILAR).count() - covered;
+            out::Row::new(
+                "",
+                format!("{:>4} notes", mine.len()),
+                format!("{covered} covered, {similar} similar  {}", tilde(dir)),
+            )
+        })
+        .collect();
+    out::print(&items, false, width);
+    let flagged: Vec<out::Row> = verdicts
+        .iter()
+        .filter_map(|(e, v)| {
+            let (s, place) = (*v)?;
+            let verdict = if s >= COVERED {
+                "covered by"
+            } else {
+                "similar to"
+            };
+            Some(out::Row::new(
+                &e.name,
+                format!("{:>4} lines", e.lines),
+                format!("{verdict} {place} ({s:.2})  in {}", tilde(&e.dir)),
+            ))
+        })
+        .collect();
+    out::section("covered or similar", flagged.len(), width);
+    out::print(&flagged, false, width);
+    out::steps(
+        &[
+            ("prune covered", "agents memory prune --covered --apply"),
+            ("every note", "agents memory --long"),
+            ("each in full", "agents memory --long --long"),
+        ],
+        &[],
         width,
     );
 }

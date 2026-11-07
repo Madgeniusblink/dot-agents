@@ -6,6 +6,7 @@
 //! `--apply`.
 
 mod check;
+mod config;
 mod git;
 mod harness;
 mod home;
@@ -41,6 +42,9 @@ struct Cli {
 enum Cmd {
     /// What each tool loads, from where, and what is broken
     Status {
+        /// Print the full report
+        #[arg(long)]
+        long: bool,
         /// Print one JSON document instead of the text
         #[arg(long)]
         json: bool,
@@ -67,9 +71,9 @@ enum Cmd {
         /// Walk caches, vendored trees, and Library too
         #[arg(long)]
         all: bool,
-        /// Print each file in full, one block per file
-        #[arg(long)]
-        long: bool,
+        /// Print every file. Twice: each file in full, one block per file
+        #[arg(long, action = clap::ArgAction::Count)]
+        long: u8,
         /// Print one JSON document instead of the text
         #[arg(long)]
         json: bool,
@@ -77,9 +81,9 @@ enum Cmd {
 
     /// The tool's auto memory per repository, what the home already covers, and what to prune
     Memory {
-        /// Print each note in full, one block per note
-        #[arg(long)]
-        long: bool,
+        /// Print every note. Twice: each note in full, one block per note
+        #[arg(long, action = clap::ArgAction::Count)]
+        long: u8,
         /// Print one JSON document instead of the text
         #[arg(long)]
         json: bool,
@@ -89,9 +93,9 @@ enum Cmd {
 
     /// Every skill each tool can load, with duplicates, and what to remove
     Skills {
-        /// Print each description in full, one block per skill
-        #[arg(long)]
-        long: bool,
+        /// Print every skill. Twice: each skill in full, with lint and files
+        #[arg(long, action = clap::ArgAction::Count)]
+        long: u8,
         /// Print one JSON document instead of the text
         #[arg(long)]
         json: bool,
@@ -208,10 +212,11 @@ fn main() -> ExitCode {
 
 fn run() -> Result<ExitCode> {
     let cli = Cli::parse();
+    let cfg = config::Config::load()?;
     let ok = ExitCode::SUCCESS;
     match cli.cmd {
-        Cmd::Status { json } => {
-            status::status(&Home::locate(cli.home)?, json);
+        Cmd::Status { long, json } => {
+            status::status(&Home::locate(cli.home)?, &cfg, long, json);
             Ok(ok)
         }
         Cmd::Tree { root, depth, all } => {
@@ -231,13 +236,12 @@ fn run() -> Result<ExitCode> {
             json,
         } => {
             let home = Home::locate(cli.home).ok();
-            scan::scan(
-                root.unwrap_or_else(home::user_home),
-                all,
-                long,
-                json,
-                home.as_ref(),
-            );
+            let roots = match root {
+                Some(r) => vec![r],
+                None if !cfg.roots.is_empty() => cfg.roots(),
+                None => vec![home::user_home()],
+            };
+            scan::scan(roots, all, long, json, home.as_ref(), &cfg);
             Ok(ok)
         }
         Cmd::Memory { long, json, action } => {
@@ -273,7 +277,7 @@ fn run() -> Result<ExitCode> {
         Cmd::Wire { apply, link } => {
             let home = Home::locate(cli.home)?;
             plan::banner(apply);
-            wire::wire(&home, link).run(apply)?;
+            wire::wire(&home, &cfg, link).run(apply)?;
             Ok(ok)
         }
         Cmd::Unwire { apply } => {
@@ -287,15 +291,15 @@ fn run() -> Result<ExitCode> {
             Ok(if passed { ok } else { ExitCode::FAILURE })
         }
         Cmd::Init { url, apply } => {
-            git::init(cli.home, &url, apply)?;
+            git::init(cli.home, &cfg, &url, apply)?;
             Ok(ok)
         }
         Cmd::Update { apply } => {
-            git::update(&Home::locate(cli.home)?, apply)?;
+            git::update(&Home::locate(cli.home)?, &cfg, apply)?;
             Ok(ok)
         }
         Cmd::Sync { apply } => {
-            git::sync(&Home::locate(cli.home)?, apply)?;
+            git::sync(&Home::locate(cli.home)?, &cfg, apply)?;
             Ok(ok)
         }
         Cmd::Reset {
@@ -313,7 +317,7 @@ fn run() -> Result<ExitCode> {
             println!();
             if apply {
                 // Planned after the moves, so a slot a move emptied can be linked.
-                wire::wire(&home, false).run(true)?;
+                wire::wire(&home, &cfg, false).run(true)?;
             } else {
                 println!("then the wiring plan, planned after the moves, so a slot a move empties can be linked.");
             }

@@ -822,7 +822,9 @@ fn copy_note(s: &Skill, project: &[&Skill], root: Option<&Path>) -> Option<Strin
     (local && !expand_home(o).exists()).then(|| "source missing".to_string())
 }
 
-pub fn list(home: Option<&Home>, long: bool, json: bool) {
+/// No `long`: counts per source and rows only for skills that are yours,
+/// BROKEN, or a copy. Once: every skill. Twice: each skill in full.
+pub fn list(home: Option<&Home>, long: u8, json: bool) {
     let width = out::width();
     let skills = find(home);
     let links = fs::read_dir(user_home().join(".claude").join("skills"))
@@ -844,6 +846,11 @@ pub fn list(home: Option<&Home>, long: bool, json: bool) {
         out::json("skills", home.map(|h| h.dir.as_path()), data);
         return;
     }
+    if long == 0 {
+        brief(&skills, &project, root.as_deref(), width);
+        return;
+    }
+    let long = long >= 2;
 
     println!("tools can load {} skills.", skills.len());
     for source in SOURCES {
@@ -975,6 +982,74 @@ pub fn list(home: Option<&Home>, long: bool, json: bool) {
     out::steps(
         &pairs,
         &["Both commands move the skill to ~/.agents-reset/<timestamp>/. They never delete."],
+        width,
+    );
+}
+
+fn brief(skills: &[Skill], project: &[&Skill], root: Option<&Path>, width: usize) {
+    println!("tools can load {} skills.", skills.len());
+    let counts: Vec<out::Row> = SOURCES
+        .iter()
+        .filter_map(|&source| {
+            let n = skills.iter().filter(|s| s.source == source).count();
+            let label = match (source, root) {
+                (Source::Project, Some(r)) => format!("project {}", tilde(r)),
+                _ => source.label().to_string(),
+            };
+            (n > 0).then(|| {
+                out::Row::new(
+                    "",
+                    format!("{n:>4}"),
+                    format!("{label}, {}", source.scope()),
+                )
+            })
+        })
+        .collect();
+    out::print(&counts, false, width);
+    let shown: Vec<out::Row> = skills
+        .iter()
+        .filter_map(|s| {
+            let copy = copy_note(s, project, root).filter(|n| n.starts_with("copy of"));
+            if s.source.scope() != "yours" && !s.broken() && copy.is_none() {
+                return None;
+            }
+            let mark = if s.broken() { " BROKEN" } else { "" };
+            let desc = s
+                .description
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ");
+            let text = match copy {
+                Some(n) => format!("{n}  {desc}"),
+                None => desc,
+            };
+            Some(out::Row::new(
+                &s.name,
+                format!("{:>4} lines{mark}", s.lines),
+                text,
+            ))
+        })
+        .collect();
+    out::section("yours, BROKEN, or a copy", shown.len(), width);
+    out::print(&shown, false, width);
+    let (same_name, same_body) = duplicates(skills);
+    println!();
+    if same_name.is_empty() && same_body.is_empty() {
+        println!("no duplicates: every name and every body appears once.");
+    } else {
+        println!(
+            "duplicates: {} names in more than one place, {} bodies under different names.",
+            same_name.len(),
+            same_body.len()
+        );
+    }
+    out::steps(
+        &[
+            ("remove some", "agents skills remove <name>... --apply"),
+            ("every skill", "agents skills --long"),
+            ("each in full", "agents skills --long --long"),
+        ],
+        &[],
         width,
     );
 }

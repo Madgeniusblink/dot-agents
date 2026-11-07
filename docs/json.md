@@ -22,6 +22,8 @@ The envelope comes first. The command's own keys follow it.
 
 | Key | Value |
 |---|---|
+| `machine` | The name this machine gives itself, or `unknown` |
+| `config` | The config file for this machine, below |
 | `git` | `null` when the home is not a git checkout; else `branch`, `sha`, `uncommitted` (a count), and `behind_upstream` (a count, or `null` with no `upstream/main`) |
 | `merge_ours_unset` | `true` when `.gitattributes` marks files `merge=ours` and `merge.ours.driver` is not set |
 | `always_on` | `files`, each with `name` and `bytes`, and `bytes`, the total |
@@ -30,6 +32,16 @@ The envelope comes first. The command's own keys follow it.
 | `manual` | `null`, or `label` and `line`, the pointer line to paste into a tool that keeps rules in app settings |
 | `hooks` | `null` when the settings file is missing; else `settings`, `valid_json`, and `missing_paths` |
 | `links` | One object per link into the home: `path`, `target`, and `broken` |
+
+The `config` object:
+
+| Key | Value |
+|---|---|
+| `path` | The file: `$AGENTS_CONFIG`, else `~/.config/agents/config.toml` |
+| `exists` | `false` when there is no file, so every key has its default |
+| `editor` | The string, or `null` when it is empty or unset |
+| `scan` | `roots` and `skip`, each a list of strings |
+| `tools` | `present`, a list of tool names; empty means every tool found |
 
 Each object in `harnesses`:
 
@@ -50,7 +62,10 @@ Each object in `harnesses`:
 
 | Key | Value |
 |---|---|
-| `root` | The directory walked |
+| `machine` | The name this machine gives itself, or `unknown` |
+| `config` | The config file for this machine, as in `status` |
+| `root` | The first directory walked |
+| `roots` | Every directory walked: `--root`, else `[scan] roots`, else your home directory |
 | `seconds` | How long the walk took |
 | `skipped` | The directory names the walk skipped; empty with `--all` |
 | `count` | How many instruction files it found |
