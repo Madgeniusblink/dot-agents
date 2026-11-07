@@ -3,9 +3,9 @@
 //! repository, so an unlisted one is behavior you did not choose.
 
 use crate::config::{self, Config};
-use crate::harness::Claude;
-use crate::home::{git_in, tilde, user_home, Home};
-use crate::{out, skills};
+use crate::harness::{self, Claude};
+use crate::home::{expand_home, git_in, tilde, user_home, Home};
+use crate::{out, skills, status};
 use serde_json::{json, Value};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeMap;
@@ -82,7 +82,30 @@ pub fn scan(
     ];
     let aside = user.join(".agents-reset");
 
-    let mut hits: Vec<Hit> = roots
+    let scope_of = |path: &Path| {
+        if home.is_some_and(|h| path.starts_with(&h.dir)) {
+            Scope::Home
+        } else if path.starts_with(&aside) {
+            Scope::MovedAside
+        } else if globals.iter().any(|g| path.starts_with(g)) {
+            // A tool's plugin cache holds files the plugin ships, loaded
+            // only through the plugin, never as the user's own rules.
+            if path
+                .components()
+                .any(|c| c.as_os_str() == "plugins" || c.as_os_str() == ".tmp")
+            {
+                Scope::PluginCache
+            } else {
+                Scope::Global
+            }
+        } else {
+            match repo_root(path) {
+                Some(r) => Scope::Project(r),
+                None => Scope::Loose,
+            }
+        }
+    };
+    let (found, mut setting_paths): (Vec<PathBuf>, Vec<PathBuf>) = roots
         .iter()
         .flat_map(|root| {
             WalkDir::new(root)
@@ -91,33 +114,30 @@ pub fn scan(
                 .filter_entry(|e| (all || keep(e)) && !cfg.skipped(e.path()))
         })
         .flatten()
-        .filter(|e| !e.file_type().is_dir() && instruction_file(e.path()))
-        .map(|e| {
-            let path = e.into_path();
+        .filter(|e| {
+            !e.file_type().is_dir()
+                && (instruction_file(e.path()) || harness::settings_tool(e.path()).is_some())
+        })
+        .map(DirEntry::into_path)
+        .partition(|p| instruction_file(p));
+    setting_paths.extend(
+        harness::settings_globals()
+            .into_iter()
+            .filter(|p| p.is_file()),
+    );
+    setting_paths.sort();
+    setting_paths.dedup();
+    let settings: Vec<(Setting, Scope)> = setting_paths
+        .iter()
+        .map(|p| (Setting::read(p), scope_of(p)))
+        .collect();
+    let mut hits: Vec<Hit> = found
+        .into_iter()
+        .map(|path| {
             let text = fs::read_to_string(&path).unwrap_or_default();
             let mut hasher = DefaultHasher::new();
             text.hash(&mut hasher);
-            let scope = if home.is_some_and(|h| path.starts_with(&h.dir)) {
-                Scope::Home
-            } else if path.starts_with(&aside) {
-                Scope::MovedAside
-            } else if globals.iter().any(|g| path.starts_with(g)) {
-                // A tool's plugin cache holds files the plugin ships, loaded
-                // only through the plugin, never as the user's own rules.
-                if path
-                    .components()
-                    .any(|c| c.as_os_str() == "plugins" || c.as_os_str() == ".tmp")
-                {
-                    Scope::PluginCache
-                } else {
-                    Scope::Global
-                }
-            } else {
-                match repo_root(&path) {
-                    Some(r) => Scope::Project(r),
-                    None => Scope::Loose,
-                }
-            };
+            let scope = scope_of(&path);
             Hit {
                 lines: text.lines().count(),
                 bytes: text.len() as u64,
@@ -154,6 +174,7 @@ pub fn scan(
             started.elapsed().as_secs_f32(),
             &hits,
             &checkouts,
+            &settings,
         );
         out::json("scan", home.map(|h| h.dir.as_path()), data);
         return;
@@ -161,7 +182,15 @@ pub fn scan(
 
     let shown: Vec<String> = roots.iter().map(|r| tilde(r)).collect();
     if long == 0 {
-        brief(&shown.join(", "), started, home, &hits, &checkouts, width);
+        brief(
+            &shown.join(", "),
+            started,
+            home,
+            &hits,
+            &checkouts,
+            &settings,
+            width,
+        );
         return;
     }
     let long = long >= 2;
@@ -227,6 +256,31 @@ pub fn scan(
     if hits.iter().any(|h| matches!(h.scope, Scope::PluginCache)) {
         out::say(
             "A tool loads these only through the plugin that ships them.",
+            2,
+            width,
+        );
+    }
+
+    if !settings.is_empty() {
+        out::section("tool settings files", settings.len(), width);
+        let rows: Vec<out::Row> = settings
+            .iter()
+            .map(|(f, scope)| {
+                out::Row::new(
+                    f.tool,
+                    format!("{:>7} bytes", f.bytes),
+                    format!(
+                        "{}  {}  {}",
+                        scope_name(scope),
+                        f.validity(),
+                        tilde(&f.path)
+                    ),
+                )
+            })
+            .collect();
+        out::print(&rows, long, width);
+        out::say(
+            "To see which apply from a directory, and in what order, run: agents scan --from <dir>",
             2,
             width,
         );
@@ -336,6 +390,7 @@ fn brief(
     home: Option<&Home>,
     hits: &[Hit],
     checkouts: &BTreeMap<&Path, Checkout>,
+    settings: &[(Setting, Scope)],
     width: usize,
 ) {
     out::say(
@@ -412,6 +467,14 @@ fn brief(
         tilde(&claude.auto_memory_root())
     );
     println!("identical content: {} groups", identical(hits).len());
+    println!(
+        "tool settings files: {}, {} invalid",
+        settings.len(),
+        settings
+            .iter()
+            .filter(|(f, _)| matches!(f.state, State::Invalid(..)))
+            .count()
+    );
     println!();
     println!("every file: agents scan --long");
 }
@@ -661,22 +724,19 @@ fn data(
     seconds: f32,
     hits: &[Hit],
     checkouts: &BTreeMap<&Path, Checkout>,
+    settings: &[(Setting, Scope)],
 ) -> Value {
+    let project_of = |s: &Scope| match s {
+        Scope::Project(r) => Some(tilde(r)),
+        _ => None,
+    };
     let files: Vec<Value> = hits
         .iter()
         .map(|h| {
-            let (scope, project) = match &h.scope {
-                Scope::Home => ("home", None),
-                Scope::Global => ("global", None),
-                Scope::Project(r) => ("project", Some(tilde(r))),
-                Scope::PluginCache => ("plugin-cache", None),
-                Scope::MovedAside => ("moved-aside", None),
-                Scope::Loose => ("loose", None),
-            };
             json!({
                 "path": tilde(&h.path),
-                "scope": scope,
-                "project": project,
+                "scope": scope_name(&h.scope),
+                "project": project_of(&h.scope),
                 "lines": h.lines,
                 "bytes": h.bytes,
                 "link": h.link.as_deref().map(tilde),
@@ -761,7 +821,27 @@ fn data(
         "identical": identical,
         "identical_remotes": identical_remotes,
         "same_remote": same_remote,
+        "settings": settings
+            .iter()
+            .map(|(f, scope)| {
+                let mut v = f.json();
+                v["scope"] = json!(scope_name(scope));
+                v["project"] = json!(project_of(scope));
+                v
+            })
+            .collect::<Vec<_>>(),
     })
+}
+
+fn scope_name(s: &Scope) -> &'static str {
+    match s {
+        Scope::Home => "home",
+        Scope::Global => "global",
+        Scope::Project(_) => "project",
+        Scope::PluginCache => "plugin-cache",
+        Scope::MovedAside => "moved-aside",
+        Scope::Loose => "loose",
+    }
 }
 
 struct View {
@@ -843,4 +923,296 @@ fn repo_root(p: &Path) -> Option<PathBuf> {
         .skip(1)
         .find(|d| d.join(".git").exists())
         .map(Path::to_path_buf)
+}
+
+enum State {
+    Valid(Value),
+    /// The line of the parse error, and the error.
+    Invalid(usize, String),
+    Empty,
+}
+
+/// One tool settings file: what it is and whether it parses.
+struct Setting {
+    path: PathBuf,
+    tool: &'static str,
+    bytes: u64,
+    state: State,
+}
+
+/// The entries of one settings file that change behavior.
+#[derive(Default)]
+struct Entries {
+    /// Event, command, and true when a path in the command is gone.
+    hooks: Vec<(String, String, bool)>,
+    deny: Vec<String>,
+    allow: Vec<String>,
+    /// Allow entries that name a path that is gone.
+    dead_allow: Vec<String>,
+    env: Vec<String>,
+    model: Option<String>,
+    effort: Option<String>,
+}
+
+impl Setting {
+    fn read(path: &Path) -> Setting {
+        let text = fs::read_to_string(path).unwrap_or_default();
+        let state = if text.trim().is_empty() {
+            State::Empty
+        } else if path.extension().is_some_and(|e| e == "toml") {
+            match basic_toml::from_str::<Value>(&text) {
+                Ok(v) => State::Valid(v),
+                Err(e) => State::Invalid(e.line_col().map_or(0, |(l, _)| l + 1), e.to_string()),
+            }
+        } else {
+            match serde_json::from_str::<Value>(&text) {
+                Ok(v) => State::Valid(v),
+                Err(e) => State::Invalid(e.line(), e.to_string()),
+            }
+        };
+        Setting {
+            path: path.to_path_buf(),
+            tool: harness::settings_tool(path).unwrap_or("unknown"),
+            bytes: fs::metadata(path).map_or(0, |m| m.len()),
+            state,
+        }
+    }
+
+    /// A file that does not parse changes nothing the scan can show.
+    fn applies(&self) -> bool {
+        !matches!(self.state, State::Invalid(..))
+    }
+
+    fn validity(&self) -> String {
+        match &self.state {
+            State::Valid(_) => "valid".to_string(),
+            State::Invalid(line, _) => format!("invalid at line {line}"),
+            State::Empty => "empty".to_string(),
+        }
+    }
+
+    fn entries(&self) -> Entries {
+        let State::Valid(v) = &self.state else {
+            return Entries::default();
+        };
+        let keys = harness::settings_keys(&self.path);
+        let at = |k: Option<&str>| k.and_then(|k| v.pointer(k));
+        let strings = |k: Option<&str>| -> Vec<String> {
+            at(k)
+                .and_then(Value::as_array)
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|x| x.as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let scalar =
+            |k: Option<&str>| at(k).map(|x| x.as_str().map_or(x.to_string(), str::to_string));
+        let mut hooks = Vec::new();
+        if let Some(Value::Object(events)) = at(keys.hooks) {
+            for (event, x) in events {
+                status::commands(x, &mut |cmd| {
+                    hooks.push((event.clone(), cmd.to_string(), dead(cmd)));
+                });
+            }
+        }
+        let allow = strings(keys.allow);
+        Entries {
+            hooks,
+            deny: strings(keys.deny),
+            dead_allow: allow
+                .iter()
+                .filter(|a| {
+                    let inner = a
+                        .split_once('(')
+                        .map_or("", |(_, r)| r.trim_end_matches(')'));
+                    dead(inner)
+                })
+                .cloned()
+                .collect(),
+            allow,
+            env: at(keys.env)
+                .and_then(Value::as_object)
+                .map(|m| m.keys().cloned().collect())
+                .unwrap_or_default(),
+            model: scalar(keys.model),
+            effort: scalar(keys.effort),
+        }
+    }
+
+    fn json(&self) -> Value {
+        let (line, error) = match &self.state {
+            State::Invalid(l, e) => (Some(*l), Some(e.as_str())),
+            _ => (None, None),
+        };
+        let e = self.entries();
+        json!({
+            "path": tilde(&self.path),
+            "tool": self.tool,
+            "bytes": self.bytes,
+            "validity": match self.state {
+                State::Valid(_) => "valid",
+                State::Invalid(..) => "invalid",
+                State::Empty => "empty",
+            },
+            "error_line": line,
+            "error": error,
+            "hooks": e.hooks.iter().map(|(ev, c, d)| json!({"event": ev, "command": c, "dead": d})).collect::<Vec<_>>(),
+            "deny": e.deny,
+            "allow": e.allow.len(),
+            "dead_allow": e.dead_allow,
+            "env": e.env,
+            "model": e.model,
+            "effort": e.effort,
+        })
+    }
+}
+
+/// True when the command names an absolute path, or one under `~`, that
+/// does not exist. A glob is not a path.
+fn dead(cmd: &str) -> bool {
+    cmd.split_whitespace().any(|t| {
+        let t = t.trim_matches(['"', '\'']).trim_end_matches(":*");
+        let p = expand_home(t);
+        !t.contains('*') && p.has_root() && !p.exists()
+    })
+}
+
+/// `agents scan --from <dir>`: for each tool, the settings files that
+/// apply in a session started in `dir`, most specific last, what each one
+/// changes, and a deny that blocks an allow in another file. Read only.
+pub fn from(dir: &Path, json: bool, home: Option<&Home>, cfg: &Config) {
+    let width = out::width();
+    let root = dir
+        .ancestors()
+        .find(|d| d.join(".git").exists())
+        .map(Path::to_path_buf);
+    let main = root.as_ref().map(|r| match Checkout::read(r).kind {
+        Kind::Worktree(m) => m,
+        _ => r.clone(),
+    });
+    let orders = harness::settings_order(dir, root.as_deref(), main.as_deref());
+    let mut tools = Vec::new();
+    // Each tool's last file: the one that wins for that tool.
+    let mut applying: Vec<PathBuf> = Vec::new();
+    for o in &orders {
+        // From the user home, a project path can be the user file itself.
+        let mut seen = std::collections::BTreeSet::new();
+        let files: Vec<(Setting, &str)> = o
+            .files
+            .iter()
+            .filter(|(p, _)| p.is_file() && seen.insert(p))
+            .map(|(p, scope)| (Setting::read(p), *scope))
+            .collect();
+        tools.push((o, files));
+    }
+    let mut conflicts: Vec<(String, PathBuf, PathBuf)> = Vec::new();
+    for (_, files) in &tools {
+        let on: Vec<&Setting> = files
+            .iter()
+            .map(|(f, _)| f)
+            .filter(|f| f.applies())
+            .collect();
+        for d in &on {
+            for a in &on {
+                if d.path == a.path {
+                    continue;
+                }
+                let allow = a.entries().allow;
+                for rule in d.entries().deny {
+                    if allow.contains(&rule) {
+                        conflicts.push((rule, d.path.clone(), a.path.clone()));
+                    }
+                }
+            }
+        }
+        applying.extend(on.last().map(|f| f.path.clone()));
+    }
+    // The deepest of those; among equals, the first tool's.
+    let edit = applying
+        .iter()
+        .rev()
+        .max_by_key(|p| p.components().count())
+        .map(|p| format!("$EDITOR {}", tilde(p)));
+
+    if json {
+        let data = json!({
+            "machine": config::machine(),
+            "config": cfg.json(),
+            "from": tilde(dir),
+            "checkout": root.as_deref().map(tilde),
+            "tools": tools.iter().map(|(o, files)| json!({
+                "tool": o.tool,
+                "order": if o.known { "documented" } else { "unknown" },
+                "note": harness::settings_note(o.tool),
+                "files": files.iter().map(|(f, scope)| {
+                    let mut v = f.json();
+                    v["scope"] = json!(scope);
+                    v["applies"] = json!(f.applies());
+                    v
+                }).collect::<Vec<_>>(),
+            })).collect::<Vec<_>>(),
+            "conflicts": conflicts.iter().map(|(r, d, a)| json!({"rule": r, "deny": tilde(d), "allow": tilde(a)})).collect::<Vec<_>>(),
+            "edit": edit,
+        });
+        out::json("scan", home.map(|h| h.dir.as_path()), data);
+        return;
+    }
+
+    println!(
+        "settings that apply from {}, lowest precedence first:",
+        tilde(dir)
+    );
+    for (o, files) in tools.iter().filter(|(_, f)| !f.is_empty()) {
+        let title = if o.known {
+            o.tool.to_string()
+        } else {
+            format!("{}, order unknown", o.tool)
+        };
+        out::section(&title, files.len(), width);
+        for (f, scope) in files {
+            let mark = if f.applies() { "applies" } else { "broken" };
+            let line = format!("  {scope}  {}  {}  {mark}", f.validity(), tilde(&f.path));
+            println!("{}", out::fit(&line, width));
+            let e = f.entries();
+            let mut lines: Vec<String> = Vec::new();
+            for (event, cmd, gone) in &e.hooks {
+                let tail = if *gone { "  dead" } else { "" };
+                lines.push(format!("hook {event}: {cmd}{tail}"));
+            }
+            lines.extend(e.deny.iter().map(|d| format!("deny: {d}")));
+            if !e.allow.is_empty() {
+                lines.push(format!("allow: {} entries", e.allow.len()));
+            }
+            lines.extend(e.dead_allow.iter().map(|a| format!("allow: {a}  dead")));
+            lines.extend(e.env.iter().map(|k| format!("env: {k}")));
+            lines.extend(e.model.iter().map(|m| format!("model: {m}")));
+            lines.extend(e.effort.iter().map(|m| format!("effort: {m}")));
+            for l in lines {
+                println!("{}", out::fit(&format!("    {l}"), width));
+            }
+        }
+        if let Some(n) = harness::settings_note(o.tool) {
+            out::say(n, 2, width);
+        }
+    }
+    if !conflicts.is_empty() {
+        out::section("conflict", conflicts.len(), width);
+        for (rule, d, a) in &conflicts {
+            out::say(
+                &format!(
+                    "conflict: {rule} is denied in {} and allowed in {}",
+                    tilde(d),
+                    tilde(a)
+                ),
+                2,
+                width,
+            );
+        }
+    }
+    if let Some(e) = edit {
+        println!();
+        println!("{e}");
+    }
 }

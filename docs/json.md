@@ -75,6 +75,7 @@ Each object in `harnesses`:
 | `identical` | Groups of paths with the same content |
 | `identical_remotes` | One list per group in `identical`: each `remote` with more than one file in the group, and `checkouts`, the count |
 | `same_remote` | One object per remote in more than one place: `remote`, and `checkouts`, the paths, newest last commit first |
+| `settings` | One object per tool settings file, below, with `scope` and `project` as in `files` |
 
 Each object in `projects`:
 
@@ -102,6 +103,35 @@ Each object in `files`:
 | `lines`, `bytes` | The size of the file |
 | `link` | The link target, or `null` |
 | `generated` | The line that says a generator wrote the file, or `null` |
+
+Each settings object:
+
+| Key | Value |
+|---|---|
+| `path` | The file |
+| `tool` | The tool that reads it |
+| `bytes` | The size of the file |
+| `validity` | `valid`, `invalid`, or `empty` |
+| `error_line`, `error` | For `invalid`, the line of the parse error and the error, else `null` |
+| `hooks` | Each hook: `event`, `command`, and `dead`, `true` when a path it names is gone |
+| `deny` | Each `permissions.deny` entry |
+| `allow` | The count of `permissions.allow` entries |
+| `dead_allow` | Each allow entry that names a path that is gone |
+| `env` | Each environment variable name the file sets |
+| `model`, `effort` | The model and effort the file sets, or `null` |
+
+## scan --from
+
+| Key | Value |
+|---|---|
+| `machine`, `config` | As in `scan` |
+| `from` | The directory a session starts in |
+| `checkout` | The checkout that holds it, or `null` |
+| `tools` | One object per tool: `tool`, `order` (`documented` or `unknown`), `note`, and `files`, lowest precedence first |
+| `conflicts` | Each deny that blocks an allow in another file: `rule`, `deny` (its file), and `allow` (its file) |
+| `edit` | The line that opens the most specific applying file in `$EDITOR`, or `null` |
+
+Each object in `files` is a settings object, plus `scope` (`user`, `project`, or `local`) and `applies`, `false` when the file does not parse.
 
 ## skills
 
