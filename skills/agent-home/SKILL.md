@@ -11,6 +11,8 @@ The home is a git checkout at `~/.agents`. The `agents` binary does every step b
 
 Run `agents status`, or `sh ~/.agents/scripts/context.sh`. It says what each tool loads, from where, and whether a generated file is STALE. If `~/.agents` is missing, get it.
 
+Read the brief report first. Add `--long` only when one line of it needs the full report.
+
 ## Get it
 
 ```sh
