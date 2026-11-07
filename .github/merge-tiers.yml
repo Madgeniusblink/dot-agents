@@ -1,0 +1,24 @@
+# Merge tiers. scripts/merge-tier.sh reads this file; docs/merge-tiers.md explains it.
+# A PR is red when one changed path matches a red pattern, else yellow when one
+# matches a yellow pattern, else green. In a pattern, * matches any characters, / too.
+# Every red pattern also has a line in .github/CODEOWNERS.
+
+red:
+  - .github/CODEOWNERS
+  - .github/merge-tiers.yml
+  - .github/workflows/review.yml
+  - .github/workflows/release.yml
+  - scripts/merge-tier.sh
+  - scripts/merge-tier-test.sh
+  - scripts/githooks/review-prompt.md
+  - rules/boundaries.md
+
+yellow:
+  - .github/workflows/*
+  - scripts/*
+  - cli/Cargo.toml
+  - cli/Cargo.lock
+  - cli/src/wire.rs
+  - cli/src/harness.rs
+  - dist-workspace.toml
+  - context/upstream.json

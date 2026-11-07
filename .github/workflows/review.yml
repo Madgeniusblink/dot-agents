@@ -1,0 +1,100 @@
+# The merge-tier gate. docs/merge-tiers.md explains it.
+name: review
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    env:
+      REVIEW_MODEL: claude-opus-5-5
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 2
+
+      - name: Tier test
+        run: sh scripts/merge-tier-test.sh
+
+      - name: Tier
+        id: tier
+        run: |
+          git diff --no-renames --name-only HEAD^1 HEAD | sh scripts/merge-tier.sh > "$RUNNER_TEMP/tier"
+          cat "$RUNNER_TEMP/tier"
+          echo "tier=$(head -n1 "$RUNNER_TEMP/tier")" >> "$GITHUB_OUTPUT"
+
+      - name: Comment
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          TIER: ${{ steps.tier.outputs.tier }}
+        run: |
+          case "$TIER" in
+            green) gate="It merges on green CI." ;;
+            yellow) gate="It merges when the \`review\` job passes the diff." ;;
+            red) gate="It waits for a review from a code owner." ;;
+          esac
+          {
+            echo '<!-- merge-tier -->'
+            echo "Merge tier: **$TIER**. $gate"
+            echo
+            if [ "$TIER" = green ]; then
+              echo "No changed path matches a pattern in \`.github/merge-tiers.yml\`."
+            else
+              echo "Paths that set it (pattern in \`.github/merge-tiers.yml\`):"
+              echo
+              tail -n +2 "$RUNNER_TEMP/tier" | sed 's/^/- `/; s/ (/` (/'
+            fi
+          } > "$RUNNER_TEMP/comment"
+          api="repos/$GITHUB_REPOSITORY/issues"
+          id=$(gh api "$api/$PR/comments" --paginate \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- merge-tier -->"))) | .id' | head -n1)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "$api/comments/$id" -F body=@"$RUNNER_TEMP/comment" --jq .html_url
+          else
+            gh api "$api/$PR/comments" -F body=@"$RUNNER_TEMP/comment" --jq .html_url
+          fi
+
+      - name: Review
+        if: steps.tier.outputs.tier == 'yellow'
+        env:
+          REVIEW_API_KEY: ${{ secrets.REVIEW_API_KEY }}
+        run: |
+          if [ -z "$REVIEW_API_KEY" ]; then
+            echo "review: the Actions secret REVIEW_API_KEY is not set, so this yellow PR cannot be reviewed."
+            exit 1
+          fi
+          {
+            cat scripts/githooks/review-prompt.md
+            printf '\n--- tracked files ---\n'
+            git ls-files
+            printf '\n--- context/upstream.json ---\n'
+            cat context/upstream.json
+            printf '\n--- diff ---\n'
+            git diff HEAD^1 HEAD | head -c 400000
+          } > "$RUNNER_TEMP/prompt"
+          jq -n --arg model "$REVIEW_MODEL" --rawfile p "$RUNNER_TEMP/prompt" \
+            '{model: $model, max_tokens: 4096, messages: [{role: "user", content: $p}]}' > "$RUNNER_TEMP/request.json"
+          if ! curl -sS --fail-with-body https://api.anthropic.com/v1/messages \
+            -H "x-api-key: $REVIEW_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            --data @"$RUNNER_TEMP/request.json" > "$RUNNER_TEMP/response.json"; then
+            echo "review: the model API call failed:"
+            cat "$RUNNER_TEMP/response.json"
+            exit 1
+          fi
+          jq -r '.content[] | select(.type == "text") | .text' "$RUNNER_TEMP/response.json" > "$RUNNER_TEMP/review"
+          cat "$RUNNER_TEMP/review"
+          verdict=$(grep -v '^[[:space:]]*$' "$RUNNER_TEMP/review" | tail -n1 | tr -d '[:space:]')
+          case "$verdict" in
+            OK|WARN) ;;
+            BLOCK) echo "review: BLOCK. Fix each stale fact above."; exit 1 ;;
+            *) echo "review: the reply has no OK, WARN, or BLOCK line."; exit 1 ;;
+          esac
