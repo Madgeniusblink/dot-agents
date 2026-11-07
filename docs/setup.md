@@ -51,6 +51,10 @@ Nothing deletes. `reset`, `skills remove`, and `skills keep` move files to
 `~/.agents-reset/<timestamp>/` with a manifest, and print the line that puts
 them back.
 
+The CLI reads a project checkout and never writes inside it. Run inside a
+checkout, `skills` lists that project's skills and marks each user copy of
+one as `copy of <path>`; `remove` and `keep` skip them.
+
 ## Do it with the scripts
 
 ```sh

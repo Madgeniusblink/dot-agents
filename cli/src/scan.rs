@@ -4,7 +4,7 @@
 
 use crate::harness::Claude;
 use crate::home::{tilde, user_home, Home};
-use crate::out;
+use crate::{out, skills};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeMap;
 use std::fs;
@@ -165,6 +165,11 @@ pub fn scan(root: PathBuf, all: bool, long: bool, home: Option<&Home>) {
             Some(repo),
             files.iter().copied(),
         );
+        let counts = skills::project_counts(repo);
+        if counts.iter().any(|(_, n)| *n > 0) {
+            let parts: Vec<String> = counts.iter().map(|(p, n)| format!("{p} {n}")).collect();
+            out::say(&format!("skills: {}", parts.join(", ")), 2, width);
+        }
     }
     view.section(
         "loose, in no git repository",
