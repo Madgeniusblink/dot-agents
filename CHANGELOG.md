@@ -2,6 +2,11 @@
 
 Template semver tracks [upstream.json](context/upstream.json) `template_version`.
 
+## 0.13.1 — 2026-11-06
+
+- Fix the dangling-hook check, which found only hooks written as an absolute path. A command may name its script as `/abs`, `$HOME/x`, `${HOME}/x` or `~/x`, and the check tested only the first, so it reported one dead hook out of seven and called the rest fine. A check that inspects a subset and reports a clean result is worse than no check.
+- Correct the Codex byte claim. 0.13.0 said the 32 KiB `project_doc_max_bytes` truncates the global file silently. Both halves were wrong. The harness states "The limit applies only to project files", and it warns rather than failing quietly. The report still shows the running total, because global instructions are pressure on what project files get, but it no longer calls it a cap on that file.
+
 ## 0.13.0 — 2026-11-06
 
 - [context.sh](scripts/context.sh) reports every harness it knows, not only Claude Code: the file each one loads, its byte count, whether it is a symlink, and whether it exists at all. A harness that loads nothing is now stated rather than omitted.

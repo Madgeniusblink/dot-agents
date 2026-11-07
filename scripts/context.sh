@@ -69,10 +69,13 @@ report_file() {
   bytes=$(wc -c < "$f" | tr -d ' ')
   [ -L "$f" ] && echo "  symlink -> $(tilde "$(readlink "$f")")"
   echo "  $own lines, $bytes bytes: $mine imports from this home, $foreign from elsewhere, $broken broken"
-  # A harness with a documented ceiling silently truncates past it.
+  # Codex compares global plus thread instructions against project_doc_max_bytes
+  # and warns, but truncates only project files. Crossing it is a signal, not a
+  # cut-off. Source: codex-rs/core/src/agents_md_manager.rs.
   if [ -n "$cap" ] && [ "$((bytes + total))" -gt "$cap" ]; then
-    echo "  $((bytes + total)) bytes with the always-on set, over the $cap byte cap."
-    echo "  It stops loading at the cap, so the last files never arrive."
+    echo "  $((bytes + total)) bytes with the always-on set, over the $cap byte"
+    echo "  project_doc_max_bytes setting. This file is not truncated, but the"
+    echo "  harness warns, and project files then compete for what is left."
   fi
   # Content in the file itself outranks nothing and duplicates the home.
   # grep -c exits 1 on no match, so `|| echo 0` would append a second count.
@@ -99,8 +102,13 @@ fi
 # names the script rather than the config that still calls for it.
 SETTINGS="$HOME/.claude/settings.json"
 if [ -f "$SETTINGS" ]; then
+  # A command may name a path as /abs, $HOME/x, ${HOME}/x or ~/x. Expand all
+  # four before testing, or the check passes on paths it never looked at.
   gone=$(grep -oE '"command"[[:space:]]*:[[:space:]]*"[^"]*"' "$SETTINGS" 2>/dev/null |
-         grep -oE '/[^" ]+' |
+         sed 's/.*:[[:space:]]*"//; s/"$//' |
+         tr ' ' '\n' |
+         sed "s|^\\\$HOME/|$HOME/|; s|^\\\${HOME}/|$HOME/|; s|^~/|$HOME/|" |
+         grep -E '^/' |
          while read -r t; do [ -e "$t" ] || echo "$t"; done | sort -u)
   if [ -n "$gone" ]; then
     echo
