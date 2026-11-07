@@ -1,12 +1,13 @@
 //! Report what loads into an agent's context, from where, and what is
 //! broken. Reads only. Writes nothing.
 
+use crate::config::{self, Config};
 use crate::harness::{
     codex_dir, cursor_dir, grok_dir, grok_dropin, Claude, CODEX_PROJECT_DOC_MAX, CURSOR_LINE,
 };
 use crate::home::{expand_home, tilde, Home};
-use crate::out;
 use crate::wire::{dropin_content, generated_content, is_ours};
+use crate::{check, out};
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
 use std::fs;
@@ -21,11 +22,173 @@ const ON_DEMAND: [&str; 6] = [
     "context",
 ];
 
-pub fn status(home: &Home, json: bool) {
+pub fn status(home: &Home, cfg: &Config, long: bool, json: bool) {
     if json {
-        out::json("status", Some(&home.dir), data(home));
-        return;
+        out::json("status", Some(&home.dir), data(home, cfg));
+    } else if long {
+        report(home, cfg);
+    } else {
+        brief(home, cfg);
     }
+}
+
+/// One line per fact: this machine, the home, the always-on set against
+/// its cap, each tool, and the links. A fault adds a line.
+fn brief(home: &Home, cfg: &Config) {
+    let width = out::width();
+    let file = if cfg.exists {
+        tilde(&cfg.path)
+    } else {
+        format!("{} (no file, so defaults)", tilde(&cfg.path))
+    };
+    out::say(
+        &format!("machine: {}, config: {file}", config::machine()),
+        0,
+        width,
+    );
+    let mut line = format!("home: {}", tilde(&home.dir));
+    if home.git(&["rev-parse", "--is-inside-work-tree"]).is_some() {
+        let branch = home
+            .git(&["rev-parse", "--abbrev-ref", "HEAD"])
+            .unwrap_or_default();
+        let sha = home
+            .git(&["rev-parse", "--short", "HEAD"])
+            .unwrap_or_default();
+        let dirty = home
+            .git(&["status", "--porcelain"])
+            .map(|o| o.lines().count())
+            .unwrap_or(0);
+        line.push_str(&format!(", {branch} at {sha}, {dirty} uncommitted"));
+        if let Some(n) = home
+            .git(&["rev-parse", "--verify", "-q", "upstream/main"])
+            .and_then(|_| home.git(&["rev-list", "--count", "HEAD..upstream/main"]))
+        {
+            line.push_str(&format!(", behind upstream by {n} commits"));
+        }
+    } else {
+        line.push_str(", NOT a git checkout");
+    }
+    out::say(&line, 0, width);
+    let attributes = fs::read_to_string(home.dir.join(".gitattributes")).unwrap_or_default();
+    if attributes.contains("merge=ours")
+        && home.git(&["config", "merge.ours.driver"]).as_deref() != Some("true")
+    {
+        out::say(
+            &format!(
+                "merge.ours.driver is not set. Run: git -C {} config merge.ours.driver true",
+                tilde(&home.dir)
+            ),
+            0,
+            width,
+        );
+    }
+
+    let total: u64 = home
+        .always_on()
+        .iter()
+        .map(|f| fs::metadata(f).map(|m| m.len()).unwrap_or(0))
+        .sum();
+    let (cap, source) = check::cap(home);
+    let over = if total > cap { ", OVER the cap" } else { "" };
+    println!("always-on: {total} of {cap} bytes ({source}){over}");
+
+    let claude = Claude::new();
+    let reports = harness_files(home, total, cfg);
+    for (tool, label) in [
+        ("claude", "claude code"),
+        ("codex", "codex"),
+        ("grok", "grok"),
+    ] {
+        let mine: Vec<&Report> = reports.iter().filter(|r| r.tool == tool).collect();
+        let installed = match tool {
+            "claude" => claude.exists(),
+            "codex" => codex_dir().is_dir(),
+            _ => true,
+        };
+        if mine.is_empty() || !installed {
+            continue;
+        }
+        let state = if tool == "claude" && !mine[0].exists && claude.rules_link().is_symlink() {
+            "current, linked".to_string()
+        } else {
+            state(home, mine[0])
+        };
+        let findings: usize = mine.iter().map(|r| findings(r)).sum();
+        let tail = if findings > 0 {
+            format!(", {findings} findings: agents status --long")
+        } else {
+            String::new()
+        };
+        out::say(&format!("{label}: {state}{tail}"), 0, width);
+    }
+    if cursor_dir().is_dir() && cfg.tool("cursor") {
+        out::say(
+            "cursor: paste the pointer line by hand, see agents status --long",
+            0,
+            width,
+        );
+    }
+
+    let links = links(&claude);
+    let broken = links.iter().filter(|l| !l.exists()).count();
+    if links.is_empty() {
+        println!("links: none");
+    } else {
+        println!("links: {}, {broken} broken", links.len());
+    }
+    let settings = claude.settings();
+    if let Ok(text) = fs::read_to_string(&settings) {
+        match serde_json::from_str::<Value>(&text) {
+            Err(_) => out::say(
+                &format!(
+                    "{} is not valid JSON. The harness ignores it.",
+                    tilde(&settings)
+                ),
+                0,
+                width,
+            ),
+            Ok(v) => {
+                let n = missing_hook_paths(&v).len();
+                if n > 0 {
+                    out::say(
+                        &format!("hooks: {n} name a missing path, see agents status --long"),
+                        0,
+                        width,
+                    );
+                }
+            }
+        }
+    }
+    println!();
+    println!("full report: agents status --long");
+}
+
+/// `current` or `STALE` for a file the home writes, else why it is not.
+fn state(home: &Home, r: &Report) -> String {
+    let wire = "Run: agents wire --apply";
+    if !r.exists {
+        format!("not wired. {wire}")
+    } else if r.link.is_some() && canonical(&r.path).starts_with(canonical(&home.dir)) {
+        format!("a link to the router, which this tool cannot follow. {wire}")
+    } else if !is_ours(&r.path) {
+        "the file there is not the home's".to_string()
+    } else if r.stale {
+        format!("STALE. {wire}")
+    } else {
+        "current".to_string()
+    }
+}
+
+/// What the full report says about a file beyond its state.
+fn findings(r: &Report) -> usize {
+    r.broken.len()
+        + usize::from(r.over_cap.is_some())
+        + usize::from(r.own_rules.is_some())
+        + r.generator.len()
+}
+
+/// Today's report, in full.
+fn report(home: &Home, cfg: &Config) {
     let width = out::width();
     println!("home: {}", tilde(&home.dir));
     if home.git(&["rev-parse", "--is-inside-work-tree"]).is_some() {
@@ -105,13 +268,18 @@ pub fn status(home: &Home, json: bool) {
         width,
     );
 
-    let harnesses = 3 + usize::from(grok_dir().is_dir()) + usize::from(cursor_dir().is_dir());
-    out::section("what each harness loads", harnesses, width);
+    let reports = harness_files(home, total, cfg);
+    let cursor = cursor_dir().is_dir() && cfg.tool("cursor");
+    out::section(
+        "what each harness loads",
+        reports.len() + usize::from(cursor),
+        width,
+    );
     let claude = Claude::new();
-    for r in harness_files(home, total) {
-        print_report(&r, width);
+    for r in &reports {
+        print_report(r, width);
     }
-    if cursor_dir().is_dir() {
+    if cursor {
         println!();
         println!("cursor: user rules live in the app settings, not in a file.");
         println!("  Nothing here can read or wire them. Paste the pointer line by hand:");
@@ -136,7 +304,7 @@ pub fn status(home: &Home, json: bool) {
 }
 
 /// The same facts the text shows, as data.
-fn data(home: &Home) -> Value {
+fn data(home: &Home, cfg: &Config) -> Value {
     let git = home.git(&["rev-parse", "--is-inside-work-tree"]).map(|_| {
         let behind = home
             .git(&["rev-parse", "--verify", "-q", "upstream/main"])
@@ -176,7 +344,7 @@ fn data(home: &Home) -> Value {
             })
         })
         .collect();
-    let harnesses: Vec<Value> = harness_files(home, total)
+    let harnesses: Vec<Value> = harness_files(home, total, cfg)
         .iter()
         .map(|r| {
             json!({
@@ -219,12 +387,14 @@ fn data(home: &Home) -> Value {
         })
         .collect();
     json!({
+        "machine": config::machine(),
+        "config": cfg.json(),
         "git": git,
         "merge_ours_unset": merge_ours_unset,
         "always_on": {"files": always_on, "bytes": total},
         "on_demand": on_demand,
         "harnesses": harnesses,
-        "manual": cursor_dir().is_dir().then(|| json!({"label": "cursor", "line": CURSOR_LINE})),
+        "manual": (cursor_dir().is_dir() && cfg.tool("cursor")).then(|| json!({"label": "cursor", "line": CURSOR_LINE})),
         "hooks": hooks,
         "links": links,
     })
@@ -238,40 +408,44 @@ fn links(claude: &Claude) -> Vec<PathBuf> {
 }
 
 /// Each harness file the home knows, read once for both forms.
-fn harness_files(home: &Home, always_on: u64) -> Vec<Report> {
+/// `[tools] present` limits which tools are read.
+fn harness_files(home: &Home, always_on: u64, cfg: &Config) -> Vec<Report> {
     let claude = Claude::new();
     let generated = generated_content(home);
-    let mut out = vec![
-        read_file(
+    let mut out = Vec::new();
+    if cfg.tool("claude") {
+        out.push(read_file(
             home,
             &claude.dropin(),
-            "claude code, the home's drop-in",
+            ("claude", "claude code, the home's drop-in"),
             None,
             always_on,
             Some(&dropin_content(home)),
-        ),
-        read_file(
+        ));
+        out.push(read_file(
             home,
             &claude.own_file(),
-            "claude code, the harness's own file",
+            ("claude", "claude code, the harness's own file"),
             None,
             always_on,
             None,
-        ),
-        read_file(
+        ));
+    }
+    if cfg.tool("codex") {
+        out.push(read_file(
             home,
             &codex_dir().join("AGENTS.md"),
-            "codex, the home's generated file",
+            ("codex", "codex, the home's generated file"),
             Some(CODEX_PROJECT_DOC_MAX),
             always_on,
             Some(&generated),
-        ),
-    ];
-    if grok_dir().is_dir() {
+        ));
+    }
+    if grok_dir().is_dir() && cfg.tool("grok") {
         out.push(read_file(
             home,
             &grok_dropin(),
-            "grok, the home's generated file",
+            ("grok", "grok, the home's generated file"),
             None,
             always_on,
             Some(&generated),
@@ -291,6 +465,7 @@ fn count_files(dir: &Path) -> usize {
 /// One harness file: which imports resolve, what it holds, who owns it, and
 /// whether a file the home wrote still matches the home.
 struct Report {
+    tool: &'static str,
     label: &'static str,
     path: PathBuf,
     exists: bool,
@@ -313,7 +488,7 @@ struct Report {
 fn read_file(
     home: &Home,
     f: &Path,
-    label: &'static str,
+    (tool, label): (&'static str, &'static str),
     cap: Option<u64>,
     always_on: u64,
     expected: Option<&str>,
@@ -364,6 +539,7 @@ fn read_file(
         .map(|(i, l)| format!("{}:{l}", i + 1))
         .collect();
     Report {
+        tool,
         label,
         path: f.to_path_buf(),
         exists,

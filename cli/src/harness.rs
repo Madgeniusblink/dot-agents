@@ -4,6 +4,9 @@
 use crate::home::user_home;
 use std::path::PathBuf;
 
+/// The names `[tools] present` in the per-machine config file takes.
+pub const TOOLS: [&str; 4] = ["claude", "codex", "grok", "cursor"];
+
 /// Claude Code scans `~/.claude/rules/` and loads every file in it, so that is
 /// its drop-in directory. `~/.claude/CLAUDE.md` is the harness's own file.
 pub struct Claude {

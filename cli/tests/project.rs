@@ -71,6 +71,7 @@ fn agents(home: &Path, cwd: &Path, args: &[&str]) -> String {
         .env("HOME", home)
         .env("COLUMNS", "400")
         .env_remove("AGENTS_HOME")
+        .env_remove("AGENTS_CONFIG")
         .env_remove("CODEX_HOME")
         .output()
         .expect("agents");
@@ -85,7 +86,7 @@ fn agents(home: &Path, cwd: &Path, args: &[&str]) -> String {
 #[test]
 fn skills_lists_the_project_and_reports_copies() {
     let (home, repo) = fixture();
-    let out = agents(home.path(), repo.path(), &["skills"]);
+    let out = agents(home.path(), repo.path(), &["skills", "--long"]);
 
     // B13: one row from each of the four places, in a project section.
     let section = out.split("\nproject ").nth(1).expect("a project section");
@@ -105,7 +106,7 @@ fn skills_lists_the_project_and_reports_copies() {
         "{out}"
     );
     assert!(out.contains("source missing"), "{out}");
-    let long = agents(home.path(), repo.path(), &["skills", "--long"]);
+    let long = agents(home.path(), repo.path(), &["skills", "--long", "--long"]);
     assert!(
         long.contains("copy of .agents/skills/beta (declared)"),
         "{long}"
@@ -132,7 +133,11 @@ fn skills_lists_the_project_and_reports_copies() {
 fn scan_counts_the_project_skills() {
     let (home, repo) = fixture();
     let root = repo.path().to_string_lossy().into_owned();
-    let out = agents(home.path(), repo.path(), &["scan", "--root", &root]);
+    let out = agents(
+        home.path(),
+        repo.path(),
+        &["scan", "--long", "--root", &root],
+    );
     assert!(
         out.contains("skills: .claude/skills 1, .agents/skills 1, .codex/skills 1, skills 1"),
         "{out}"
@@ -228,12 +233,13 @@ fn scan_reports_each_checkout_without_the_network() {
     let (_tmp, root) = checkouts();
     let trace = root.join("trace.log");
     let out = Command::new(env!("CARGO_BIN_EXE_agents"))
-        .args(["scan", "--root"])
+        .args(["scan", "--long", "--root"])
         .arg(&root)
         .env("HOME", &root)
         .env("COLUMNS", "400")
         .env("GIT_TRACE", &trace)
         .env_remove("AGENTS_HOME")
+        .env_remove("AGENTS_CONFIG")
         .env_remove("CODEX_HOME")
         .output()
         .expect("agents");
@@ -306,6 +312,7 @@ fn scan_reports_each_checkout_without_the_network() {
         .arg(&root)
         .env("HOME", &root)
         .env_remove("AGENTS_HOME")
+        .env_remove("AGENTS_CONFIG")
         .env_remove("CODEX_HOME")
         .output()
         .expect("agents");

@@ -46,6 +46,7 @@ fn agents(home: &Path, args: &[&str]) -> String {
         .env("HOME", home)
         .env("COLUMNS", "400")
         .env_remove("AGENTS_HOME")
+        .env_remove("AGENTS_CONFIG")
         .env_remove("CODEX_HOME")
         .output()
         .expect("agents");
@@ -150,7 +151,7 @@ fn skills_json_has_the_record_shape_and_the_duplicates() {
 fn status_json_matches_the_text() {
     let t = fixture();
     let doc = document(t.path(), "status", &[]);
-    let text = agents(t.path(), &["status"]);
+    let text = agents(t.path(), &["status", "--long"]);
     let total = text
         .lines()
         .find(|l| l.trim_start().starts_with("total"))
@@ -164,7 +165,7 @@ fn scan_json_matches_the_text() {
     let t = fixture();
     let root = t.path().to_string_lossy().into_owned();
     let doc = document(t.path(), "scan", &["--root", &root]);
-    let text = agents(t.path(), &["scan", "--root", &root]);
+    let text = agents(t.path(), &["scan", "--long", "--root", &root]);
     assert_eq!(doc["count"], number_before(&text, " instruction files."));
     assert_eq!(doc["count"], 2, "{doc}");
     assert_eq!(doc["auto_memory"]["indexes"].as_array().unwrap().len(), 1);
@@ -174,7 +175,7 @@ fn scan_json_matches_the_text() {
 fn memory_json_matches_the_text() {
     let t = fixture();
     let doc = document(t.path(), "memory", &[]);
-    let text = agents(t.path(), &["memory"]);
+    let text = agents(t.path(), &["memory", "--long"]);
     assert_eq!(doc["count"], number_before(&text, " notes."));
     assert_eq!(doc["covered"], number_before(&text, " of these notes."));
     assert_eq!(doc["covered"], 1);

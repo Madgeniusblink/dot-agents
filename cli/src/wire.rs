@@ -8,6 +8,7 @@
 //! `unwire` removes exactly what `wire` added, so a home can be taken out
 //! without stranding the half that pointed at it.
 
+use crate::config::Config;
 use crate::harness::{codex_dir, cursor_dir, grok_dir, grok_dropin, Claude, CURSOR_LINE};
 use crate::home::{rel, tilde, Home};
 use crate::plan::{Action, Plan};
@@ -159,12 +160,13 @@ fn drop_legacy_imports(plan: &mut Plan, path: &Path) {
     }
 }
 
-pub fn wire(home: &Home, link: bool) -> Plan {
+/// Only the tools `[tools] present` allows, when it names any.
+pub fn wire(home: &Home, cfg: &Config, link: bool) -> Plan {
     let mut plan = Plan::new();
     let mut found = false;
 
     let claude = Claude::new();
-    if claude.exists() {
+    if claude.exists() && cfg.tool("claude") {
         found = true;
         plan.header("claude code:");
         if link {
@@ -180,7 +182,7 @@ pub fn wire(home: &Home, link: bool) -> Plan {
     // Codex reads one global file and expands no import, so that slot gets
     // the generated file.
     let codex = codex_dir();
-    if codex.is_dir() {
+    if codex.is_dir() && cfg.tool("codex") {
         found = true;
         plan.header("codex:");
         write_generated(&mut plan, home, &codex.join("AGENTS.md"));
@@ -188,13 +190,13 @@ pub fn wire(home: &Home, link: bool) -> Plan {
 
     // Grok Build scans ~/.grok/rules/ in every project and loads each file
     // in full, with no import, so its drop-in holds the content.
-    if grok_dir().is_dir() {
+    if grok_dir().is_dir() && cfg.tool("grok") {
         found = true;
         plan.header("grok:");
         write_generated(&mut plan, home, &grok_dropin());
     }
 
-    if cursor_dir().is_dir() {
+    if cursor_dir().is_dir() && cfg.tool("cursor") {
         found = true;
         plan.header("cursor:");
         plan.say("user rules live in the app settings, not a file, so nothing here can");

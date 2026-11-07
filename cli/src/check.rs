@@ -419,18 +419,24 @@ fn merge_without_no_edit(line: &str) -> bool {
     false
 }
 
+/// The always-on cap in bytes, and where it comes from. A fork may set
+/// `budget.always_on_bytes` in `context/upstream.json`.
+pub fn cap(home: &Home) -> (u64, &'static str) {
+    let set = fs::read_to_string(home.dir.join("context").join("upstream.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+        .and_then(|j| j["budget"]["always_on_bytes"].as_u64());
+    match set {
+        Some(b) => (b, "cap from context/upstream.json"),
+        None => (ALWAYS_ON_CAP, "default cap"),
+    }
+}
+
 /// Principles plus every rule file, against the cap. A fork may set
 /// `budget.always_on_bytes` in `context/upstream.json`.
 fn always_on(home: &Home, out: &mut Vec<Fault>) -> Cap {
     let root = &home.dir;
-    let set = fs::read_to_string(root.join("context").join("upstream.json"))
-        .ok()
-        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
-        .and_then(|j| j["budget"]["always_on_bytes"].as_u64());
-    let (bytes, source) = match set {
-        Some(b) => (b, "cap from context/upstream.json"),
-        None => (ALWAYS_ON_CAP, "default cap"),
-    };
+    let (bytes, source) = cap(home);
     let files: Vec<(PathBuf, u64)> = home
         .always_on()
         .into_iter()
