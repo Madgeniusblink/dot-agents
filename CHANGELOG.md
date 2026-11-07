@@ -2,6 +2,13 @@
 
 Template semver tracks [upstream.json](context/upstream.json) `template_version`.
 
+## 0.15.0 — 2026-11-06
+
+- New [cli/](cli/), one Rust crate, binary `agents`, per [decision 0009](docs/decisions/0009-cli-in-tree.md). It embeds no content and is versioned with the template; a test fails when `cli/Cargo.toml` and `context/upstream.json` disagree. `status`, `wire`, `unwire`, and `check` port the four scripts; `init`, `update`, and `sync` run git; `tree` shows a directory as structure and sizes without content; `scan` finds every instruction file on the machine by scope and reports identical copies; `skills` lists every skill each tool can load, flags a name in two places or one body under two names, and `remove` or `keep` moves skills aside. `reset` moves each tool's own instruction files aside with a manifest and `--restore` puts them back. Nothing in the binary deletes.
+- The scripts stay. A test runs `wire.sh` and `agents wire` on the same temporary home and fails on any difference in the resulting tree, so the two cannot drift until the scripts retire.
+- The drop-in header no longer names `wire.sh`, since two things write it now. The next `wire --apply` rewrites the file once.
+- Opt-in pre-commit review in [scripts/githooks/](scripts/githooks/): asks the `claude` CLI to read staged markdown for a stale fact or a plain-writing fault. Not registered by default; see CONTRIBUTING.
+
 ## 0.14.0 — 2026-11-06
 
 - [wire.sh](scripts/wire.sh) no longer edits `~/.claude/CLAUDE.md`. Claude Code scans `~/.claude/rules/` and loads every file in it, so the home now drops one file it owns there, `00-agents-home.md`, holding one import line per always-on file. This is the rule every package manager settled on: never edit a file you do not own, put yours in their drop-in directory. `CLAUDE.md` belongs to the harness, and a generator that owns it discards anything appended, which is how an earlier install lost its wiring. `--apply` also removes the import lines an older version appended there, since the drop-in now carries them, and `--remove` deletes the drop-in.

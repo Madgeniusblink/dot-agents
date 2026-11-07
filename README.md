@@ -56,7 +56,8 @@ The root of this repository is the tree. Clone it to `~/.agents` and the paths b
 ├── skills/            agent-home, patch, report
 ├── standards/
 ├── context/
-├── scripts/           check.sh
+├── scripts/           wire.sh, context.sh, check.sh
+├── cli/               the `agents` binary: status, tree, scan, skills, wire, check, reset
 ├── memory/            you own
 └── decisions/         you own
 ```

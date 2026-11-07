@@ -1,0 +1,23 @@
+#!/usr/bin/env sh
+# Opt in once, per clone:  git config core.hooksPath scripts/githooks
+# Before a commit lands, asks the claude CLI to read the staged markdown for
+# a fact the tree now contradicts and for plain-writing faults. A stale fact
+# blocks the commit; a writing fault is printed and lets it through. Does
+# nothing when claude is not installed or nothing markdown is staged.
+command -v claude >/dev/null 2>&1 || exit 0
+staged=$(git diff --cached --name-only --diff-filter=ACM -- '*.md')
+[ -n "$staged" ] || exit 0
+
+root="$(git rev-parse --show-toplevel)"
+prompt="$(cat "$root/scripts/githooks/review-prompt.md")"
+diff="$(git diff --cached -- '*.md')"
+
+echo "pre-commit: asking claude to review $(echo "$staged" | wc -l | tr -d ' ') staged markdown file(s)..." >&2
+out=$(printf '%s\n\n--- staged diff ---\n%s\n' "$prompt" "$diff" |
+      claude -p --model "${AGENTS_REVIEW_MODEL:-haiku}" 2>/dev/null) || exit 0
+
+printf '%s\n' "$out" >&2
+case "$out" in
+  *"BLOCK"*) echo "pre-commit: a stale fact is staged. Fix it, or commit with --no-verify to override." >&2; exit 1 ;;
+esac
+exit 0

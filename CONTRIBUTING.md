@@ -31,3 +31,13 @@ Repository hygiene: **Template repository**, description, topics (`agents`, `tem
 ## Code of conduct
 
 Be direct and kind. Minimize diff scope.
+
+## Pre-commit review (opt-in)
+
+`scripts/githooks/pre-commit` asks the `claude` CLI, when it is installed, to read the staged markdown for a fact the tree now contradicts and for plain-writing faults ([review-prompt.md](scripts/githooks/review-prompt.md)). A stale fact blocks the commit; a writing fault is printed and lets it through. Turn it on per clone:
+
+```sh
+git config core.hooksPath scripts/githooks
+```
+
+It is not registered for you, so a clone without it behaves as before, and deleting the clone leaves nothing behind.

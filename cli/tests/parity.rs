@@ -1,0 +1,160 @@
+//! The shell scripts stay until the CLI has shipped on every channel. Until
+//! then each script and its command run against the same temporary `$HOME`
+//! and any difference in the resulting tree is a failure.
+//!
+//! The round-trip tests need `sh`, so they run on unix only. On Windows the
+//! helpers below are unused, and that is expected, not a warning.
+#![cfg_attr(not(unix), allow(dead_code))]
+
+use std::collections::BTreeMap;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+fn repo_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .to_path_buf()
+}
+
+#[derive(Debug, PartialEq)]
+enum Node {
+    Dir,
+    File(String),
+    Link(PathBuf),
+}
+
+/// Every path under `root`, with symlink targets canonicalized so two
+/// spellings of one directory compare equal.
+fn snapshot(root: &Path) -> BTreeMap<PathBuf, Node> {
+    let mut out = BTreeMap::new();
+    for e in walkdir::WalkDir::new(root)
+        .min_depth(1)
+        .into_iter()
+        .flatten()
+    {
+        let p = e.path();
+        let rel = p.strip_prefix(root).unwrap().to_path_buf();
+        let node = if e.path_is_symlink() {
+            let t = fs::read_link(p).unwrap();
+            Node::Link(fs::canonicalize(&t).unwrap_or(t))
+        } else if e.file_type().is_dir() {
+            Node::Dir
+        } else {
+            Node::File(fs::read_to_string(p).unwrap_or_default())
+        };
+        out.insert(rel, node);
+    }
+    out
+}
+
+/// A tool directory for each of Claude Code and Codex, and a CLAUDE.md that
+/// holds the user's own content, an unrelated import, and one legacy line
+/// an earlier wire.sh appended.
+fn fixture() -> tempfile::TempDir {
+    let t = tempfile::tempdir().unwrap();
+    fs::create_dir_all(t.path().join(".claude")).unwrap();
+    fs::create_dir_all(t.path().join(".codex")).unwrap();
+    fs::write(
+        t.path().join(".claude").join("CLAUDE.md"),
+        "# my own content\n@~/other.md\n@/elsewhere/.agents/principles.md\n",
+    )
+    .unwrap();
+    t
+}
+
+fn script(home: &Path, args: &[&str]) -> String {
+    let out = Command::new("sh")
+        .arg(repo_root().join("scripts").join("wire.sh"))
+        .args(args)
+        .env("HOME", home)
+        .env_remove("CODEX_HOME")
+        .output()
+        .expect("sh");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+fn cli(home: &Path, args: &[&str]) -> String {
+    let out = Command::new(env!("CARGO_BIN_EXE_agents"))
+        .arg("--home")
+        .arg(repo_root())
+        .args(args)
+        .env("HOME", home)
+        .env_remove("CODEX_HOME")
+        .env_remove("AGENTS_HOME")
+        .output()
+        .expect("agents");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+#[test]
+#[cfg(unix)]
+fn wire_and_unwire_match_the_scripts() {
+    let (a, b) = (fixture(), fixture());
+
+    script(a.path(), &["--apply"]);
+    let cli_out = cli(b.path(), &["wire", "--apply"]);
+    assert_eq!(snapshot(a.path()), snapshot(b.path()), "after wire");
+    assert!(cli_out.contains("write .claude/rules/00-agents-home.md"));
+    assert!(cli_out.contains("drop 1 import line(s) from .claude/CLAUDE.md"));
+
+    let again = cli(b.path(), &["wire", "--apply"]);
+    assert!(again.contains("present: .claude/rules/00-agents-home.md"));
+    assert_eq!(snapshot(a.path()), snapshot(b.path()), "after second wire");
+
+    script(a.path(), &["--remove", "--apply"]);
+    cli(b.path(), &["unwire", "--apply"]);
+    assert_eq!(snapshot(a.path()), snapshot(b.path()), "after unwire");
+    assert_eq!(
+        fs::read_to_string(b.path().join(".claude").join("CLAUDE.md")).unwrap(),
+        "# my own content\n@~/other.md\n",
+        "the user's own lines survive the round trip"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn dry_run_writes_nothing() {
+    let t = fixture();
+    let before = snapshot(t.path());
+    let out = cli(t.path(), &["wire"]);
+    assert!(out.starts_with("dry run."));
+    assert_eq!(before, snapshot(t.path()));
+}
+
+#[test]
+fn check_passes_on_this_tree() {
+    let out = Command::new(env!("CARGO_BIN_EXE_agents"))
+        .arg("--home")
+        .arg(repo_root())
+        .arg("check")
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+}
+
+#[test]
+fn crate_version_is_the_template_version() {
+    let text = fs::read_to_string(repo_root().join("context").join("upstream.json")).unwrap();
+    let json: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(
+        json["template_version"].as_str().unwrap(),
+        env!("CARGO_PKG_VERSION"),
+        "cli/Cargo.toml and context/upstream.json must carry the same version"
+    );
+}

@@ -41,5 +41,12 @@ jobs:
         if: runner.os != 'Windows'
         run: python3 scripts/check-links.py
 
+      - name: CLI (fmt, clippy, tests, parity with the scripts)
+        working-directory: cli
+        shell: bash
+        run: |
+          cargo fmt --check
+          cargo clippy --all-targets -- -D warnings
+          cargo test
 
 

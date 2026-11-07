@@ -20,36 +20,50 @@ Only `AGENTS.md` and `rules/` need to load every session. The router names
 `memory/`, `templates/`, and `skills/`, so the model opens those when the task
 matches.
 
-## Take it back out
+## Do it with the CLI
 
 ```sh
-sh scripts/wire.sh --remove            # what it would undo
-sh scripts/wire.sh --remove --apply    # undo it
+cargo install --git https://github.com/Madgeniusblink/dot-agents dot-agents
+agents init <your-copy> --apply    # clone to ~/.agents, add upstream, wire
 ```
 
-It drops its own import lines and its own links, nothing else. Do this before
-deleting a home. A deleted home whose wiring stayed behind leaves every tool
-pointing at a path that is gone.
+Until the first release, `cargo install` builds the binary from this
+repository. The binary embeds no content: the home stays a git checkout. Every
+command that writes prints its plan and writes nothing without `--apply`.
 
-## See what loads now
+| Command | Does |
+|---|---|
+| `agents status` | What each tool loads, from where, and what is broken |
+| `agents tree` | The home, or any directory, as a tree: structure and sizes, not content |
+| `agents scan` | Every instruction file on this machine, by scope, with identical copies |
+| `agents skills` | Every skill each tool can load, with duplicates; `remove` and `keep` move skills aside |
+| `agents wire` | Point this machine's tools at the home; `unwire` takes out exactly that |
+| `agents check` | Budget and links |
+| `agents update` | Merge the template's main into the home; `sync` does update, wire, and status |
+| `agents reset` | Move each tool's own instruction files aside, then wire; `--restore` puts them back |
 
-```sh
-sh scripts/context.sh
-```
+Nothing deletes. `reset`, `skills remove`, and `skills keep` move files to
+`~/.agents-reset/<timestamp>/` with a manifest, and print the line that puts
+them back.
 
-Reads only. Run it before and after wiring: it names every file a tool loads,
-which imports resolve, and whether another tool owns the file you are about to
-edit.
-
-## Do it with the script
+## Do it with the scripts
 
 ```sh
 sh scripts/wire.sh            # prints what it would change
 sh scripts/wire.sh --apply    # writes it
+sh scripts/wire.sh --remove --apply    # undo it
+sh scripts/context.sh         # what loads now; reads only
 ```
 
-It covers the tools below and is idempotent. Read on for the detail, for a
-tool it does not know, or to wire by hand.
+The scripts do the same as `wire`, `unwire`, and `status`, need no binary, and
+stay until the CLI has shipped on every channel. The CLI's tests run each
+script and its command on the same temporary home and fail on any difference.
+
+Take the wiring out before deleting a home. A deleted home whose wiring stayed
+behind leaves every tool pointing at a path that is gone.
+
+Both cover the tools below and are idempotent. Read on for the detail, for a
+tool they do not know, or to wire by hand.
 
 ## Claude Code
 
