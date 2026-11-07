@@ -2,6 +2,10 @@
 
 Template semver tracks [upstream.json](context/upstream.json) `template_version`.
 
+## 0.11.2 — 2026-11-06
+
+- Fix a shell error in [context.sh](scripts/context.sh) on the clean case it exists to confirm. `grep -c` exits 1 when it matches nothing, so `|| echo 0` appended a second count and the comparison got `0\n0`. A tool config holding no rules of its own is the correct state, so the report failed exactly where it should have said everything is fine.
+
 ## 0.11.1 — 2026-11-06
 
 - Every documented merge now carries `--no-edit`. Without it, `git merge` opens an editor for the merge message and waits. In a shell nobody is watching, that is indistinguishable from a hang, and it stopped a real update mid-command.
