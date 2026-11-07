@@ -73,6 +73,21 @@ report_file() {
 
 report_file "$HOME/.claude/CLAUDE.md" "claude code"
 
+# A hook naming a path that is gone blocks the tool it guards, and the error
+# names the script rather than the config that still calls for it.
+SETTINGS="$HOME/.claude/settings.json"
+if [ -f "$SETTINGS" ]; then
+  gone=$(grep -oE '"command"[[:space:]]*:[[:space:]]*"[^"]*"' "$SETTINGS" 2>/dev/null |
+         grep -oE '/[^" ]+' |
+         while read -r t; do [ -e "$t" ] || echo "$t"; done | sort -u)
+  if [ -n "$gone" ]; then
+    echo
+    echo "hooks in $(tilde "$SETTINGS") naming a path that does not exist:"
+    echo "$gone" | while read -r t; do echo "  $(tilde "$t")"; done
+    echo "  Each one fails the tool it guards. Remove the hook or restore the file."
+  fi
+fi
+
 echo
 echo "links into this home:"
 found=0

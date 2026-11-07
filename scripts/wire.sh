@@ -1,20 +1,24 @@
 #!/usr/bin/env sh
-# Point the agent tools on this machine at this home.
+# Point the agent tools on this machine at this home, or take it back out.
 # Prints what it would change. Pass --apply to write.
+# --remove undoes exactly what this script added: its import lines and its
+# links, and nothing else. Anything that writes without an undo leaves the
+# other half behind when half is deleted.
 # Default transport is an import line; --link uses a symlink where the tool
 # follows one. Never a copy: a copy is a snapshot and goes stale in silence.
 
 HOME_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-apply=0; link=0
+apply=0; link=0; remove=0
 for a in "$@"; do
   case "$a" in
     --apply) apply=1 ;;
     --link) link=1 ;;
-    -h|--help) echo "usage: wire.sh [--apply] [--link]"; exit 0 ;;
+    --remove) remove=1 ;;
+    -h|--help) echo "usage: wire.sh [--apply] [--link] [--remove]"; exit 0 ;;
     *) echo "unknown option: $a" >&2; exit 2 ;;
   esac
 done
-[ "$apply" -eq 1 ] || echo "dry run. nothing is written. add --apply to wire."
+[ "$apply" -eq 1 ] || echo "dry run. nothing is written. add --apply to write."
 
 say() { echo "  $1"; }
 do_it() { [ "$apply" -eq 1 ] && eval "$1"; say "$2"; }
@@ -44,6 +48,28 @@ add_link() {
   else do_it "mkdir -p '$(dirname "$dst")' && ln -s '$src' '$dst'" "link ${dst#$HOME/} -> ${src#$HOME/}"
   fi
 }
+
+# Undo: drop our import lines and our links. Leave everything else alone.
+if [ "$remove" -eq 1 ]; then
+  for target in "$HOME/.claude/CLAUDE.md"; do
+    [ -f "$target" ] || continue
+    n=$(grep -c "^@.*/\.agents/" "$target" 2>/dev/null) || n=0
+    if [ "$n" -gt 0 ]; then
+      do_it "grep -v '^@.*/\.agents/' '$target' > '$target.tmp' && mv '$target.tmp' '$target'" \
+            "drop $n import line(s) from ${target#$HOME/}"
+    else
+      say "no import lines in ${target#$HOME/}"
+    fi
+  done
+  for l in "$HOME/.claude/rules/agents" "$HOME/.claude/skills/agents"; do
+    if [ -L "$l" ]; then
+      do_it "rm '$l'" "unlink ${l#$HOME/}"
+    fi
+  done
+  echo
+  echo "the home itself is untouched. remove it with: rm -rf $HOME_DIR"
+  exit 0
+fi
 
 found=0
 

@@ -2,6 +2,12 @@
 
 Template semver tracks [upstream.json](context/upstream.json) `template_version`.
 
+## 0.12.0 — 2026-11-06
+
+- [wire.sh](scripts/wire.sh) gains `--remove`. It drops the import lines and links it added and touches nothing else, so a home can be taken out without leaving tools pointing at a path that is gone. Verified by a round trip: a config with the user's own content and an unrelated import comes back byte-identical after wire then remove.
+- [context.sh](scripts/context.sh) reports hooks in a tool's settings whose command names a path that does not exist. A dead hook blocks the tool it guards, and the error names the missing script rather than the config still calling for it, so the cause is a directory away from the symptom.
+- Both come from the same failure. Deleting a superseded tree left six hooks pointing into it and blocked every shell command in that tool. Nothing installed had an undo, and nothing reported the dangling half.
+
 ## 0.11.3 — 2026-11-06
 
 - [context.sh](scripts/context.sh) reports a home whose `.gitattributes` marks files `merge=ours` while `merge.ours.driver` is unset. The driver is local config, not something a clone carries, so without it the attribute falls back to a normal merge and those files conflict on every upstream change with no sign of why.
