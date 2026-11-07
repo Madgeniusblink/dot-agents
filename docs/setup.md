@@ -37,6 +37,7 @@ command that writes prints its plan and writes nothing without `--apply`.
 | `agents tree` | The home, or any directory, as a tree: structure and sizes, not content |
 | `agents scan` | Every instruction file on this machine, by scope, with identical copies |
 | `agents skills` | Every skill each tool can load, with duplicates; `remove` and `keep` move skills aside |
+| `agents memory` | The tool's own notes per repository, scored against the home so a note the home already states shows as covered; `prune` moves notes aside and drops their index lines |
 | `agents wire` | Point this machine's tools at the home; `unwire` takes out exactly that |
 | `agents check` | Budget and links |
 | `agents update` | Merge the template's main into the home; `sync` does update, wire, and status |

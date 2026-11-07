@@ -9,6 +9,7 @@ mod check;
 mod git;
 mod harness;
 mod home;
+mod memory;
 mod plan;
 mod reset;
 mod scan;
@@ -61,6 +62,12 @@ enum Cmd {
         /// Walk caches, vendored trees, and Library too
         #[arg(long)]
         all: bool,
+    },
+
+    /// The tool's auto memory per repository, what the home already covers, and what to prune
+    Memory {
+        #[command(subcommand)]
+        action: Option<MemoryAction>,
     },
 
     /// Every skill each tool can load, with duplicates, and what to remove
@@ -127,6 +134,20 @@ enum Cmd {
 }
 
 #[derive(Subcommand)]
+enum MemoryAction {
+    /// Move the named notes aside and drop their index lines
+    Prune {
+        names: Vec<String>,
+        /// Select every note the home already covers
+        #[arg(long)]
+        covered: bool,
+        /// Write the plan. Without it, print only
+        #[arg(long)]
+        apply: bool,
+    },
+}
+
+#[derive(Subcommand)]
 enum SkillsAction {
     /// Move the named skills aside
     Remove {
@@ -175,6 +196,21 @@ fn run() -> Result<ExitCode> {
         Cmd::Scan { root, all } => {
             let home = Home::locate(cli.home).ok();
             scan::scan(root.unwrap_or_else(home::user_home), all, home.as_ref());
+            Ok(ok)
+        }
+        Cmd::Memory { action } => {
+            let home = Home::locate(cli.home).ok();
+            match action {
+                None => memory::list(home.as_ref()),
+                Some(MemoryAction::Prune {
+                    names,
+                    covered,
+                    apply,
+                }) => {
+                    plan::banner(apply);
+                    memory::prune(&names, covered, home.as_ref()).run(apply)?;
+                }
+            }
             Ok(ok)
         }
         Cmd::Skills { action } => {

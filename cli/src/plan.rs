@@ -21,7 +21,7 @@ pub enum Action {
     /// Rewrite the file without the lines `matches` selects.
     DropLines {
         path: PathBuf,
-        matches: fn(&str) -> bool,
+        matches: Box<dyn Fn(&str) -> bool>,
     },
     Move {
         from: PathBuf,
