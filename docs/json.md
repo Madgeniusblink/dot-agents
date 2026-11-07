@@ -68,8 +68,8 @@ Each object in `projects`:
 | `root` | The checkout |
 | `skills` | A count per place a tool reads |
 | `remote` | `owner/repo` from `origin`, or `null` |
-| `kind` | `clone`, `worktree`, or `orphan worktree` |
-| `main_checkout` | The main checkout of a worktree, else `null` |
+| `kind` | `clone`, `worktree`, `submodule`, or `orphan worktree` |
+| `main_checkout` | The main checkout of a worktree, the superproject of a submodule, else `null` |
 | `branch` | The branch, or `null` |
 | `ahead`, `behind` | Counts against the upstream ref on disk, or `null` with no upstream |
 | `uncommitted` | How many files have changes not committed |
