@@ -58,7 +58,9 @@ drop_legacy_imports() {
   [ -f "$target" ] || return 0
   n=$(grep -c "^@.*/\.agents/" "$target" 2>/dev/null) || n=0
   if [ "$n" -gt 0 ]; then
-    do_it "grep -v '^@.*/\.agents/' '$target' > '$target.tmp' && mv '$target.tmp' '$target'" \
+    # grep -v exits 1 when it filters every line, which is the case where the
+    # file held nothing but our lines, so treat 1 as success and 2 as failure.
+    do_it "{ grep -v '^@.*/\.agents/' '$target' || [ \$? -eq 1 ]; } > '$target.tmp' && mv '$target.tmp' '$target'" \
           "drop $n import line(s) from ${target#$HOME/}"
   fi
 }
