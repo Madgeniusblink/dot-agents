@@ -977,7 +977,7 @@ pub fn list(home: Option<&Home>, long: u8, json: bool) {
         ("keep only some", "agents skills keep <name>... --apply"),
     ];
     if !long {
-        pairs.push(("read in full", "agents skills --long"));
+        pairs.push(("each in full", "agents skills --long --long"));
     }
     out::steps(
         &pairs,
