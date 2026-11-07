@@ -94,7 +94,7 @@ fn brief(home: &Home, cfg: &Config) {
     println!("always-on: {total} of {cap} bytes ({source}){over}");
 
     let claude = Claude::new();
-    let reports = harness_files(home, total, cfg);
+    let reports = harness_files(home, cfg);
     for (tool, label) in [
         ("claude", "claude code"),
         ("codex", "codex"),
@@ -270,7 +270,7 @@ fn report(home: &Home, cfg: &Config) {
         width,
     );
 
-    let reports = harness_files(home, total, cfg);
+    let reports = harness_files(home, cfg);
     let cursor = cursor_dir().is_dir() && cfg.tool("cursor");
     out::section(
         "what each harness loads",
@@ -347,7 +347,7 @@ fn data(home: &Home, cfg: &Config) -> Value {
             })
         })
         .collect();
-    let harnesses: Vec<Value> = harness_files(home, total, cfg)
+    let harnesses: Vec<Value> = harness_files(home, cfg)
         .iter()
         .map(|r| {
             json!({
@@ -412,7 +412,7 @@ fn links(claude: &Claude) -> Vec<PathBuf> {
 
 /// Each harness file the home knows, read once for both forms.
 /// `[tools] present` limits which tools are read.
-fn harness_files(home: &Home, always_on: u64, cfg: &Config) -> Vec<Report> {
+fn harness_files(home: &Home, cfg: &Config) -> Vec<Report> {
     let claude = Claude::new();
     let generated = generated_content(home);
     let mut out = Vec::new();
@@ -422,7 +422,6 @@ fn harness_files(home: &Home, always_on: u64, cfg: &Config) -> Vec<Report> {
             &claude.dropin(),
             ("claude", "claude code, the home's drop-in"),
             None,
-            always_on,
             Some(&dropin_content(home)),
         ));
         out.push(read_file(
@@ -430,7 +429,6 @@ fn harness_files(home: &Home, always_on: u64, cfg: &Config) -> Vec<Report> {
             &claude.own_file(),
             ("claude", "claude code, the harness's own file"),
             None,
-            always_on,
             None,
         ));
     }
@@ -440,7 +438,6 @@ fn harness_files(home: &Home, always_on: u64, cfg: &Config) -> Vec<Report> {
             &codex_dir().join("AGENTS.md"),
             ("codex", "codex, the home's generated file"),
             Some(CODEX_PROJECT_DOC_MAX),
-            always_on,
             Some(&generated),
         ));
     }
@@ -450,7 +447,6 @@ fn harness_files(home: &Home, always_on: u64, cfg: &Config) -> Vec<Report> {
             &grok_dropin(),
             ("grok", "grok, the home's generated file"),
             None,
-            always_on,
             Some(&generated),
         ));
     }
@@ -479,7 +475,7 @@ struct Report {
     foreign: usize,
     /// Each import line whose target is gone.
     broken: Vec<String>,
-    /// The bytes with the always-on set, and the cap they pass.
+    /// The bytes of the file, and the cap they pass.
     over_cap: Option<(u64, u64)>,
     stale: bool,
     /// Lines of rules in the file itself, when that makes two sources.
@@ -493,7 +489,6 @@ fn read_file(
     f: &Path,
     (tool, label): (&'static str, &'static str),
     cap: Option<u64>,
-    always_on: u64,
     expected: Option<&str>,
 ) -> Report {
     let exists = f.exists() || f.is_symlink();
@@ -515,10 +510,10 @@ fn read_file(
     let bytes = text.len() as u64;
     // Codex compares global plus thread instructions against project_doc_max_bytes
     // and warns, but truncates only project files. Crossing it is a signal, not a
-    // cut-off. Source: codex-rs/core/src/agents_md_manager.rs.
-    let over_cap = cap
-        .filter(|&cap| bytes + always_on > cap)
-        .map(|cap| (bytes + always_on, cap));
+    // cut-off. Source: codex-rs/core/src/agents_md_manager.rs. Codex follows no
+    // import, so this file is all it loads from the home: wire already copied the
+    // always-on set into it.
+    let over_cap = cap.filter(|&cap| bytes > cap).map(|cap| (bytes, cap));
     let ours = is_ours(f);
     // Content in the file itself outranks nothing and duplicates the home,
     // unless the file is a link into the home or the home wrote it.
@@ -590,7 +585,7 @@ fn print_report(r: &Report, width: usize) {
     if let Some((total, cap)) = r.over_cap {
         out::say(
             &format!(
-                "{total} bytes with the always-on set. That is over the {cap} byte project_doc_max_bytes setting. The harness does not truncate this file, but it warns. Project files then compete for what is left."
+                "{total} bytes. That is over the {cap} byte project_doc_max_bytes setting. The harness does not truncate this file, but it warns. Project files then compete for what is left."
             ),
             2,
             width,
@@ -669,7 +664,7 @@ fn missing_hook_paths(settings: &Value) -> BTreeSet<PathBuf> {
     gone
 }
 
-fn commands(v: &Value, f: &mut dyn FnMut(&str)) {
+pub fn commands(v: &Value, f: &mut dyn FnMut(&str)) {
     match v {
         Value::Object(m) => {
             for (k, x) in m {
