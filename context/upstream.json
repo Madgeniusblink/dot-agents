@@ -1,10 +1,10 @@
 {
   "version": 1,
   "name": "dot-agents",
-  "template_version": "0.11.2",
+  "template_version": "0.11.3",
   "repository": "https://github.com/Madgeniusblink/dot-agents",
   "default_branch": "main",
-  "release_tag": "v0.11.2",
+  "release_tag": "v0.11.3",
   "extends_doc": "standards/extending.md",
   "paths": {
     "standards_index": "standards/README.md",
@@ -14,8 +14,8 @@
   "links": {
     "repo": "https://github.com/Madgeniusblink/dot-agents",
     "tree_main": "https://github.com/Madgeniusblink/dot-agents/tree/main",
-    "tree_tag": "https://github.com/Madgeniusblink/dot-agents/tree/v0.11.2",
+    "tree_tag": "https://github.com/Madgeniusblink/dot-agents/tree/v0.11.3",
     "raw_main": "https://raw.githubusercontent.com/Madgeniusblink/dot-agents/main",
-    "raw_tag": "https://raw.githubusercontent.com/Madgeniusblink/dot-agents/v0.11.2"
+    "raw_tag": "https://raw.githubusercontent.com/Madgeniusblink/dot-agents/v0.11.3"
   }
 }
