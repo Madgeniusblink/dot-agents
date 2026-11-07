@@ -285,6 +285,25 @@ fn scan_prints_one_row_per_remote_and_no_files() {
 }
 
 #[test]
+fn o2_scan_counts_test_fixtures_under_the_home_on_their_own() {
+    let t = fixture();
+    let h = t.path();
+    write(h, ".agents/cli/tests/fixtures/a/AGENTS.md", "# a\n");
+    write(h, ".agents/cli/tests/fixtures/b/CLAUDE.md", "# b\n");
+    let root = h.join(".agents").to_string_lossy().into_owned();
+    let out = agents(h, None, &["scan", "--root", &root]);
+    assert!(
+        out.contains("home ~/.agents: 1 file, 2 test fixtures\n"),
+        "{out}"
+    );
+    let long = agents(h, None, &["scan", "--long", "--root", &root]);
+    assert!(
+        long.contains("fixtures/a/AGENTS.md") && long.contains("fixtures/b/CLAUDE.md"),
+        "{long}"
+    );
+}
+
+#[test]
 fn a_skip_glob_removes_a_root_from_scan() {
     let t = fixture();
     let h = t.path();
