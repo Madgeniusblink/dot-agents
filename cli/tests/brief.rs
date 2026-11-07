@@ -285,6 +285,45 @@ fn scan_prints_one_row_per_remote_and_no_files() {
 }
 
 #[test]
+fn o1_scan_long_in_a_pipe_keeps_a_long_path_whole() {
+    let t = fixture();
+    let h = t.path();
+    let deep = format!("work/{}/{}", "a".repeat(52), "b".repeat(60));
+    let d = h.join(&deep);
+    fs::create_dir_all(&d).unwrap();
+    git(&d, &["init", "-q"]);
+    write(&d, "AGENTS.md", "# deep\n");
+    let path = format!("~/{deep}");
+    assert_eq!(path.chars().count(), 120, "{path}");
+    let out = Command::new(env!("CARGO_BIN_EXE_agents"))
+        .env("AGENTS_UPDATE_CHECK", "off")
+        .args(["--home".as_ref(), h.join(".agents").as_os_str()])
+        .args([
+            "scan".as_ref(),
+            "--long".as_ref(),
+            "--root".as_ref(),
+            h.as_os_str(),
+        ])
+        .current_dir(h)
+        .env("HOME", h)
+        .env_remove("COLUMNS")
+        .env_remove("AGENTS_HOME")
+        .env_remove("AGENTS_CONFIG")
+        .env_remove("CODEX_HOME")
+        .env_remove("GROK_HOME")
+        .output()
+        .expect("agents");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let out = String::from_utf8_lossy(&out.stdout);
+    assert!(out.contains(&path), "{out}");
+    assert!(!out.contains('…'), "{out}");
+}
+
+#[test]
 fn a_skip_glob_removes_a_root_from_scan() {
     let t = fixture();
     let h = t.path();

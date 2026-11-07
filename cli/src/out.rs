@@ -5,17 +5,20 @@
 use crate::home::tilde;
 use crate::reset::rfc3339;
 use serde_json::{json, Value};
+use std::io::IsTerminal;
 use std::path::Path;
 
 /// The widest the name column gets. A longer name is cut.
 pub const NAME_CAP: usize = 28;
 
-/// `COLUMNS`, then the terminal, then 80 when stdout is not a terminal.
+/// `COLUMNS`, then no limit when stdout is not a terminal, so a reader in a
+/// pipe gets every row whole. Then the terminal, then 80.
 pub fn width() -> usize {
     std::env::var("COLUMNS")
         .ok()
         .and_then(|v| v.trim().parse::<usize>().ok())
         .filter(|&n| n > 0)
+        .or_else(|| (!std::io::stdout().is_terminal()).then_some(usize::MAX))
         .or_else(|| terminal_size::terminal_size().map(|(w, _)| w.0 as usize))
         .filter(|&n| n > 0)
         .unwrap_or(80)
