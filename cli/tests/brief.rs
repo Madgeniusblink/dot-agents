@@ -40,7 +40,8 @@ fn fixture() -> tempfile::TempDir {
 /// Run `agents` in `home`, with `config` as the per-machine file when given.
 fn agents(home: &Path, config: Option<&str>, args: &[&str]) -> String {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_agents"));
-    cmd.arg("--home")
+    cmd.env("AGENTS_UPDATE_CHECK", "off")
+        .arg("--home")
         .arg(home.join(".agents"))
         .args(args)
         .current_dir(home)
@@ -235,6 +236,7 @@ fn init_writes_the_config_file() {
     git(&src, &["add", "-A"]);
     git(&src, &["commit", "-qm", "init"]);
     let out = Command::new(env!("CARGO_BIN_EXE_agents"))
+        .env("AGENTS_UPDATE_CHECK", "off")
         .arg("--home")
         .arg(h.join("new-home"))
         .args(["init", &src.to_string_lossy(), "--apply"])

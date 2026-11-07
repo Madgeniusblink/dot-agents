@@ -26,7 +26,7 @@ cargo install --git https://github.com/Madgeniusblink/dot-agents dot-agents
 agents init <your-copy> --apply
 ```
 
-The binary embeds no content and reads the same tree. Every command prints its plan and writes nothing without `--apply`. The first tagged release adds `brew install`; the scripts in `scripts/` do the same with no binary ([docs/setup.md](docs/setup.md)).
+The binary embeds no content and reads the same tree. Every command prints its plan and writes nothing without `--apply`. `agents --version` names the commit it was built from, and once a day a command says on stderr how many commits main is ahead of that build; `AGENTS_UPDATE_CHECK=off` silences it. The first tagged release adds `brew install`; the scripts in `scripts/` do the same with no binary ([docs/setup.md](docs/setup.md)).
 
 A conflict is the point: it shows the line that moved under a rule you rewrote. There is no installer, no copy, and no manifest, because `git status` and `git diff` already answer every question one would need to reinvent ([adopt.md](standards/adopt.md)).
 

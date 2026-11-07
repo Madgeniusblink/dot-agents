@@ -84,6 +84,7 @@ fn script(home: &Path, args: &[&str]) -> String {
 
 fn cli(home: &Path, args: &[&str]) -> String {
     let out = Command::new(env!("CARGO_BIN_EXE_agents"))
+        .env("AGENTS_UPDATE_CHECK", "off")
         .arg("--home")
         .arg(repo_root())
         .args(args)
@@ -157,6 +158,7 @@ fn dry_run_writes_nothing() {
 #[test]
 fn check_passes_on_this_tree() {
     let out = Command::new(env!("CARGO_BIN_EXE_agents"))
+        .env("AGENTS_UPDATE_CHECK", "off")
         .arg("--home")
         .arg(repo_root())
         .arg("check")
@@ -221,6 +223,7 @@ fn check_fails_on_a_skill_name_that_is_not_its_directory() {
     fs::write(t.path().join("AGENTS.md"), "# Agent rules\n").unwrap();
     broken_skill(&t.path().join("skills"));
     let out = Command::new(env!("CARGO_BIN_EXE_agents"))
+        .env("AGENTS_UPDATE_CHECK", "off")
         .arg("--home")
         .arg(t.path())
         .arg("check")

@@ -15,6 +15,7 @@ fn repo_root() -> PathBuf {
 
 fn check(home: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_agents"))
+        .env("AGENTS_UPDATE_CHECK", "off")
         .arg("--home")
         .arg(home)
         .arg("check")
