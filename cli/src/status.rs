@@ -191,6 +191,16 @@ fn findings(r: &Report) -> usize {
 /// Today's report, in full.
 fn report(home: &Home, cfg: &Config) {
     let width = out::width();
+    let file = if cfg.exists {
+        tilde(&cfg.path)
+    } else {
+        format!("{} (no file, so defaults)", tilde(&cfg.path))
+    };
+    out::say(
+        &format!("machine: {}, config: {file}", config::machine()),
+        0,
+        width,
+    );
     println!("{}", crate::version::line());
     println!("home: {}", tilde(&home.dir));
     if home.git(&["rev-parse", "--is-inside-work-tree"]).is_some() {
@@ -248,6 +258,13 @@ fn report(home: &Home, cfg: &Config) {
         ));
     }
     items.push(out::Row::new("total", format!("{total} bytes"), ""));
+    let (cap, source) = check::cap(home);
+    let over = if total > cap { "OVER the cap" } else { "" };
+    items.push(out::Row::new(
+        "cap",
+        format!("{cap} bytes ({source})"),
+        over,
+    ));
     out::print(&items, false, width);
 
     let demand: Vec<out::Row> = ON_DEMAND

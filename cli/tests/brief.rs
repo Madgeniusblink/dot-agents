@@ -278,3 +278,24 @@ fn json_names_the_machine_and_the_config() {
         assert_eq!(doc["config"]["tools"]["present"], serde_json::json!([]));
     }
 }
+
+#[test]
+fn status_long_holds_every_fact_of_the_brief() {
+    let t = fixture();
+    let h = t.path();
+    agents(h, None, &["wire", "--apply"]);
+    let brief = agents(h, None, &["status"]);
+    let long = agents(h, None, &["status", "--long"]);
+    let machine = brief.lines().next().unwrap();
+    assert!(long.contains(machine), "{machine}\n{long}");
+    for n in brief
+        .split(|c: char| !c.is_ascii_digit())
+        .filter(|s| !s.is_empty())
+    {
+        assert!(
+            long.contains(n),
+            "{n} is in the brief, not in --long:\n{long}"
+        );
+    }
+    assert!(long.contains("(default cap)"), "{long}");
+}
