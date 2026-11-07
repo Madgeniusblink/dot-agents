@@ -71,9 +71,11 @@ report_file() {
   echo "  $own lines, $bytes bytes: $mine imports from this home, $foreign from elsewhere, $broken broken"
   # Codex compares global plus thread instructions against project_doc_max_bytes
   # and warns, but truncates only project files. Crossing it is a signal, not a
-  # cut-off. Source: codex-rs/core/src/agents_md_manager.rs.
-  if [ -n "$cap" ] && [ "$((bytes + total))" -gt "$cap" ]; then
-    echo "  $((bytes + total)) bytes with the always-on set, over the $cap byte"
+  # cut-off. Source: codex-rs/core/src/agents_md_manager.rs. Codex follows no
+  # import, so this file is all it loads from the home: wire already copied the
+  # always-on set into it.
+  if [ -n "$cap" ] && [ "$bytes" -gt "$cap" ]; then
+    echo "  $bytes bytes, over the $cap byte"
     echo "  project_doc_max_bytes setting. This file is not truncated, but the"
     echo "  harness warns, and project files then compete for what is left."
   fi

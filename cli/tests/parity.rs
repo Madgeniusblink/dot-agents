@@ -155,6 +155,48 @@ fn dry_run_writes_nothing() {
     assert_eq!(before, snapshot(t.path()));
 }
 
+/// `wire` already copies the always-on set into the Codex file, so
+/// `context.sh` must compare that file's own bytes with the cap, not add
+/// the set again. A 17 KB set sits under the 32768 cap once, over it twice.
+#[test]
+#[cfg(unix)]
+fn context_sh_counts_the_codex_file_once_against_its_cap() {
+    let t = tempfile::tempdir().unwrap();
+    let home = t.path().join("home");
+    let user = t.path().join("user");
+    fs::create_dir_all(home.join("scripts")).unwrap();
+    fs::create_dir_all(home.join("rules")).unwrap();
+    fs::create_dir_all(user.join(".codex")).unwrap();
+    fs::copy(
+        repo_root().join("scripts").join("context.sh"),
+        home.join("scripts").join("context.sh"),
+    )
+    .unwrap();
+    let always_on = "x".repeat(17_000) + "\n";
+    fs::write(home.join("principles.md"), &always_on).unwrap();
+    fs::write(
+        user.join(".codex").join("AGENTS.md"),
+        format!("<!-- dot-agents owns this file -->\n{always_on}"),
+    )
+    .unwrap();
+    let out = Command::new("sh")
+        .arg(home.join("scripts").join("context.sh"))
+        .env("HOME", &user)
+        .env_remove("CODEX_HOME")
+        .output()
+        .expect("sh");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !stdout.contains("project_doc_max_bytes"),
+        "17 KB counted once is under the cap:\n{stdout}"
+    );
+}
+
 #[test]
 fn check_passes_on_this_tree() {
     let out = Command::new(env!("CARGO_BIN_EXE_agents"))
