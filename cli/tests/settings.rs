@@ -61,6 +61,7 @@ fn agents(home: &Path, args: &[&str]) -> String {
         .env("HOME", home)
         .env("COLUMNS", "400")
         .env("EDITOR", "vi")
+        .env("AGENTS_UPDATE_CHECK", "off")
         .env_remove("AGENTS_HOME")
         .env_remove("AGENTS_CONFIG")
         .env_remove("CODEX_HOME")
