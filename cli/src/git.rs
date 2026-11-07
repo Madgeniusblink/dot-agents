@@ -1,6 +1,7 @@
 //! The two commands that touch the home's git state. The home takes shared
 //! files from the template by merge, not by an installer.
 
+use crate::config::{self, Config};
 use crate::home::{git_in, tilde, Home};
 use crate::plan::{banner, Action, Plan};
 use crate::{status, wire};
@@ -10,7 +11,7 @@ use std::path::PathBuf;
 /// Clone the user's own copy of the template to the home, add the template
 /// it came from as `upstream`, set the merge driver its `.gitattributes`
 /// asks for, then wire.
-pub fn init(flag: Option<PathBuf>, url: &str, apply: bool) -> Result<()> {
+pub fn init(flag: Option<PathBuf>, cfg: &Config, url: &str, apply: bool) -> Result<()> {
     let dir = std::path::absolute(flag.unwrap_or_else(Home::default_dir))?;
     if dir.exists() {
         bail!(
@@ -23,7 +24,21 @@ pub fn init(flag: Option<PathBuf>, url: &str, apply: bool) -> Result<()> {
     println!("  git clone {url} {}", tilde(&dir));
     println!("  git remote add upstream <repository from context/upstream.json>");
     println!("  git config merge.ours.driver true");
+    let mut machine = Plan::new();
+    machine.header("this machine:");
+    if cfg.exists {
+        machine.say(format!("present: {}", tilde(&cfg.path)));
+    } else {
+        machine.act(
+            Action::Write {
+                path: cfg.path.clone(),
+                content: config::TEMPLATE.to_string(),
+            },
+            format!("write {} (every key at its default)", tilde(&cfg.path)),
+        );
+    }
     if !apply {
+        machine.run(false)?;
         println!();
         println!("then the wiring plan, which needs the clone to exist.");
         return Ok(());
@@ -62,8 +77,9 @@ pub fn init(flag: Option<PathBuf>, url: &str, apply: bool) -> Result<()> {
         "merge.ours.driver true".to_string(),
     );
     plan.run(true)?;
+    machine.run(true)?;
     println!();
-    wire::wire(&home, false).run(true)
+    wire::wire(&home, cfg, false).run(true)
 }
 
 fn template_url(home: &Home) -> Option<String> {
@@ -75,7 +91,7 @@ fn template_url(home: &Home) -> Option<String> {
 /// `git fetch upstream && git merge --no-edit upstream/main`, then the
 /// report. Keep `--no-edit`: without it git opens an editor for the merge
 /// message and waits, which looks like a hang in any shell nobody watches.
-pub fn update(home: &Home, apply: bool) -> Result<()> {
+pub fn update(home: &Home, cfg: &Config, apply: bool) -> Result<()> {
     if git_in(&home.dir, &["remote", "get-url", "upstream"]).is_none() {
         bail!(
             "no upstream remote in {}. add it with: git -C {} remote add upstream <template-url>",
@@ -101,19 +117,19 @@ pub fn update(home: &Home, apply: bool) -> Result<()> {
     plan.run(apply)?;
     if apply {
         println!();
-        status::status(home, false);
+        status::status(home, cfg, false, false);
     }
     Ok(())
 }
 
 /// `update`, then `wire`, then the report: the one-step resync.
-pub fn sync(home: &Home, apply: bool) -> Result<()> {
-    update(home, apply)?;
+pub fn sync(home: &Home, cfg: &Config, apply: bool) -> Result<()> {
+    update(home, cfg, apply)?;
     println!();
-    wire::wire(home, false).run(apply)?;
+    wire::wire(home, cfg, false).run(apply)?;
     if apply {
         println!();
-        status::status(home, false);
+        status::status(home, cfg, false, false);
     }
     Ok(())
 }

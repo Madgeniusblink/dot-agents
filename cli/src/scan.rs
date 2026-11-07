@@ -2,6 +2,7 @@
 //! in every session and the project ones when a session starts inside that
 //! repository, so an unlisted one is behavior you did not choose.
 
+use crate::config::{self, Config};
 use crate::harness::Claude;
 use crate::home::{git_in, tilde, user_home, Home};
 use crate::{out, skills};
@@ -61,7 +62,16 @@ struct Hit {
     scope: Scope,
 }
 
-pub fn scan(root: PathBuf, all: bool, long: bool, json: bool, home: Option<&Home>) {
+/// No `long`: one row per remote and counts. Once: every file. Twice: each
+/// file in full. `[scan] skip` globs prune the walk, even with `--all`.
+pub fn scan(
+    roots: Vec<PathBuf>,
+    all: bool,
+    long: u8,
+    json: bool,
+    home: Option<&Home>,
+    cfg: &Config,
+) {
     let width = out::width();
     let started = Instant::now();
     let user = user_home();
@@ -72,10 +82,14 @@ pub fn scan(root: PathBuf, all: bool, long: bool, json: bool, home: Option<&Home
     ];
     let aside = user.join(".agents-reset");
 
-    let mut hits: Vec<Hit> = WalkDir::new(&root)
-        .follow_links(false)
-        .into_iter()
-        .filter_entry(|e| all || keep(e))
+    let mut hits: Vec<Hit> = roots
+        .iter()
+        .flat_map(|root| {
+            WalkDir::new(root)
+                .follow_links(false)
+                .into_iter()
+                .filter_entry(|e| (all || keep(e)) && !cfg.skipped(e.path()))
+        })
         .flatten()
         .filter(|e| !e.file_type().is_dir() && instruction_file(e.path()))
         .map(|e| {
@@ -123,6 +137,7 @@ pub fn scan(root: PathBuf, all: bool, long: bool, json: bool, home: Option<&Home
         })
         .collect();
     hits.sort_by(|a, b| a.path.cmp(&b.path));
+    hits.dedup_by(|a, b| a.path == b.path);
     let mut projects: BTreeMap<&Path, Vec<&Hit>> = BTreeMap::new();
     for h in &hits {
         if let Scope::Project(r) = &h.scope {
@@ -133,7 +148,8 @@ pub fn scan(root: PathBuf, all: bool, long: bool, json: bool, home: Option<&Home
         projects.keys().map(|r| (*r, Checkout::read(r))).collect();
     if json {
         let data = data(
-            &root,
+            &roots,
+            cfg,
             all,
             started.elapsed().as_secs_f32(),
             &hits,
@@ -143,9 +159,15 @@ pub fn scan(root: PathBuf, all: bool, long: bool, json: bool, home: Option<&Home
         return;
     }
 
+    let shown: Vec<String> = roots.iter().map(|r| tilde(r)).collect();
+    if long == 0 {
+        brief(&shown.join(", "), started, home, &hits, &checkouts, width);
+        return;
+    }
+    let long = long >= 2;
     println!(
         "scanned {} in {:.1}s: {} instruction files.",
-        tilde(&root),
+        shown.join(", "),
         started.elapsed().as_secs_f32(),
         hits.len()
     );
@@ -304,6 +326,94 @@ pub fn scan(root: PathBuf, all: bool, long: bool, json: bool, home: Option<&Home
         };
         out::say(&text, 0, width);
     }
+}
+
+/// One row per remote: how many checkouts, the newest, and `stale`,
+/// `orphan`, or `copy` where they apply. Then counts, and no file list.
+fn brief(
+    roots: &str,
+    started: Instant,
+    home: Option<&Home>,
+    hits: &[Hit],
+    checkouts: &BTreeMap<&Path, Checkout>,
+    width: usize,
+) {
+    out::say(
+        &format!(
+            "scanned {roots} in {:.1}s: {} instruction files in {} checkouts.",
+            started.elapsed().as_secs_f32(),
+            hits.len(),
+            checkouts.len()
+        ),
+        0,
+        width,
+    );
+    let mut groups: BTreeMap<&str, Vec<(&Path, &Checkout)>> = BTreeMap::new();
+    for (repo, c) in checkouts {
+        groups
+            .entry(c.remote.as_deref().unwrap_or("no remote"))
+            .or_default()
+            .push((repo, c));
+    }
+    let items: Vec<out::Row> = groups
+        .iter()
+        .map(|(remote, group)| {
+            let newest = group
+                .iter()
+                .max_by(|a, b| a.1.when.cmp(&b.1.when))
+                .map_or(String::new(), |(r, _)| tilde(r));
+            let stale = group.iter().filter(|(_, c)| c.stale()).count();
+            let orphan = group
+                .iter()
+                .filter(|(_, c)| matches!(c.kind, Kind::Orphan))
+                .count();
+            let clones = group
+                .iter()
+                .filter(|(_, c)| matches!(c.kind, Kind::Clone))
+                .count();
+            let mut marks = Vec::new();
+            if stale > 0 {
+                marks.push(format!("{stale} stale"));
+            }
+            if orphan > 0 {
+                marks.push(format!("{orphan} orphan"));
+            }
+            if *remote != "no remote" && clones > 1 {
+                marks.push("copy".to_string());
+            }
+            let n = group.len();
+            let unit = if n == 1 { "checkout" } else { "checkouts" };
+            out::Row::new(
+                *remote,
+                format!("{n:>3} {unit}"),
+                format!("{newest}  {}", marks.join(", ")),
+            )
+        })
+        .collect();
+    out::section("checkouts by remote, newest shown", items.len(), width);
+    out::print(&items, false, width);
+    println!();
+    let count = |want: fn(&Scope) -> bool| hits.iter().filter(|h| want(&h.scope)).count();
+    println!(
+        "global, loaded in every session: {} files",
+        count(|s| matches!(s, Scope::Global))
+    );
+    if let Some(h) = home {
+        println!(
+            "home {}: {} files",
+            tilde(&h.dir),
+            count(|s| matches!(s, Scope::Home))
+        );
+    }
+    let claude = Claude::new();
+    println!(
+        "auto memory: {} indexes under {}",
+        claude.auto_memory_dirs().len(),
+        tilde(&claude.auto_memory_root())
+    );
+    println!("identical content: {} groups", identical(hits).len());
+    println!();
+    println!("every file: agents scan --long");
 }
 
 /// Checkouts of one remote found in more than one place, each group newest
@@ -545,7 +655,8 @@ fn identical(hits: &[Hit]) -> Vec<Vec<&Hit>> {
 
 /// The same facts the text shows, as data.
 fn data(
-    root: &Path,
+    roots: &[PathBuf],
+    cfg: &Config,
     all: bool,
     seconds: f32,
     hits: &[Hit],
@@ -637,7 +748,10 @@ fn data(
         .map(|g| g.iter().map(|h| tilde(&h.path)).collect())
         .collect();
     json!({
-        "root": tilde(root),
+        "machine": config::machine(),
+        "config": cfg.json(),
+        "root": roots.first().map(|r| tilde(r)),
+        "roots": roots.iter().map(|r| tilde(r)).collect::<Vec<_>>(),
         "seconds": (seconds * 10.0).round() / 10.0,
         "skipped": if all { Vec::new() } else { SKIP.to_vec() },
         "count": hits.len(),

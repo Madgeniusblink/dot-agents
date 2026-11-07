@@ -47,6 +47,7 @@ writes prints its plan and writes nothing without `--apply`.
 | `agents update` | Merge the template's main into the home; `sync` does update, wire, and status |
 | `agents reset` | Move each tool's own instruction files aside, then wire; `--memory` includes the tool's auto memory; `--restore` puts them back |
 | `--json` | On `status`, `scan`, `skills`, `memory`, and `check`: one JSON document instead of the text. [json.md](json.md) lists the keys |
+| `--long` | On `status`, `scan`, `skills`, and `memory`: the full listing. Without it, each prints one screen. Twice on `scan`, `skills`, and `memory`: each item in full |
 
 Nothing deletes. `reset`, `skills remove`, and `skills keep` move files to
 `~/.agents-reset/<timestamp>/` with a manifest, and print the line that puts
@@ -55,6 +56,26 @@ them back.
 The CLI reads a project checkout and never writes inside it. Run inside a
 checkout, `skills` lists that project's skills and marks each user copy of
 one as `copy of <path>`; `remove` and `keep` skip them.
+
+## The config file for this machine
+
+Every command reads `~/.config/agents/config.toml`, or the file that
+`$AGENTS_CONFIG` names. `agents init` writes it with each key at its default
+and one comment per key. A missing file means the defaults. `status` names
+the file on its first line, and `status --json` and `scan --json` carry it
+as `config`, beside `machine`.
+
+| Key | Holds |
+|---|---|
+| `editor` | The command that opens a file on this machine |
+| `[scan] roots` | The directories `scan` walks. Empty means your home directory |
+| `[scan] skip` | Globs of paths `scan` skips, such as the task copies a tool makes. `*` stays inside one directory; `**` crosses directories |
+| `[tools] present` | The tools that `status` and `wire` touch: `claude`, `codex`, `grok`, `cursor`. Empty means every tool found |
+
+Put a fact in this file when it is true on one machine only: a path, a
+tool you installed, a directory of copies. Put a fact in the home when every
+machine needs it. The always-on cap is in the home's `context/upstream.json`
+for that reason: it must travel.
 
 ## Do it with the scripts
 
