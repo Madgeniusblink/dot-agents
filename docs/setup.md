@@ -20,6 +20,16 @@ Only `AGENTS.md` and `rules/` need to load every session. The router names
 `memory/`, `templates/`, and `skills/`, so the model opens those when the task
 matches.
 
+## See what loads now
+
+```sh
+sh scripts/context.sh
+```
+
+Reads only. Run it before and after wiring: it names every file a tool loads,
+which imports resolve, and whether another tool owns the file you are about to
+edit.
+
 ## Do it with the script
 
 ```sh
