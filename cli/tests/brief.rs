@@ -141,6 +141,12 @@ fn skills_collapse_managed_sources() {
     assert!(!out.contains("kit0"), "{out}");
     let long = agents(h, None, &["skills", "--long"]);
     assert!(long.contains("kit0"), "{long}");
+    let hint = long.lines().find(|l| l.starts_with("each in full:"));
+    assert!(
+        hint.is_some_and(|l| l.ends_with(" agents skills --long --long")),
+        "{long}"
+    );
+    assert!(!long.contains("read in full"), "{long}");
     let full = agents(h, None, &["skills", "--long", "--long"]);
     assert!(full.contains("The alpha skill."), "{full}");
 }
@@ -200,6 +206,12 @@ fn memory_shows_only_flagged_notes() {
     assert!(!out.contains("  tea"), "{out}");
     let long = agents(h, None, &["memory", "--long"]);
     assert!(long.contains("  tea"), "{long}");
+    let hint = long.lines().find(|l| l.starts_with("each in full:"));
+    assert!(
+        hint.is_some_and(|l| l.ends_with(" agents memory --long --long")),
+        "{long}"
+    );
+    assert!(!long.contains("read in full"), "{long}");
 }
 
 fn git(dir: &Path, args: &[&str]) {
