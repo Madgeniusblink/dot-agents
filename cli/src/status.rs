@@ -115,7 +115,9 @@ fn brief(home: &Home, cfg: &Config) {
             state(home, mine[0])
         };
         let findings: usize = mine.iter().map(|r| findings(r)).sum();
-        let tail = if findings > 0 {
+        let tail = if findings == 1 {
+            ", 1 finding: agents status --long".to_string()
+        } else if findings > 0 {
             format!(", {findings} findings: agents status --long")
         } else {
             String::new()
