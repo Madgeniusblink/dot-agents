@@ -184,6 +184,27 @@ fn git(dir: &Path, args: &[&str]) {
     assert!(ok, "git {args:?}");
 }
 
+#[test]
+fn status_takes_no_lock_in_the_home() {
+    let t = fixture();
+    let h = t.path();
+    let home = h.join(".agents");
+    git(&home, &["init", "-q"]);
+    git(&home, &["add", "-A"]);
+    git(&home, &["commit", "-qm", "home"]);
+    let modified = || fs::metadata(home.join(".git")).unwrap().modified().unwrap();
+    let before = modified();
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    for args in [
+        &["status"][..],
+        &["status", "--long"],
+        &["status", "--json"],
+    ] {
+        agents(h, None, args);
+    }
+    assert_eq!(modified(), before, "status wrote into the home's .git");
+}
+
 /// Two clones of one remote under `work/`, and one checkout under `tasks/`.
 fn checkouts(h: &Path) {
     for dir in ["work/one", "work/two", "tasks/web-task-1"] {

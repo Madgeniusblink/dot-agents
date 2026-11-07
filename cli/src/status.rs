@@ -56,7 +56,7 @@ fn brief(home: &Home, cfg: &Config) {
             .git(&["rev-parse", "--short", "HEAD"])
             .unwrap_or_default();
         let dirty = home
-            .git(&["status", "--porcelain"])
+            .git(&["--no-optional-locks", "status", "--porcelain"])
             .map(|o| o.lines().count())
             .unwrap_or(0);
         line.push_str(&format!(", {branch} at {sha}, {dirty} uncommitted"));
@@ -201,7 +201,7 @@ fn report(home: &Home, cfg: &Config) {
             .git(&["rev-parse", "--short", "HEAD"])
             .unwrap_or_default();
         let dirty = home
-            .git(&["status", "--porcelain"])
+            .git(&["--no-optional-locks", "status", "--porcelain"])
             .map(|o| o.lines().count())
             .unwrap_or(0);
         println!("  {branch} at {sha}, {dirty} uncommitted");
@@ -316,7 +316,7 @@ fn data(home: &Home, cfg: &Config) -> Value {
             "branch": home.git(&["rev-parse", "--abbrev-ref", "HEAD"]).unwrap_or_default(),
             "sha": home.git(&["rev-parse", "--short", "HEAD"]).unwrap_or_default(),
             "uncommitted": home
-                .git(&["status", "--porcelain"])
+                .git(&["--no-optional-locks", "status", "--porcelain"])
                 .map(|o| o.lines().count())
                 .unwrap_or(0),
             "behind_upstream": behind,
