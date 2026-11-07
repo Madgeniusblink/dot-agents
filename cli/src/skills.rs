@@ -1,6 +1,7 @@
 //! Every skill each tool can load, where it comes from, and which ones are
 //! the same skill twice. Removal moves a skill aside, never deletes it.
 
+use crate::harness::codex_dir;
 use crate::home::{rel, tilde, user_home, Home};
 use crate::plan::{Action, Plan};
 use crate::reset::timestamp;
@@ -15,14 +16,33 @@ use walkdir::WalkDir;
 pub enum Source {
     Home,
     User,
+    Codex,
+    Synced,
     Plugin,
 }
 
+const SOURCES: [Source; 5] = [
+    Source::Home,
+    Source::User,
+    Source::Codex,
+    Source::Synced,
+    Source::Plugin,
+];
+
 impl Source {
+    /// A tool or a service owns these; the CLI lists them and leaves them.
+    fn managed(self) -> bool {
+        matches!(self, Source::Synced | Source::Plugin)
+    }
+
     fn label(self) -> &'static str {
         match self {
             Source::Home => "home",
             Source::User => "claude code, user skills",
+            Source::Codex => "codex, user skills",
+            Source::Synced => {
+                "claude code, skills synced from claude.ai (managed there; remove them there)"
+            }
             Source::Plugin => {
                 "claude code, plugin skills (managed by the plugin; disable it instead)"
             }
@@ -46,6 +66,16 @@ pub fn find(home: Option<&Home>) -> Vec<Skill> {
     }
     let claude = user_home().join(".claude");
     collect(&claude.join("skills"), Source::User, 2, &mut out);
+    // Codex reads $CODEX_HOME/skills/<name>/SKILL.md, the same shape.
+    collect(&codex_dir().join("skills"), Source::Codex, 2, &mut out);
+    // claude.ai syncs skills to skills/synced/<id>/<name>/SKILL.md, one level
+    // deeper than a user skill, so the user walk above does not reach them.
+    collect(
+        &claude.join("skills").join("synced"),
+        Source::Synced,
+        3,
+        &mut out,
+    );
     collect(&claude.join("plugins"), Source::Plugin, 8, &mut out);
     out.sort_by(|a, b| (a.source, &a.dir).cmp(&(b.source, &b.dir)));
     out
@@ -116,7 +146,7 @@ pub fn list(home: Option<&Home>) {
         })
         .unwrap_or_default();
 
-    for source in [Source::Home, Source::User, Source::Plugin] {
+    for source in SOURCES {
         let group: Vec<&Skill> = skills.iter().filter(|s| s.source == source).collect();
         if group.is_empty() && !(source == Source::User && !links.is_empty()) {
             continue;
@@ -226,10 +256,15 @@ fn aside(names: &[String], keep: bool, home: Option<&Home>) -> Plan {
         if named == keep {
             continue;
         }
-        if s.source == Source::Plugin {
+        if s.source.managed() {
             plan.say(format!(
-                "SKIP {}: a plugin owns it. Disable the plugin instead.",
-                tilde(&s.dir)
+                "SKIP {}: {}.",
+                tilde(&s.dir),
+                if s.source == Source::Plugin {
+                    "a plugin owns it. Disable the plugin instead"
+                } else {
+                    "claude.ai owns it. Remove it there"
+                }
             ));
             continue;
         }
