@@ -75,7 +75,7 @@ fn drop_legacy_imports(plan: &mut Plan, path: &Path) {
         plan.act(
             Action::DropLines {
                 path: path.to_path_buf(),
-                matches: is_legacy_import,
+                matches: Box::new(is_legacy_import),
             },
             format!("drop {n} import line(s) from {}", rel(path)),
         );

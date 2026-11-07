@@ -2,6 +2,10 @@
 
 Template semver tracks [upstream.json](context/upstream.json) `template_version`.
 
+## 0.16.0 — 2026-11-07
+
+- New `agents memory`. The tool's auto memory is machine-local and never synced, so a habit taught on one machine does not exist on the next, and once it is moved into the home the copy left behind is a near-duplicate, the kind of distractor that hurts most. The command lists every repository's notes by type, scores each against the home's rule lines and memory files (overlap of distinctive words, covered at 0.5, similar at 0.3), and flags the same note in more than one repository. `prune <name>...` and `prune --covered` move notes to `~/.agents-reset/<timestamp>/` and drop their lines from the index. First run on the machine that prompted it: 99 notes in 16 repositories, 9 covered by the home, 18 pruned.
+
 ## 0.15.1 — 2026-11-07
 
 - `agents scan` lists the tool's auto memory: one `MEMORY.md` per repository under `~/.claude/projects/<project>/memory/`, or wherever `autoMemoryDirectory` points. The first 200 lines of each load at the start of every session in that repository, so a scan that skipped them reported control it did not have.
