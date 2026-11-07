@@ -1,8 +1,8 @@
 //! Every skill each tool can load, where it comes from, and which ones are
 //! the same skill twice. Removal moves a skill aside, never deletes it.
 
-use crate::harness::codex_dir;
-use crate::home::{rel, tilde, user_home, Home};
+use crate::harness::{codex_dir, PROJECT_SKILL_DIRS};
+use crate::home::{expand_home, rel, tilde, user_home, Home};
 use crate::out;
 use crate::plan::{Action, Plan};
 use crate::reset::timestamp;
@@ -20,20 +20,31 @@ pub enum Source {
     Codex,
     Synced,
     Plugin,
+    Project,
 }
 
-const SOURCES: [Source; 5] = [
+const SOURCES: [Source; 6] = [
     Source::Home,
     Source::User,
     Source::Codex,
     Source::Synced,
     Source::Plugin,
+    Source::Project,
 ];
 
 impl Source {
     /// A tool or a service owns these; the CLI lists them and leaves them.
     fn managed(self) -> bool {
         matches!(self, Source::Synced | Source::Plugin)
+    }
+
+    /// Who may move it: the user, a tool or service, or the project.
+    fn scope(self) -> &'static str {
+        match self {
+            Source::Project => "project",
+            s if s.managed() => "managed",
+            _ => "yours",
+        }
     }
 
     fn label(self) -> &'static str {
@@ -43,6 +54,7 @@ impl Source {
             Source::Codex => "codex, user skills",
             Source::Synced => "claude code, skills synced from claude.ai",
             Source::Plugin => "claude code, plugin skills",
+            Source::Project => "project",
         }
     }
 }
@@ -69,6 +81,14 @@ impl Skill {
         self.front
             .as_ref()
             .and_then(|f| f.metadata.get("owner"))
+            .map(String::as_str)
+    }
+
+    /// `metadata.source`: where a copy says it came from.
+    pub fn origin(&self) -> Option<&str> {
+        self.front
+            .as_ref()
+            .and_then(|f| f.metadata.get("source"))
             .map(String::as_str)
     }
 }
@@ -153,8 +173,63 @@ pub fn find(home: Option<&Home>) -> Vec<Skill> {
         &mut out,
     );
     collect(&claude.join("plugins"), Source::Plugin, 8, &mut out);
+    // A checkout that is also the home, or holds a user directory, is
+    // listed once, under the scope that lets the user move it.
+    if let Some(root) = project_root() {
+        let known: Vec<PathBuf> = out
+            .iter()
+            .filter_map(|s| fs::canonicalize(&s.dir).ok())
+            .collect();
+        out.extend(
+            project_skills(&root)
+                .into_iter()
+                .filter(|s| fs::canonicalize(&s.dir).map_or(true, |d| !known.contains(&d))),
+        );
+    }
     out.sort_by(|a, b| (a.source, &a.dir).cmp(&(b.source, &b.dir)));
     out
+}
+
+/// The git checkout the command runs in, if any.
+pub fn project_root() -> Option<PathBuf> {
+    let cwd = std::env::current_dir().ok()?;
+    cwd.ancestors()
+        .find(|d| d.join(".git").exists())
+        .map(Path::to_path_buf)
+}
+
+/// The skills a checkout owns, two levels under each place a tool reads.
+/// A place whose real path leaves the checkout is not read.
+pub fn project_skills(root: &Path) -> Vec<Skill> {
+    let mut out = Vec::new();
+    let real = fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    let mut seen = Vec::new();
+    for place in PROJECT_SKILL_DIRS {
+        let Ok(dir) = fs::canonicalize(root.join(place)) else {
+            continue;
+        };
+        if !dir.starts_with(&real) || seen.contains(&dir) {
+            continue;
+        }
+        seen.push(dir);
+        collect(&root.join(place), Source::Project, 2, &mut out);
+    }
+    out
+}
+
+/// How many skills sit in each place a tool reads inside the checkout.
+pub fn project_counts(root: &Path) -> Vec<(&'static str, usize)> {
+    let skills = project_skills(root);
+    PROJECT_SKILL_DIRS
+        .iter()
+        .map(|&p| {
+            let n = skills
+                .iter()
+                .filter(|s| s.dir.strip_prefix(root).is_ok_and(|r| r.starts_with(p)))
+                .count();
+            (p, n)
+        })
+        .collect()
 }
 
 /// `<dir>/**/skills/<name>/SKILL.md`, not following links, so a link into
@@ -608,6 +683,38 @@ fn refs(dir: &Path, body: &str) -> Refs {
     r
 }
 
+/// A skill outside the project that is a copy of one inside it: its
+/// `metadata.source` names that skill, or its body is the same. An absolute
+/// source path that names no file is reported as missing. A URL or a
+/// repository-relative path needs its repository, so it is not checked.
+fn copy_note(s: &Skill, project: &[&Skill], root: Option<&Path>) -> Option<String> {
+    if s.source == Source::Project {
+        return None;
+    }
+    // Relative to the checkout, whose root heads the project section.
+    let rel = |p: &Skill| {
+        root.and_then(|r| p.dir.strip_prefix(r).ok())
+            .map(|r| r.to_string_lossy().replace('\\', "/"))
+            .unwrap_or_else(|| tilde(&p.dir))
+    };
+    if let Some(o) = s.origin() {
+        let o = o.trim_end_matches('/').trim_end_matches("/SKILL.md");
+        let named = project.iter().find(|p| {
+            let r = rel(p);
+            o == r || o.ends_with(&format!("/{r}")) || Path::new(o) == p.dir
+        });
+        if let Some(p) = named {
+            return Some(format!("copy of {} (declared)", rel(p)));
+        }
+    }
+    if let Some(p) = project.iter().find(|p| p.hash == s.hash) {
+        return Some(format!("copy of {} (identical)", rel(p)));
+    }
+    let o = s.origin()?;
+    let local = o.starts_with('/') || o.starts_with("~/") || o.starts_with("$HOME/");
+    (local && !expand_home(o).exists()).then(|| "source missing".to_string())
+}
+
 pub fn list(home: Option<&Home>, long: bool) {
     let width = out::width();
     let skills = find(home);
@@ -620,13 +727,23 @@ pub fn list(home: Option<&Home>, long: bool) {
         })
         .unwrap_or_default();
 
+    let root = project_root();
+    let project: Vec<&Skill> = skills
+        .iter()
+        .filter(|s| s.source == Source::Project)
+        .collect();
+
     println!("tools can load {} skills.", skills.len());
     for source in SOURCES {
         let group: Vec<&Skill> = skills.iter().filter(|s| s.source == source).collect();
         if group.is_empty() && !(source == Source::User && !links.is_empty()) {
             continue;
         }
-        out::section(source.label(), group.len(), width);
+        let title = match (source, &root) {
+            (Source::Project, Some(r)) => format!("project {}", tilde(r)),
+            _ => source.label().to_string(),
+        };
+        out::section(&title, group.len(), width);
         let mut items = Vec::new();
         if source == Source::User {
             for l in &links {
@@ -639,13 +756,18 @@ pub fn list(home: Option<&Home>, long: bool) {
         }
         for s in &group {
             let mark = if s.broken() { " BROKEN" } else { "" };
-            let text = if long {
+            let desc = if long {
                 details(s)
             } else {
                 s.description
                     .split_whitespace()
                     .collect::<Vec<_>>()
                     .join(" ")
+            };
+            let text = match copy_note(s, &project, root.as_deref()) {
+                Some(n) if long => format!("{n}\n{desc}"),
+                Some(n) => format!("{n}  {desc}"),
+                None => desc,
             };
             items.push(out::Row::new(
                 &s.name,
@@ -654,6 +776,13 @@ pub fn list(home: Option<&Home>, long: bool) {
             ));
         }
         out::print(&items, long, width);
+        if source == Source::Project {
+            out::say(
+                "The project owns these skills. The CLI lists them and never writes inside the checkout.",
+                2,
+                width,
+            );
+        }
         if source == Source::User && !links.is_empty() {
             out::say(
                 "A link points to another source. Its skills show under that source.",
@@ -706,7 +835,10 @@ pub fn list(home: Option<&Home>, long: bool) {
             .iter()
             .map(|group| {
                 let identical = group.iter().all(|s| s.hash == group[0].hash);
-                let places: Vec<String> = group.iter().map(|s| tilde(&s.dir)).collect();
+                let places: Vec<String> = group
+                    .iter()
+                    .map(|s| format!("{} {}", s.source.scope(), tilde(&s.dir)))
+                    .collect();
                 out::Row::new(
                     &group[0].name,
                     if identical {
@@ -792,6 +924,10 @@ fn aside(names: &[String], keep: bool, home: Option<&Home>) -> Plan {
             matched += 1;
         }
         if named == keep {
+            continue;
+        }
+        if s.source == Source::Project {
+            plan.say(format!("SKIP {}: the project owns it.", tilde(&s.dir)));
             continue;
         }
         if s.source.managed() {

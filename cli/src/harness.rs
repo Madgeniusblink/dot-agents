@@ -57,6 +57,14 @@ pub fn codex_dir() -> PathBuf {
 /// warns past it. It truncates project files only.
 pub const CODEX_PROJECT_DOC_MAX: u64 = 32768;
 
+/// Where tools read a project's own skills, relative to the checkout root.
+pub const PROJECT_SKILL_DIRS: [&str; 4] = [
+    ".claude/skills",
+    ".agents/skills",
+    ".codex/skills",
+    "skills",
+];
+
 /// Cursor keeps user rules in its application settings, not in a file.
 pub fn cursor_dir() -> PathBuf {
     user_home().join(".cursor")
