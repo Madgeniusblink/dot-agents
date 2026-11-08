@@ -2,9 +2,12 @@
 //! print. Each view reads the same object that `--json` prints, so the view
 //! and the report cannot disagree. Raw mode comes from `rustix` termios and
 //! the drawing is ANSI written here, so no crate is added (decision 0011).
-//! The view writes no file. The frame owns the terminal, the tabs, and the
-//! keys; each view below draws its own lines.
+//! The view writes no file: `c` copies through the terminal and `o` opens
+//! an editor, which writes only what the person saves. The frame owns the
+//! terminal, the tabs, and the keys; each view below draws its own lines.
 
+#[cfg(unix)]
+pub mod act;
 // The tabs reach these views in later items of #82. Until then only their
 // tests call them.
 #[allow(dead_code)]
@@ -31,8 +34,9 @@ pub use unix::ui;
 
 #[cfg(unix)]
 mod unix {
+    use super::act;
     use crate::config::Config;
-    use crate::home::Home;
+    use crate::home::{tilde, Home};
     use crate::out::{self, State};
     use crate::status;
     use anyhow::Result;
@@ -41,8 +45,8 @@ mod unix {
     use std::io::{self, Read, Write};
     use std::panic::{self, AssertUnwindSafe};
     use std::path::PathBuf;
-    use std::process::ExitCode;
-    use std::sync::{Mutex, PoisonError};
+    use std::process::{Command, ExitCode};
+    use std::sync::{Mutex, Once, PoisonError};
 
     /// The alternate screen, with the cursor hidden.
     const ENTER: &str = "\x1b[?1049h\x1b[?25l";
@@ -51,6 +55,8 @@ mod unix {
     /// Reverse video, and the end of every attribute.
     const INVERT: &str = "\x1b[7m";
     const RESET: &str = "\x1b[0m";
+    /// The end of an OSC 8 link.
+    const LINK_END: &str = "\x1b]8;;\x1b\\";
 
     /// Open the view, or print one line and exit 1 when there is no terminal.
     pub fn ui(home: Option<PathBuf>, cfg: &Config) -> Result<ExitCode> {
@@ -60,7 +66,7 @@ mod unix {
         }
         let home = Home::locate(home)?;
         let mut tty = Tty;
-        guarded(&mut tty, |_| run(&home, cfg))??;
+        guarded(&mut tty, |t| run(t, &home, cfg))??;
         Ok(ExitCode::SUCCESS)
     }
 
@@ -82,8 +88,19 @@ mod unix {
         }
     }
 
+    /// `cmd` on the main screen with line discipline on, then the view
+    /// again. The person's own editor needs the terminal as it was.
+    pub(super) fn open<T: Term>(term: &mut T, mut cmd: Command) -> io::Result<()> {
+        term.leave();
+        let status = cmd.status();
+        term.enter()?;
+        status.map(drop)
+    }
+
     /// The settings the terminal had before `enter`. `None` once restored.
     static SAVED: Mutex<Option<Termios>> = Mutex::new(None);
+    /// `enter` runs again after `o`; the panic hook goes in once.
+    static HOOK: Once = Once::new();
 
     /// The real terminal: raw mode on stdin, the alternate screen on stdout.
     struct Tty;
@@ -115,11 +132,13 @@ mod unix {
             termios::tcsetattr(&stdin, OptionalActions::Flush, &raw)?;
             // Restore before the panic message prints, so it lands on the
             // main screen with line discipline on.
-            let previous = panic::take_hook();
-            panic::set_hook(Box::new(move |info| {
-                Tty::restore();
-                previous(info);
-            }));
+            HOOK.call_once(|| {
+                let previous = panic::take_hook();
+                panic::set_hook(Box::new(move |info| {
+                    Tty::restore();
+                    previous(info);
+                }));
+            });
             let mut out = io::stdout().lock();
             out.write_all(ENTER.as_bytes())?;
             out.flush()
@@ -131,7 +150,7 @@ mod unix {
     }
 
     /// The loop: draw, wait for a key, apply it, until `q`.
-    fn run(home: &Home, cfg: &Config) -> Result<()> {
+    fn run<T: Term>(term: &mut T, home: &Home, cfg: &Config) -> Result<()> {
         let mut frame = Frame::default();
         let mut body = frame.view.lines(home, cfg);
         let mut stdin = io::stdin().lock();
@@ -143,6 +162,22 @@ mod unix {
             let mut buf = [0u8; 16];
             let n = stdin.read(&mut buf)?;
             let Some(key) = key(&buf[..n]) else { continue };
+            match key {
+                Key::Copy => {
+                    out.write_all(act::copy(&tilde(&frame.view.target(home))).as_bytes())?;
+                    out.flush()?;
+                    continue;
+                }
+                Key::Open => {
+                    let editor = std::env::var("EDITOR").ok();
+                    open(
+                        term,
+                        act::editor(editor.as_deref(), &frame.view.target(home)),
+                    )?;
+                    continue;
+                }
+                _ => {}
+            }
             let before = frame.view;
             if !frame.press(key, body.len(), height.saturating_sub(2)) {
                 return Ok(());
@@ -191,6 +226,8 @@ mod unix {
         Top,
         Bottom,
         Esc,
+        Copy,
+        Open,
         Other,
     }
 
@@ -210,6 +247,8 @@ mod unix {
             b"g" | b"\x1b[H" => Key::Top,
             b"G" | b"\x1b[F" => Key::Bottom,
             b"\x1b" => Key::Esc,
+            b"c" => Key::Copy,
+            b"o" => Key::Open,
             _ => Key::Other,
         })
     }
@@ -226,6 +265,13 @@ mod unix {
         pub(super) fn name(self) -> &'static str {
             match self {
                 View::Status => "Status",
+            }
+        }
+
+        /// The path `c` copies and `o` opens. Status reports on the home.
+        pub(super) fn target(self, home: &Home) -> PathBuf {
+            match self {
+                View::Status => home.dir.clone(),
             }
         }
 
@@ -281,7 +327,7 @@ mod unix {
                 Key::PageUp => self.top = self.top.saturating_sub(rows),
                 Key::Top => self.top = 0,
                 Key::Bottom => self.top = last,
-                Key::Other => {}
+                Key::Copy | Key::Open | Key::Other => {}
             }
             true
         }
@@ -371,7 +417,7 @@ mod unix {
         cut(&bar, width)
     }
 
-    const HELP: [&str; 14] = [
+    const HELP: [&str; 17] = [
         "Keys",
         "",
         "  ?            this help; again to close",
@@ -382,9 +428,12 @@ mod unix {
         "  space, b     one page down, up",
         "  g, G         top, bottom",
         "  esc          close this help",
+        "  c            copy the view's path; the terminal holds the copy",
+        "  o            open the view's path in $EDITOR",
         "",
         "Each view reads what its command prints with --json, so the view and",
-        "the report say the same thing. The view writes no file.",
+        "the report say the same thing. The view writes no file. Each path",
+        "is a link in a terminal that shows links.",
         "",
     ];
 
@@ -399,22 +448,30 @@ mod unix {
         }
         let mut text = String::new();
         let mut shown = 0;
-        let mut esc = false;
-        for c in s.chars() {
-            if esc {
-                text.push(c);
-                esc = c != 'm';
-            } else if c == '\x1b' {
-                text.push(c);
-                esc = true;
+        let mut link = false;
+        let mut rest = s;
+        while let Some(c) = rest.chars().next() {
+            if c == '\x1b' {
+                let (esc, after) = rest.split_at(out::escape_len(rest));
+                if let Some(body) = esc.strip_prefix("\x1b]8;") {
+                    // An empty URI ends a link; any other opens one.
+                    let body = body.trim_end_matches(['\x07', '\\']);
+                    link = !body.trim_end_matches('\x1b').ends_with(';');
+                }
+                text.push_str(esc);
+                rest = after;
             } else if shown + 1 < width {
                 text.push(c);
                 shown += 1;
+                rest = &rest[c.len_utf8()..];
             } else {
                 break;
             }
         }
         text.push('…');
+        if link {
+            text.push_str(LINK_END);
+        }
         text.push_str(RESET);
         text
     }
@@ -432,13 +489,14 @@ mod unix {
     pub(super) fn status_lines(doc: &Value) -> Vec<String> {
         let mut lines = Vec::new();
         let config = &doc["config"];
+        let path = act::link_shown(s(config, "path"));
         let file = if config["exists"].as_bool() == Some(true) {
-            s(config, "path").to_string()
+            path
         } else {
-            format!("{} (no file, so defaults)", s(config, "path"))
+            format!("{path} (no file, so defaults)")
         };
         lines.push(format!("machine: {}, config: {file}", s(doc, "machine")));
-        let mut home = format!("home: {}", s(doc, "home"));
+        let mut home = format!("home: {}", act::link_shown(s(doc, "home")));
         match &doc["git"] {
             Value::Null => home.push_str(", NOT a git checkout"),
             git => {
@@ -490,7 +548,7 @@ mod unix {
                 Some(t) => format!(", a link to {t}"),
                 None => String::new(),
             };
-            lines.push(format!("  {}{link}", s(h, "path")));
+            lines.push(format!("  {}{link}", act::link_shown(s(h, "path"))));
             if h["exists"].as_bool() == Some(true) {
                 let imports = &h["imports"];
                 let broken = imports["broken"].as_array().map(Vec::len).unwrap_or(0);
@@ -536,7 +594,7 @@ mod unix {
         }
 
         if let Some(hooks) = doc["hooks"].as_object() {
-            let settings = hooks["settings"].as_str().unwrap_or_default();
+            let settings = act::link_shown(hooks["settings"].as_str().unwrap_or_default());
             if hooks["valid_json"].as_bool() == Some(true) {
                 let missing = hooks["missing_paths"]
                     .as_array()
@@ -575,7 +633,11 @@ mod unix {
             } else {
                 out::state(State::Ok)
             };
-            lines.push(format!("  {state} {} -> {}", s(l, "path"), s(l, "target")));
+            lines.push(format!(
+                "  {state} {} -> {}",
+                act::link_shown(s(l, "path")),
+                act::link_shown(s(l, "target"))
+            ));
         }
         lines
     }
@@ -605,14 +667,13 @@ mod tests {
     /// the test runs on, and the facts are in the words.
     fn words(s: &str) -> String {
         let mut text = String::new();
-        let mut esc = false;
-        for c in s.chars() {
-            if esc {
-                esc = c != 'm';
-            } else if c == '\x1b' {
-                esc = true;
+        let mut rest = s;
+        while let Some(c) = rest.chars().next() {
+            if c == '\x1b' {
+                rest = &rest[crate::out::escape_len(rest)..];
             } else {
                 text.push(c);
+                rest = &rest[c.len_utf8()..];
             }
         }
         ["✓ ", "✗ ", "! ", "= ", "≠ "]
@@ -759,6 +820,86 @@ mod tests {
         assert_eq!(cut("abcdef", 4), "abc…\x1b[0m");
         assert_eq!(cut("\x1b[32mabcdef\x1b[0m", 4), "\x1b[32mabc…\x1b[0m");
         assert_eq!(cut("abc", 0), "");
+    }
+
+    #[test]
+    fn t6_c_and_o_are_keys_that_leave_the_frame_as_it_was() {
+        assert_eq!(key(b"c"), Some(Key::Copy));
+        assert_eq!(key(b"o"), Some(Key::Open));
+        let mut f = Frame {
+            top: 2,
+            ..Frame::default()
+        };
+        assert!(f.press(Key::Copy, 10, 5) && f.press(Key::Open, 10, 5));
+        assert_eq!((f.view, f.help, f.top), (View::Status, false, 2));
+        let home = crate::home::Home {
+            dir: std::path::PathBuf::from("/h/.agents"),
+        };
+        assert_eq!(View::Status.target(&home), home.dir);
+    }
+
+    #[test]
+    fn t6_o_runs_the_editor_outside_raw_mode_then_the_view_comes_back() {
+        use std::os::unix::fs::PermissionsExt;
+        let t = tempfile::tempdir().unwrap();
+        let script = t.path().join("ed");
+        std::fs::write(&script, "#!/bin/sh\nprintf %s \"$1\" > \"$SEEN\"\n").unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let seen = t.path().join("seen");
+        let target = t.path().join("a file.md");
+        let mut cmd = super::act::editor(Some(script.to_str().unwrap()), &target);
+        cmd.env("SEEN", &seen);
+        let mut fake = Fake::default();
+        fake.enter().unwrap();
+        open(&mut fake, cmd).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&seen).unwrap(),
+            target.to_str().unwrap()
+        );
+        assert!(fake.raw, "the view is back in raw mode");
+        assert_eq!((fake.entered, fake.left), (2, 1));
+        let missing = super::act::editor(Some("/no/such/editor"), &target);
+        open(&mut fake, missing).unwrap();
+        assert!(fake.raw, "a failed editor still gives the view back");
+    }
+
+    #[test]
+    fn t6_cut_ends_a_link_it_cuts_and_a_link_takes_no_width() {
+        let link = super::act::link(std::path::Path::new("/a/long-name.md"), "long-name.md");
+        assert_eq!(cut(&link, 12), link);
+        let cut5 = cut(&link, 5);
+        assert_eq!(
+            cut5,
+            "\x1b]8;;file:///a/long-name.md\x1b\\long…\x1b]8;;\x1b\\\x1b[0m"
+        );
+        assert_eq!(crate::out::visible(&cut5), 5);
+        let after = format!("{link} and more text");
+        assert_eq!(cut(&after, 15), format!("{link} a…\x1b[0m"));
+    }
+
+    #[test]
+    fn t6_status_view_paths_are_links() {
+        let doc = json!({
+            "home": "~/.agents", "machine": "box",
+            "config": {"path": "~/.config/agents/config.toml", "exists": true},
+            "always_on": {},
+            "harnesses": [{"label": "codex", "path": "~/.codex/AGENTS.md", "exists": false}],
+            "hooks": {"settings": "~/.claude/settings.json", "valid_json": true, "missing_paths": []},
+            "links": [{"path": "~/.claude/skills", "target": "~/.agents/skills", "broken": false}]
+        });
+        let text = status_lines(&doc).join("\n");
+        for p in [
+            "~/.agents",
+            "~/.config/agents/config.toml",
+            "~/.codex/AGENTS.md",
+            "~/.claude/settings.json",
+            "~/.claude/skills",
+            "~/.agents/skills",
+        ] {
+            let l = super::act::link_shown(p);
+            assert!(l.starts_with("\x1b]8;;file:///"), "{l:?}");
+            assert!(text.contains(&l), "no link for {p} in:\n{text:?}");
+        }
     }
 
     #[test]
