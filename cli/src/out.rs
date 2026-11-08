@@ -98,17 +98,34 @@ fn render(s: State, styled: bool) -> String {
 /// The characters a terminal shows: every one outside an escape sequence.
 pub fn visible(s: &str) -> usize {
     let mut n = 0;
-    let mut esc = false;
-    for c in s.chars() {
-        if esc {
-            esc = c != 'm';
-        } else if c == '\x1b' {
-            esc = true;
+    let mut rest = s;
+    while let Some(c) = rest.chars().next() {
+        if c == '\x1b' {
+            rest = &rest[escape_len(rest)..];
         } else {
             n += 1;
+            rest = &rest[c.len_utf8()..];
         }
     }
     n
+}
+
+/// The bytes of the escape sequence that starts `s`: an OSC string, such as
+/// a link, to its BEL or `ESC \`, else everything to the first `m`.
+pub fn escape_len(s: &str) -> usize {
+    let b = s.as_bytes();
+    if b.get(1) != Some(&b']') {
+        return s[1..].find('m').map_or(s.len(), |i| i + 2);
+    }
+    let mut i = 2;
+    while i < b.len() {
+        match b[i] {
+            0x07 => return i + 1,
+            0x1b if b.get(i + 1) == Some(&b'\\') => return i + 2,
+            _ => i += 1,
+        }
+    }
+    b.len()
 }
 
 /// `s` in at most `max` characters. A cut ends in one `…`.
@@ -377,6 +394,16 @@ mod tests {
         std::env::set_var("NO_COLOR", "1");
         assert!(!styled());
         assert_eq!(state(State::Stale), "STALE");
+    }
+
+    #[test]
+    fn t6_a_link_takes_no_width() {
+        let link = "\x1b]8;;file:///home/m.md\x1b\\m.md\x1b]8;;\x1b\\";
+        assert_eq!(visible(link), 4);
+        assert_eq!(visible("\x1b]52;c;bQ==\x07ok"), 2);
+        assert_eq!(escape_len("\x1b]8;;file:///m\x1b\\m"), 16);
+        assert_eq!(escape_len("\x1b[31mx"), 5);
+        assert_eq!(escape_len("\x1b]8;;open"), 9);
     }
 
     #[test]
