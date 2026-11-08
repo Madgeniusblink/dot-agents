@@ -173,9 +173,17 @@ Source: the user guide shipped with the tool, `12-project-rules.md` and
 ## Cursor
 
 Cursor keeps user-level rules in its application settings rather than a file,
-so nothing here can read or write them. Paste the pointer line into
-Settings by hand, and accept that it is the weak transport. Project rules are
-per repository, in `.cursor/rules/*.mdc`.
+so nothing here can read or write them. Its user-level hooks file,
+`~/.cursor/hooks.json`, is read on every session, and a `sessionStart` hook
+there may add context to the session. `wire` adds one entry that runs
+`scripts/cursor-context.sh`; the script prints principles.md and `rules/*.md`
+as they are at that moment, as the hook's `additional_context`. Nothing is
+copied, so nothing goes stale, and `unwire` takes the entry out again. Other
+hooks in the file stay as they are. `status` reports `cursor: current` while
+the entry is there and the script exists. Project rules are per repository,
+in `.cursor/rules/*.mdc`.
+
+Source: <https://cursor.com/docs/agent/hooks>.
 
 ## A tool with no import syntax
 

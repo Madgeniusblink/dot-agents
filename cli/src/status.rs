@@ -3,7 +3,8 @@
 
 use crate::config::{self, Config};
 use crate::harness::{
-    codex_dir, cursor_dir, grok_dir, grok_dropin, Claude, CODEX_PROJECT_DOC_MAX, CURSOR_LINE,
+    codex_dir, cursor_dir, cursor_hook_command, cursor_hooks, grok_dir, grok_dropin, Claude,
+    CODEX_PROJECT_DOC_MAX,
 };
 use crate::home::{expand_home, tilde, Home};
 use crate::wire::{dropin_content, generated_content, is_ours};
@@ -127,12 +128,8 @@ fn brief(home: &Home, cfg: &Config) {
         };
         out::say(&format!("{label}: {state}{tail}"), 0, width);
     }
-    if cursor_dir().is_dir() && cfg.tool("cursor") {
-        out::say(
-            "cursor: paste the pointer line by hand, see agents status --long",
-            0,
-            width,
-        );
+    if let Some(c) = cursor(home, cfg) {
+        out::say(&format!("cursor: {}", c.state()), 0, width);
     }
 
     let links = links(&claude);
@@ -293,21 +290,34 @@ fn report(home: &Home, cfg: &Config) {
     );
 
     let reports = harness_files(home, cfg);
-    let cursor = cursor_dir().is_dir() && cfg.tool("cursor");
+    let cursor = cursor(home, cfg);
     out::section(
         "what each harness loads",
-        reports.len() + usize::from(cursor),
+        reports.len() + usize::from(cursor.is_some()),
         width,
     );
     let claude = Claude::new();
     for r in &reports {
         print_report(r, width);
     }
-    if cursor {
+    if let Some(c) = cursor {
         println!();
-        println!("cursor: user rules live in the app settings, not in a file.");
-        println!("  Nothing here can read or wire them. Paste the pointer line by hand:");
-        println!("    {CURSOR_LINE}");
+        out::say(
+            &format!("cursor, the sessionStart hook: {}", c.state()),
+            0,
+            width,
+        );
+        out::say(
+            &format!(
+                "{} runs `{}` when a session starts. It sends principles.md and \
+                 rules/*.md as they are then, so nothing is copied and nothing goes stale. \
+                 Cursor keeps user rules in its app settings, which nothing here reads.",
+                tilde(&c.hooks),
+                c.command
+            ),
+            2,
+            width,
+        );
     }
 
     dead_hooks(&claude.settings(), width);
@@ -427,9 +437,50 @@ pub fn data(home: &Home, cfg: &Config) -> Value {
         "always_on": {"files": always_on, "bytes": total, "cap": cap, "cap_source": source},
         "on_demand": on_demand,
         "harnesses": harnesses,
-        "manual": (cursor_dir().is_dir() && cfg.tool("cursor")).then(|| json!({"label": "cursor", "line": CURSOR_LINE})),
+        "cursor": cursor(home, cfg).map(|c| json!({"hooks": tilde(&c.hooks), "command": c.command, "wired": c.wired})),
         "hooks": hooks,
         "links": links,
+    })
+}
+
+/// Cursor's user-level hooks file and whether our `sessionStart` entry is
+/// in it. `None` when Cursor is not installed or `[tools] present` leaves it out.
+struct Cursor {
+    hooks: PathBuf,
+    command: String,
+    wired: bool,
+}
+
+impl Cursor {
+    fn state(&self) -> &'static str {
+        if self.wired {
+            "current"
+        } else {
+            "not wired. Run: agents wire --apply"
+        }
+    }
+}
+
+fn cursor(home: &Home, cfg: &Config) -> Option<Cursor> {
+    if !cursor_dir().is_dir() || !cfg.tool("cursor") {
+        return None;
+    }
+    let hooks = cursor_hooks();
+    let command = cursor_hook_command(&home.dir);
+    let wired = fs::read_to_string(&hooks)
+        .ok()
+        .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+        .and_then(|d| d["hooks"]["sessionStart"].as_array().cloned())
+        .is_some_and(|start| {
+            start
+                .iter()
+                .any(|e| e["command"].as_str() == Some(&command))
+        })
+        && home.dir.join("scripts").join("cursor-context.sh").is_file();
+    Some(Cursor {
+        hooks,
+        command,
+        wired,
     })
 }
 

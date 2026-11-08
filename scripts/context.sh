@@ -94,13 +94,16 @@ echo "what each harness loads:"
 report_file "$HOME/.claude/rules/00-agents-home.md" "claude code, the home's drop-in" ""
 report_file "$HOME/.claude/CLAUDE.md" "claude code, the harness's own file" ""
 report_file "${CODEX_HOME:-$HOME/.codex}/AGENTS.md" "codex" 32768
-# Cursor keeps user-level rules in its application settings, not in a file, so
-# nothing here can read or wire them. Project rules are per repository.
+# Cursor keeps user-level rules in its application settings, not in a file.
+# Its sessionStart hook is the live transport: wire adds an entry to
+# ~/.cursor/hooks.json that runs scripts/cursor-context.sh.
 if [ -d "$HOME/.cursor" ]; then
   echo
-  echo "cursor: user rules live in the app settings, not a file."
-  echo "  Nothing here can read or wire them. Paste the pointer line by hand:"
-  echo "    Read ~/.agents/AGENTS.md and every file in ~/.agents/rules/ before starting work."
+  if [ -f "$HOME/.cursor/hooks.json" ] && grep -q 'scripts/cursor-context.sh' "$HOME/.cursor/hooks.json"; then
+    echo "cursor: ~/.cursor/hooks.json runs scripts/cursor-context.sh when a session starts"
+  else
+    echo "cursor: not wired. Run: sh $HOME_DIR/scripts/wire.sh --apply"
+  fi
 fi
 
 # A hook naming a path that is gone blocks the tool it guards, and the error

@@ -37,6 +37,19 @@ always_on() {
 # generator put there; nothing here writes to it.
 DROPIN="$HOME/.claude/rules/00-agents-home.md"
 
+# Cursor keeps user-level rules in its application settings, not in a file,
+# but its user-level hooks file is read on every session. A sessionStart hook
+# there runs scripts/cursor-context.sh, which sends the always-on set as it
+# is now. Nothing is copied, so nothing goes stale.
+# Source: https://cursor.com/docs/agent/hooks
+CURSOR_HOOKS="$HOME/.cursor/hooks.json"
+CURSOR_CMD="sh $(tilde "$HOME_DIR")/scripts/cursor-context.sh"
+
+# The whole file when the home creates it. The CLI writes the same bytes.
+emit_cursor_hooks() {
+  printf '{\n  "hooks": {\n    "sessionStart": [\n      {\n        "command": "%s"\n      }\n    ]\n  },\n  "version": 1\n}\n' "$CURSOR_CMD"
+}
+
 emit_dropin() {
   echo "<!-- $(tilde "$HOME_DIR") owns this file. wire writes it and unwire deletes it. Add a rule as a file in $(tilde "$HOME_DIR")/rules/, then run wire again. -->"
   always_on | while read -r f; do echo "@$(tilde "$f")"; done
@@ -111,6 +124,15 @@ if [ "$remove" -eq 1 ]; then
     fi
   done
   drop_legacy_imports "$HOME/.claude/CLAUDE.md"
+  if [ -f "$CURSOR_HOOKS" ] && grep -q 'scripts/cursor-context.sh' "$CURSOR_HOOKS"; then
+    if [ "$(cat "$CURSOR_HOOKS")" = "$(emit_cursor_hooks)" ]; then
+      do_it "rm '$CURSOR_HOOKS'" "delete ${CURSOR_HOOKS#$HOME/}"
+    else
+      say "SKIP ${CURSOR_HOOKS#$HOME/}: it holds other hooks too, and this script"
+      say "does not edit JSON. Run: agents unwire --apply, or remove the"
+      say "sessionStart entry that names scripts/cursor-context.sh by hand."
+    fi
+  fi
   for l in "$HOME/.claude/rules/agents" "$HOME/.claude/skills/agents" \
            "${CODEX_HOME:-$HOME/.codex}/AGENTS.md"; do
     if [ -L "$l" ]; then
@@ -152,12 +174,17 @@ if [ -d "$GROK" ]; then
   write_generated "$GROK/rules/00-agents-home.md"
 fi
 
-# Cursor keeps user-level rules in its application settings, not in a file.
 if [ -d "$HOME/.cursor" ]; then
   found=1; echo "cursor:"
-  say "user rules live in the app settings, not a file, so nothing here can"
-  say "wire them. Paste this into Settings -> Rules by hand:"
-  say "  Read ~/.agents/AGENTS.md and every file in ~/.agents/rules/ before starting work."
+  if [ ! -f "$CURSOR_HOOKS" ]; then
+    do_it "emit_cursor_hooks > '$CURSOR_HOOKS'" "write ${CURSOR_HOOKS#$HOME/} (sessionStart hook)"
+  elif grep -q 'scripts/cursor-context.sh' "$CURSOR_HOOKS"; then
+    say "present: ${CURSOR_HOOKS#$HOME/}"
+  else
+    say "SKIP ${CURSOR_HOOKS#$HOME/}: it holds other hooks, and this script does"
+    say "not edit JSON. Run: agents wire --apply, or add this to hooks.sessionStart:"
+    say "  {\"command\": \"$CURSOR_CMD\"}"
+  fi
 fi
 
 [ "$found" -eq 1 ] || echo "  no known tool directory in \$HOME. see docs/setup.md."

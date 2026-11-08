@@ -30,7 +30,7 @@ The envelope comes first. The command's own keys follow it.
 | `always_on` | `files`, each with `name` and `bytes`; `bytes`, the total; the `cap` it must fit; and `cap_source`, as in `check` |
 | `on_demand` | One object per directory: `dir` and `files`, a count |
 | `harnesses` | One object per harness file, below |
-| `manual` | `null`, or `label` and `line`, the pointer line to paste into a tool that keeps rules in app settings |
+| `cursor` | `null` when Cursor is not installed or `[tools] present` leaves it out; else `hooks`, its user-level hooks file; `command`, the `sessionStart` entry `wire` adds there; and `wired`, `true` when the entry is present and the script it names exists |
 | `hooks` | `null` when the settings file is missing; else `settings`, `valid_json`, and `missing_paths` |
 | `links` | One object per link into the home: `path`, `target`, and `broken` |
 

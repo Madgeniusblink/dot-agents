@@ -1104,12 +1104,18 @@ mod unix {
             }
             lines.push(String::new());
         }
-        if let Some(m) = doc["manual"].as_object() {
+        if let Some(c) = doc["cursor"].as_object() {
+            let state = if c["wired"].as_bool().unwrap_or(false) {
+                "current"
+            } else {
+                "not wired. Run: agents wire --apply"
+            };
+            lines.push(format!("cursor, the sessionStart hook: {state}"));
             lines.push(format!(
-                "{}: paste the pointer line by hand:",
-                m["label"].as_str().unwrap_or_default()
+                "  {} runs {}",
+                c["hooks"].as_str().unwrap_or_default(),
+                c["command"].as_str().unwrap_or_default()
             ));
-            lines.push(format!("  {}", m["line"].as_str().unwrap_or_default()));
             lines.push(String::new());
         }
 
@@ -1591,7 +1597,7 @@ mod tests {
                  "link": null, "lines": 9, "bytes": 90, "imports": {"home": 0, "elsewhere": 0, "broken": []},
                  "over_cap": {"bytes": 90, "cap": 50}, "stale": false, "ours": false, "own_rule_lines": null, "generator_lines": []}
             ],
-            "manual": {"label": "cursor", "line": "@~/.agents/AGENTS.md"},
+            "cursor": {"hooks": "~/.cursor/hooks.json", "command": "sh ~/.agents/scripts/cursor-context.sh", "wired": false},
             "hooks": {"settings": "~/.claude/settings.json", "valid_json": true, "missing_paths": ["~/bin/gone"]},
             "links": [{"path": "~/.claude/skills", "target": "~/.agents/skills", "broken": true}]
         });
@@ -1610,7 +1616,8 @@ mod tests {
             "codex, the home's generated file: not wired. Run: agents wire --apply",
             "grok, the home's generated file: the file there is not the home's",
             "  90 bytes passes the cap of 50",
-            "cursor: paste the pointer line by hand:",
+            "cursor, the sessionStart hook: not wired. Run: agents wire --apply",
+            "  ~/.cursor/hooks.json runs sh ~/.agents/scripts/cursor-context.sh",
             "hooks: ~/.claude/settings.json, 1 name a missing path",
             "  BROKEN ~/bin/gone",
             "links: 1, 1 broken",
