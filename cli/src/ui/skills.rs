@@ -11,7 +11,7 @@ use crate::out;
 use crate::plan::Plan;
 use crate::skills::{self, copy_note, Skill, Source, SOURCES};
 use std::collections::BTreeSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// The fewest lines the detail pane keeps when the terminal is short.
 const DETAIL_MIN: usize = 5;
@@ -76,6 +76,28 @@ impl<'a> View<'a> {
                 self.marked.insert(s.name.clone());
             }
         }
+    }
+
+    /// The selected skill's directory and the marked names, so a refresh
+    /// keeps what the person chose.
+    pub fn state(&self) -> (Option<PathBuf>, BTreeSet<String>) {
+        (self.selected().map(|s| s.dir.clone()), self.marked.clone())
+    }
+
+    /// `state` from the view before a refresh. A mark on a name that is
+    /// gone is dropped; a selected skill that is gone leaves the first row.
+    pub fn restore(&mut self, (dir, marked): (Option<PathBuf>, BTreeSet<String>)) {
+        if let Some(i) = self
+            .rows
+            .iter()
+            .position(|&i| Some(&self.skills[i].dir) == dir.as_ref())
+        {
+            self.selected = i;
+        }
+        self.marked = marked
+            .into_iter()
+            .filter(|n| self.skills.iter().any(|s| &s.name == n))
+            .collect();
     }
 
     /// The names `r` and `K` act on: the marked ones, else the selected one.
