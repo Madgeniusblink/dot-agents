@@ -2,7 +2,19 @@
 //! print. Each view reads the same object that `--json` prints, so the view
 //! and the report cannot disagree. Raw mode comes from `rustix` termios and
 //! the drawing is ANSI written here, so no crate is added (decision 0011).
-//! The view writes no file.
+//! The view writes no file. The frame owns the terminal, the tabs, and the
+//! keys; each view below draws its own lines.
+
+// The tabs reach these views in later items of #82. Until then only their
+// tests call them.
+#[allow(dead_code)]
+pub mod files;
+#[allow(dead_code)]
+pub mod scan;
+#[allow(dead_code)]
+pub mod skills;
+#[allow(dead_code)]
+pub mod tree;
 
 /// On Windows the view does not compile: `rustix` termios is Unix only.
 #[cfg(not(unix))]
