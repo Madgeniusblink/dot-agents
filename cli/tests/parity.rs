@@ -49,14 +49,15 @@ fn snapshot(root: &Path) -> BTreeMap<PathBuf, Node> {
     out
 }
 
-/// A tool directory for each of Claude Code and Codex, and a CLAUDE.md that
-/// holds the user's own content, an unrelated import, and one legacy line
-/// an earlier wire.sh appended.
+/// A tool directory for each of Claude Code, Codex, Grok and Cursor, and a
+/// CLAUDE.md that holds the user's own content, an unrelated import, and one
+/// legacy line an earlier wire.sh appended.
 fn fixture() -> tempfile::TempDir {
     let t = tempfile::tempdir().unwrap();
     fs::create_dir_all(t.path().join(".claude")).unwrap();
     fs::create_dir_all(t.path().join(".codex")).unwrap();
     fs::create_dir_all(t.path().join(".grok")).unwrap();
+    fs::create_dir_all(t.path().join(".cursor")).unwrap();
     fs::write(
         t.path().join(".claude").join("CLAUDE.md"),
         "# my own content\n@~/other.md\n@/elsewhere/.agents/principles.md\n",
@@ -131,8 +132,17 @@ fn wire_and_unwire_match_the_scripts() {
         "codex and grok get the same generated file"
     );
 
+    let hooks = fs::read_to_string(b.path().join(".cursor").join("hooks.json")).unwrap();
+    let doc: serde_json::Value = serde_json::from_str(&hooks).unwrap();
+    assert_eq!(
+        doc["hooks"]["sessionStart"][0]["command"].as_str().unwrap(),
+        format!("sh {}/scripts/cursor-context.sh", repo_root().display()),
+        "cursor's sessionStart hook runs the home's script"
+    );
+
     let again = cli(b.path(), &["wire", "--apply"]);
     assert!(again.contains("present: .claude/rules/00-agents-home.md"));
+    assert!(again.contains("present: .cursor/hooks.json"));
     assert_eq!(snapshot(a.path()), snapshot(b.path()), "after second wire");
 
     script(a.path(), &["--remove", "--apply"]);
@@ -142,6 +152,90 @@ fn wire_and_unwire_match_the_scripts() {
         fs::read_to_string(b.path().join(".claude").join("CLAUDE.md")).unwrap(),
         "# my own content\n@~/other.md\n",
         "the user's own lines survive the round trip"
+    );
+}
+
+/// The user's own Cursor hooks are not ours to touch: `wire` adds one
+/// `sessionStart` entry beside them and `unwire` takes only that one out.
+/// An entry from a home at another path is replaced, not joined.
+#[test]
+fn cursor_hooks_of_the_users_own_survive_wire_and_unwire() {
+    let t = fixture();
+    let path = t.path().join(".cursor").join("hooks.json");
+    let before = r#"{"version": 1, "hooks": {"beforeShellExecution": [{"command": "./guard.sh"}], "sessionStart": [{"command": "sh /old/home/scripts/cursor-context.sh"}, {"command": "./banner.sh"}]}, "extra": true}"#;
+    fs::write(&path, before).unwrap();
+
+    let out = cli(t.path(), &["wire", "--apply"]);
+    assert!(
+        out.contains("write .cursor/hooks.json (sessionStart hook)"),
+        "{out}"
+    );
+    let doc: serde_json::Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    let start = doc["hooks"]["sessionStart"].as_array().unwrap();
+    let commands: Vec<&str> = start
+        .iter()
+        .map(|e| e["command"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        commands,
+        vec![
+            "./banner.sh",
+            &format!("sh {}/scripts/cursor-context.sh", repo_root().display())
+        ],
+        "the stale entry goes, the user's stays, ours is last"
+    );
+    assert_eq!(
+        doc["hooks"]["beforeShellExecution"][0]["command"],
+        "./guard.sh"
+    );
+    assert_eq!(doc["extra"], true);
+
+    cli(t.path(), &["unwire", "--apply"]);
+    let doc: serde_json::Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    assert_eq!(doc["hooks"]["sessionStart"].as_array().unwrap().len(), 1);
+    assert_eq!(doc["hooks"]["sessionStart"][0]["command"], "./banner.sh");
+    assert_eq!(
+        doc["hooks"]["beforeShellExecution"][0]["command"],
+        "./guard.sh"
+    );
+    assert_eq!(doc["extra"], true);
+}
+
+/// A hooks file that is not JSON is not ours to repair.
+#[test]
+fn an_unreadable_cursor_hooks_file_is_skipped() {
+    let t = fixture();
+    let path = t.path().join(".cursor").join("hooks.json");
+    fs::write(&path, "{ not json").unwrap();
+    let out = cli(t.path(), &["wire", "--apply"]);
+    assert!(
+        out.contains("SKIP .cursor/hooks.json: not valid JSON"),
+        "{out}"
+    );
+    assert_eq!(fs::read_to_string(&path).unwrap(), "{ not json");
+}
+
+/// What the hook prints is one JSON object whose `additional_context` holds
+/// the always-on set, as Cursor's sessionStart hook reads it.
+#[test]
+#[cfg(unix)]
+fn cursor_context_script_prints_the_always_on_set_as_json() {
+    let out = Command::new("sh")
+        .arg(repo_root().join("scripts").join("cursor-context.sh"))
+        .output()
+        .expect("sh");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).expect("one JSON object");
+    let text = doc["additional_context"].as_str().unwrap();
+    assert!(text.starts_with("<!-- "), "a header names the owner");
+    assert!(text.contains("# Principles"), "principles.md is in it");
+    assert!(
+        text.contains("rules/") && text.contains("\n<!-- "),
+        "each rules file follows under its own path comment"
     );
 }
 

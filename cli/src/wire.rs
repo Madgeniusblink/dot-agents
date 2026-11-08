@@ -9,9 +9,13 @@
 //! without stranding the half that pointed at it.
 
 use crate::config::Config;
-use crate::harness::{codex_dir, cursor_dir, grok_dir, grok_dropin, Claude, CURSOR_LINE};
+use crate::harness::{
+    codex_dir, cursor_dir, cursor_hook_command, cursor_hooks, grok_dir, grok_dropin, Claude,
+    CURSOR_HOOK_SCRIPT,
+};
 use crate::home::{rel, tilde, Home};
 use crate::plan::{Action, Plan};
+use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -160,6 +164,125 @@ fn drop_legacy_imports(plan: &mut Plan, path: &Path) {
     }
 }
 
+/// `~/.cursor/hooks.json` as an object, or why it cannot be edited.
+fn cursor_hooks_doc() -> Result<Value, String> {
+    let path = cursor_hooks();
+    if !path.exists() {
+        return Ok(json!({"hooks": {}, "version": 1}));
+    }
+    let text = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let doc: Value = serde_json::from_str(&text).map_err(|_| "not valid JSON".to_string())?;
+    if !doc.is_object() {
+        return Err("not a JSON object".to_string());
+    }
+    Ok(doc)
+}
+
+fn is_our_hook(entry: &Value, command: &str) -> bool {
+    entry["command"].as_str() == Some(command)
+}
+
+/// One `sessionStart` entry of ours in Cursor's user-level hooks file. Other
+/// hooks in the file stay as they are. An entry from a home at another path
+/// is replaced, not joined. `scripts/wire.sh` writes the same bytes when it
+/// creates the file.
+fn write_cursor_hook(plan: &mut Plan, home: &Home) {
+    let path = cursor_hooks();
+    let command = cursor_hook_command(&home.dir);
+    let mut doc = match cursor_hooks_doc() {
+        Ok(doc) => doc,
+        Err(why) => {
+            plan.say(format!("SKIP {}: {why}", rel(&path)));
+            return;
+        }
+    };
+    let obj = doc.as_object_mut().unwrap();
+    obj.entry("version").or_insert(json!(1));
+    let hooks = obj.entry("hooks").or_insert(json!({}));
+    if !hooks.is_object() {
+        plan.say(format!("SKIP {}: \"hooks\" is not an object", rel(&path)));
+        return;
+    }
+    let start = hooks["sessionStart"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    if start.iter().any(|e| is_our_hook(e, &command)) {
+        plan.say(format!("present: {}", rel(&path)));
+        return;
+    }
+    let mut kept: Vec<Value> = start
+        .into_iter()
+        .filter(|e| {
+            !e["command"]
+                .as_str()
+                .is_some_and(|c| c.ends_with(CURSOR_HOOK_SCRIPT))
+        })
+        .collect();
+    kept.push(json!({"command": command}));
+    hooks["sessionStart"] = Value::Array(kept);
+    let content = serde_json::to_string_pretty(&doc).unwrap() + "\n";
+    plan.act(
+        Action::Write {
+            path: path.clone(),
+            content,
+        },
+        format!("write {} (sessionStart hook)", rel(&path)),
+    );
+}
+
+/// Take our entry out again. When nothing else is left in the file, delete
+/// it; a file with other hooks is rewritten without ours.
+fn remove_cursor_hook(plan: &mut Plan, home: &Home) -> bool {
+    let path = cursor_hooks();
+    if !path.is_file() {
+        return false;
+    }
+    let command = cursor_hook_command(&home.dir);
+    let mut doc = match cursor_hooks_doc() {
+        Ok(doc) => doc,
+        Err(_) => return false,
+    };
+    let Some(start) = doc["hooks"]["sessionStart"].as_array().cloned() else {
+        return false;
+    };
+    let kept: Vec<Value> = start
+        .iter()
+        .filter(|e| !is_our_hook(e, &command))
+        .cloned()
+        .collect();
+    if kept.len() == start.len() {
+        return false;
+    }
+    let hooks = doc["hooks"].as_object_mut().unwrap();
+    if kept.is_empty() {
+        hooks.remove("sessionStart");
+    } else {
+        hooks.insert("sessionStart".into(), Value::Array(kept));
+    }
+    let obj = doc.as_object();
+    let bare = obj.is_some_and(|o| {
+        o.keys().all(|k| k == "hooks" || k == "version")
+            && o["hooks"].as_object().is_some_and(|h| h.is_empty())
+    });
+    if bare {
+        plan.act(
+            Action::Delete(path.clone()),
+            format!("delete {}", rel(&path)),
+        );
+    } else {
+        let content = serde_json::to_string_pretty(&doc).unwrap() + "\n";
+        plan.act(
+            Action::Write {
+                path: path.clone(),
+                content,
+            },
+            format!("write {} without the sessionStart hook", rel(&path)),
+        );
+    }
+    true
+}
+
 /// Only the tools `[tools] present` allows, when it names any.
 pub fn wire(home: &Home, cfg: &Config, link: bool) -> Plan {
     let mut plan = Plan::new();
@@ -199,9 +322,7 @@ pub fn wire(home: &Home, cfg: &Config, link: bool) -> Plan {
     if cursor_dir().is_dir() && cfg.tool("cursor") {
         found = true;
         plan.header("cursor:");
-        plan.say("user rules live in the app settings, not a file, so nothing here can");
-        plan.say("wire them. Paste this into Settings -> Rules by hand:");
-        plan.say(format!("  {CURSOR_LINE}"));
+        write_cursor_hook(&mut plan, home);
     }
 
     if !found {
@@ -227,6 +348,7 @@ pub fn unwire(home: &Home) -> Plan {
         }
     }
     drop_legacy_imports(&mut plan, &claude.own_file());
+    any |= remove_cursor_hook(&mut plan, home);
     for l in [
         claude.rules_link(),
         claude.skills_link(),

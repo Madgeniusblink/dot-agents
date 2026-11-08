@@ -68,13 +68,26 @@ pub const PROJECT_SKILL_DIRS: [&str; 4] = [
     "skills",
 ];
 
-/// Cursor keeps user rules in its application settings, not in a file.
+/// Cursor keeps user rules in its application settings, not in a file. Its
+/// user-level hooks file is the live transport: a `sessionStart` hook there
+/// runs `scripts/cursor-context.sh`, which sends the always-on set as it is
+/// now. Source: <https://cursor.com/docs/agent/hooks>.
 pub fn cursor_dir() -> PathBuf {
     user_home().join(".cursor")
 }
 
-pub const CURSOR_LINE: &str =
-    "Read ~/.agents/AGENTS.md and every file in ~/.agents/rules/ before starting work.";
+pub fn cursor_hooks() -> PathBuf {
+    cursor_dir().join("hooks.json")
+}
+
+/// The hook command for a home at `dir`. `scripts/wire.sh` writes the same.
+pub fn cursor_hook_command(dir: &Path) -> String {
+    format!("sh {}/scripts/cursor-context.sh", crate::home::tilde(dir))
+}
+
+/// The name every version of the hook command ends with, so `wire` replaces
+/// an entry from a home that moved instead of adding a second one.
+pub const CURSOR_HOOK_SCRIPT: &str = "/scripts/cursor-context.sh";
 
 impl Claude {
     /// Where Claude Code keeps auto memory: its own per-repository notes.
