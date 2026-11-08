@@ -62,18 +62,30 @@ struct Hit {
     scope: Scope,
 }
 
-/// No `long`: one row per remote and counts. Once: every file. Twice: each
-/// file in full. `[scan] skip` globs prune the walk, even with `--all`.
-pub fn scan(
-    roots: Vec<PathBuf>,
+/// The same document `--json` prints, for a view.
+pub fn report(roots: &[PathBuf], all: bool, home: Option<&Home>, cfg: &Config) -> Value {
+    let started = Instant::now();
+    let (hits, settings) = gather(roots, all, home, cfg);
+    let checkouts = checkouts(&hits);
+    data(
+        roots,
+        cfg,
+        all,
+        started.elapsed().as_secs_f32(),
+        &hits,
+        &checkouts,
+        &settings,
+    )
+}
+
+/// Every instruction file and tool settings file under the roots, each with
+/// its scope, files in path order.
+fn gather(
+    roots: &[PathBuf],
     all: bool,
-    long: u8,
-    json: bool,
     home: Option<&Home>,
     cfg: &Config,
-) {
-    let width = out::width();
-    let started = Instant::now();
+) -> (Vec<Hit>, Vec<(Setting, Scope)>) {
     let user = user_home();
     let globals = [
         user.join(".claude"),
@@ -158,27 +170,47 @@ pub fn scan(
         .collect();
     hits.sort_by(|a, b| a.path.cmp(&b.path));
     hits.dedup_by(|a, b| a.path == b.path);
+    (hits, settings)
+}
+
+/// The checkout at each project root the files sit in.
+fn checkouts(hits: &[Hit]) -> BTreeMap<&Path, Checkout> {
+    let roots: std::collections::BTreeSet<&Path> = hits
+        .iter()
+        .filter_map(|h| match &h.scope {
+            Scope::Project(r) => Some(r.as_path()),
+            _ => None,
+        })
+        .collect();
+    roots.into_iter().map(|r| (r, Checkout::read(r))).collect()
+}
+
+/// No `long`: one row per remote and counts. Once: every file. Twice: each
+/// file in full. `[scan] skip` globs prune the walk, even with `--all`.
+pub fn scan(
+    roots: Vec<PathBuf>,
+    all: bool,
+    long: u8,
+    json: bool,
+    home: Option<&Home>,
+    cfg: &Config,
+) {
+    if json {
+        let data = report(&roots, all, home, cfg);
+        out::json("scan", home.map(|h| h.dir.as_path()), data);
+        return;
+    }
+    let width = out::width();
+    let started = Instant::now();
+    let aside = user_home().join(".agents-reset");
+    let (hits, settings) = gather(&roots, all, home, cfg);
     let mut projects: BTreeMap<&Path, Vec<&Hit>> = BTreeMap::new();
     for h in &hits {
         if let Scope::Project(r) = &h.scope {
             projects.entry(r.as_path()).or_default().push(h);
         }
     }
-    let checkouts: BTreeMap<&Path, Checkout> =
-        projects.keys().map(|r| (*r, Checkout::read(r))).collect();
-    if json {
-        let data = data(
-            &roots,
-            cfg,
-            all,
-            started.elapsed().as_secs_f32(),
-            &hits,
-            &checkouts,
-            &settings,
-        );
-        out::json("scan", home.map(|h| h.dir.as_path()), data);
-        return;
-    }
+    let checkouts = checkouts(&hits);
 
     let shown: Vec<String> = roots.iter().map(|r| tilde(r)).collect();
     if long == 0 {

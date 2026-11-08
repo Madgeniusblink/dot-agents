@@ -18,6 +18,10 @@ mod scan;
 mod skills;
 mod status;
 mod tree;
+// The frame that shows the views is the next slice of #82.
+#[cfg(unix)]
+#[cfg_attr(not(test), allow(dead_code))]
+mod ui;
 mod version;
 mod wire;
 
