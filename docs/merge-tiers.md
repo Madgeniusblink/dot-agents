@@ -1,6 +1,6 @@
 # Merge tiers
 
-A PR's tier comes from the paths it changes. The repository enforces the gate for each tier, so a session can merge what the gates allow and no more ([boundaries](../rules/boundaries.md)).
+A PR's tier comes from the paths it changes. The repository enforces the gate for each tier, so a session can merge what the gates allow and no more ([boundaries](../home/rules/boundaries.md)).
 
 | Tier | Blast radius | Gate |
 |---|---|---|
@@ -23,7 +23,7 @@ Aim for about one red PR in twenty.
 1. It runs the tier test.
 2. It decides the tier with [scripts/merge-tier.sh](../scripts/merge-tier.sh).
 3. It writes one comment on the PR, or updates it. The comment names the tier and each path that set it.
-4. A green or red PR passes at once. A yellow PR goes to a model with [review-prompt.md](../scripts/githooks/review-prompt.md), the diff, the list of tracked files, and `context/upstream.json`. The job fails when the last line of the reply is `BLOCK`.
+4. A green or red PR passes at once. A yellow PR goes to a model with [review-prompt.md](../scripts/githooks/review-prompt.md), the diff, the list of tracked files, and `home/context/upstream.json`. The job fails when the last line of the reply is `BLOCK`.
 
 The job reads the model key from the Actions secret `REVIEW_API_KEY`. When that secret is not set, a yellow PR gets no model review and the job passes, so the required checks are the whole gate. The model ID is in the workflow.
 

@@ -27,19 +27,22 @@ jobs:
       - name: upstream.json paths exist
         shell: bash
         run: |
-          test -f standards/README.md
-          test -f standards/adopt.md
-          test -f context/data-locations.md
-          test -f context/upstream.json
+          test -f home/standards/README.md
+          test -f home/standards/adopt.md
+          test -f home/context/data-locations.md
+          test -f home/context/upstream.json
 
       - name: Context budget
         if: runner.os != 'Windows'
         shell: bash
-        run: sh scripts/check-budget.sh
+        run: sh home/scripts/check-budget.sh
 
       - name: Relative link check
         if: runner.os != 'Windows'
-        run: python3 scripts/check-links.py
+        shell: bash
+        run: |
+          python3 home/scripts/check-links.py
+          python3 home/scripts/check-links.py .
 
       - name: CLI (fmt, clippy, tests, parity with the scripts)
         working-directory: cli
@@ -52,6 +55,6 @@ jobs:
       - name: agents check on the template
         working-directory: cli
         shell: bash
-        run: cargo run --quiet -- --home .. check --template
+        run: cargo run --quiet -- --home ../home check --template
 
 

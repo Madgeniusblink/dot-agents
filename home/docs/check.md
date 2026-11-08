@@ -10,7 +10,7 @@ A clean run prints one line with the always-on bytes, the cap, and where the cap
 
 | Rule | Message | Fix | Source |
 |---|---|---|---|
-| `router.lines` | `<n> lines, max 50` | move detail to a linked file | [README.md](../README.md) |
+| `router.lines` | `<n> lines, max 50` | move detail to a linked file | [check-budget.sh](../scripts/check-budget.sh) |
 | `rule.one-line` | rule continues on an indented line, or paragraph spans more than one line | join the rule or paragraph into one line | [rules.md](../standards/rules.md) |
 | `correction.dated` | correction does not end in a dated test | end the line with `` `YYYY-MM · task that proves it` `` | [rules.md](../standards/rules.md) |
 | `skill.missing` | directory has no SKILL.md | add SKILL.md, or move the directory out of `skills/` | [skills/README.md](../skills/README.md) |
@@ -31,5 +31,5 @@ A clean run prints one line with the always-on bytes, the cap, and where the cap
 | `link.relative` | link target `<path>` does not exist | point the link at a file that exists | [sources-policy.md](../context/sources-policy.md) |
 | `link.merge-no-edit` | a documented merge command lacks `--no-edit` | add `--no-edit` to the command | [adopt.md](../standards/adopt.md) |
 | `budget.always-on` | principles and rules hold `<n>` bytes, the cap is 12 KiB | move text out of the always-on files, or raise `budget.always_on_bytes` in `context/upstream.json` | [rules.md](../standards/rules.md) |
-| `budget.skills` | the template ships more than 3 skills (`--template` only) | move the skill out of the template | [decision 0008](decisions/0008-ship-no-fill-in-files.md) |
-| `budget.template-files` | the template ships a file in `memory/` or `decisions/` (`--template` only) | move the file out of the template | [decision 0008](decisions/0008-ship-no-fill-in-files.md) |
+| `budget.skills` | the template ships more than 3 skills (`--template` only) | move the skill out of the template | [decision 0008](https://github.com/Madgeniusblink/dot-agents/blob/main/docs/decisions/0008-ship-no-fill-in-files.md) |
+| `budget.template-files` | the template ships a file in `memory/` or `decisions/` (`--template` only) | move the file out of the template | [decision 0008](https://github.com/Madgeniusblink/dot-agents/blob/main/docs/decisions/0008-ship-no-fill-in-files.md) |

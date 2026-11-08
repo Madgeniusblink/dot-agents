@@ -11,11 +11,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-fn repo_root() -> PathBuf {
+/// `home/` in this repository: the tree a home is a checkout of.
+fn template_home() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap()
-        .to_path_buf()
+        .join("home")
 }
 
 #[derive(Debug, PartialEq)]
@@ -68,7 +69,7 @@ fn fixture() -> tempfile::TempDir {
 
 fn script(home: &Path, args: &[&str]) -> String {
     let out = Command::new("sh")
-        .arg(repo_root().join("scripts").join("wire.sh"))
+        .arg(template_home().join("scripts").join("wire.sh"))
         .args(args)
         .env("HOME", home)
         .env_remove("CODEX_HOME")
@@ -87,7 +88,7 @@ fn cli(home: &Path, args: &[&str]) -> String {
     let out = Command::new(env!("CARGO_BIN_EXE_agents"))
         .env("AGENTS_UPDATE_CHECK", "off")
         .arg("--home")
-        .arg(repo_root())
+        .arg(template_home())
         .args(args)
         .env("HOME", home)
         .env_remove("CODEX_HOME")
@@ -136,7 +137,7 @@ fn wire_and_unwire_match_the_scripts() {
     let doc: serde_json::Value = serde_json::from_str(&hooks).unwrap();
     assert_eq!(
         doc["hooks"]["sessionStart"][0]["command"].as_str().unwrap(),
-        format!("sh {}/scripts/cursor-context.sh", repo_root().display()),
+        format!("sh {}/scripts/cursor-context.sh", template_home().display()),
         "cursor's sessionStart hook runs the home's script"
     );
 
@@ -187,7 +188,7 @@ fn cursor_hooks_of_the_users_own_survive_wire_and_unwire() {
         commands,
         vec![
             "./banner.sh",
-            &format!("sh {}/scripts/cursor-context.sh", repo_root().display())
+            &format!("sh {}/scripts/cursor-context.sh", template_home().display())
         ],
         "the stale entry goes, the user's stays, ours is last"
     );
@@ -232,7 +233,7 @@ fn an_unreadable_cursor_hooks_file_is_skipped() {
 #[cfg(unix)]
 fn cursor_context_script_prints_the_always_on_set_as_json() {
     let out = Command::new("sh")
-        .arg(repo_root().join("scripts").join("cursor-context.sh"))
+        .arg(template_home().join("scripts").join("cursor-context.sh"))
         .output()
         .expect("sh");
     assert!(
@@ -273,7 +274,7 @@ fn context_sh_counts_the_codex_file_once_against_its_cap() {
     fs::create_dir_all(home.join("rules")).unwrap();
     fs::create_dir_all(user.join(".codex")).unwrap();
     fs::copy(
-        repo_root().join("scripts").join("context.sh"),
+        template_home().join("scripts").join("context.sh"),
         home.join("scripts").join("context.sh"),
     )
     .unwrap();
@@ -307,7 +308,7 @@ fn check_passes_on_this_tree() {
     let out = Command::new(env!("CARGO_BIN_EXE_agents"))
         .env("AGENTS_UPDATE_CHECK", "off")
         .arg("--home")
-        .arg(repo_root())
+        .arg(template_home())
         .arg("check")
         .output()
         .unwrap();
@@ -320,12 +321,12 @@ fn check_passes_on_this_tree() {
 
 #[test]
 fn crate_version_is_the_template_version() {
-    let text = fs::read_to_string(repo_root().join("context").join("upstream.json")).unwrap();
+    let text = fs::read_to_string(template_home().join("context").join("upstream.json")).unwrap();
     let json: serde_json::Value = serde_json::from_str(&text).unwrap();
     assert_eq!(
         json["template_version"].as_str().unwrap(),
         env!("CARGO_PKG_VERSION"),
-        "cli/Cargo.toml and context/upstream.json must carry the same version"
+        "cli/Cargo.toml and home/context/upstream.json must carry the same version"
     );
 }
 

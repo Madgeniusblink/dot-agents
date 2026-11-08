@@ -27,8 +27,8 @@ private repo (for example `agents-private`) and install into `~/.agents`.
 
 ## Token efficiency
 
-- [AGENTS.md](../../AGENTS.md) does **not** load `voice.md` every session.
-- [report skill](../../skills/report/SKILL.md) loads `voice.md` only when
+- [AGENTS.md](../../home/AGENTS.md) does **not** load `voice.md` every session.
+- [report skill](../../home/skills/report/SKILL.md) loads `voice.md` only when
   the model is reporting status or completion.
 - Do **not** duplicate these lines in Cursor user rules unless you need a host
   that never reads skills.
