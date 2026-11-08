@@ -815,7 +815,11 @@ fn copy_note(s: &Skill, project: &[&Skill], root: Option<&Path>) -> Option<Strin
         }
     }
     if let Some(p) = project.iter().find(|p| p.hash == s.hash) {
-        return Some(format!("copy of {} (identical)", rel(p)));
+        return Some(format!(
+            "copy of {} ({})",
+            rel(p),
+            out::state(out::State::Identical)
+        ));
     }
     let o = s.origin()?;
     let local = o.starts_with('/') || o.starts_with("~/") || o.starts_with("$HOME/");
@@ -874,7 +878,11 @@ pub fn list(home: Option<&Home>, long: u8, json: bool) {
             }
         }
         for s in &group {
-            let mark = if s.broken() { " BROKEN" } else { "" };
+            let mark = if s.broken() {
+                format!(" {}", out::state(out::State::Broken))
+            } else {
+                String::new()
+            };
             let desc = if long {
                 details(s)
             } else {
@@ -944,9 +952,9 @@ pub fn list(home: Option<&Home>, long: u8, json: bool) {
                 out::Row::new(
                     &group[0].name,
                     if identical {
-                        "identical"
+                        out::state(out::State::Identical)
                     } else {
-                        "DIFFERENT bodies"
+                        format!("{} bodies", out::state(out::State::Different))
                     },
                     places.join(sep),
                 )
@@ -1013,7 +1021,11 @@ fn brief(skills: &[Skill], project: &[&Skill], root: Option<&Path>, width: usize
             if s.source.scope() != "yours" && !s.broken() && copy.is_none() {
                 return None;
             }
-            let mark = if s.broken() { " BROKEN" } else { "" };
+            let mark = if s.broken() {
+                format!(" {}", out::state(out::State::Broken))
+            } else {
+                String::new()
+            };
             let desc = s
                 .description
                 .split_whitespace()
