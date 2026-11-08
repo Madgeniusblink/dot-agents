@@ -325,12 +325,11 @@ mod unix {
                         out.flush()?;
                         // Terminal.app ignores OSC 52, so a clipboard command
                         // does the copy too, and the note says which (#103).
+                        // Short, so the key bar keeps its keys at 80 columns.
                         frame.note = match act::copy_with_tool(&text, None) {
                             Ok(Some(tool)) => format!("copied with {tool}"),
-                            Ok(None) => {
-                                "copied through the terminal only: no pbcopy, wl-copy, xclip, or xsel on PATH".to_string()
-                            }
-                            Err(e) => format!("copy failed: {e}"),
+                            Ok(None) => "copied: terminal only, no clipboard tool".to_string(),
+                            Err(e) => format!("copied: terminal only, {e}"),
                         };
                         continue;
                     }

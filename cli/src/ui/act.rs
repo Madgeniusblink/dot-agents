@@ -27,36 +27,52 @@ const TOOLS: [(&str, &[&str]); 4] = [
     ("xsel", &["--clipboard", "--input"]),
 ];
 
-/// Put `text` on the clipboard with the first command of `TOOLS` found on
-/// `path` (`PATH` when `None`). The name of the command that ran, or `None`
-/// when there is none to run.
+/// Put `text` on the clipboard with the first command of `TOOLS` on `path`
+/// (`PATH` when `None`) that takes it. A tool that fails, as `xclip` does
+/// with no display, gives way to the next. The name of the command that
+/// ran; `None` when no tool exists; the last failure when every tool failed.
 pub fn copy_with_tool(text: &str, path: Option<&OsStr>) -> io::Result<Option<&'static str>> {
+    use std::os::unix::fs::PermissionsExt;
     let path = path
         .map(OsStr::to_os_string)
         .or_else(|| std::env::var_os("PATH"));
     let dirs: Vec<_> = path.iter().flat_map(std::env::split_paths).collect();
-    let Some((name, args, bin)) = TOOLS.iter().find_map(|(name, args)| {
-        let bin = dirs.iter().map(|d| d.join(name)).find(|b| b.is_file())?;
-        Some((*name, *args, bin))
-    }) else {
-        return Ok(None);
+    let executable = |b: &Path| {
+        b.metadata()
+            .is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
     };
+    let mut failed = None;
+    for (name, args) in TOOLS {
+        let Some(bin) = dirs.iter().map(|d| d.join(name)).find(|b| executable(b)) else {
+            continue;
+        };
+        match pipe_to(&bin, args, text) {
+            Ok(()) => return Ok(Some(name)),
+            Err(e) => failed = Some(io::Error::other(format!("{name}: {e}"))),
+        }
+    }
+    failed.map_or(Ok(None), Err)
+}
+
+/// Run `bin` with `text` on its stdin, and fail unless it exits 0.
+fn pipe_to(bin: &Path, args: &[&str], text: &str) -> io::Result<()> {
     let mut child = Command::new(bin)
         .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()?;
-    child
+    // A tool that quits early closes the pipe; its exit status says why.
+    let _ = child
         .stdin
         .take()
         .expect("piped stdin")
-        .write_all(text.as_bytes())?;
+        .write_all(text.as_bytes());
     let status = child.wait()?;
     if status.success() {
-        Ok(Some(name))
+        Ok(())
     } else {
-        Err(io::Error::other(format!("{name}: {status}")))
+        Err(io::Error::other(status.to_string()))
     }
 }
 
@@ -170,6 +186,26 @@ mod tests {
         let tool = copy_with_tool("x", Some(dir.path().as_os_str())).unwrap();
         assert_eq!(tool, Some("xclip"));
         assert_eq!(std::fs::read_to_string(&log).unwrap(), "x");
+    }
+
+    #[test]
+    fn c_moves_to_the_next_tool_when_one_fails_or_is_not_executable() {
+        use std::os::unix::fs::PermissionsExt;
+        // pbcopy is a plain file, wl-copy quits with 1 before it reads, and
+        // xclip takes the text.
+        let (dir, log) = fake_tool("xclip");
+        std::fs::write(dir.path().join("pbcopy"), "not a program").unwrap();
+        let bad = dir.path().join("wl-copy");
+        std::fs::write(&bad, "#!/bin/sh\nexit 1\n").unwrap();
+        std::fs::set_permissions(&bad, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let tool = copy_with_tool("x", Some(dir.path().as_os_str())).unwrap();
+        assert_eq!(tool, Some("xclip"));
+        assert_eq!(std::fs::read_to_string(&log).unwrap(), "x");
+
+        // Every tool failed: the last failure, with the tool's name.
+        std::fs::remove_file(dir.path().join("xclip")).unwrap();
+        let err = copy_with_tool("x", Some(dir.path().as_os_str())).unwrap_err();
+        assert_eq!(err.to_string(), "wl-copy: exit status: 1");
     }
 
     #[test]
