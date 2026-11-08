@@ -358,7 +358,11 @@ fn a_reader_that_closes_the_pipe_early_ends_agents_quietly() {
     use std::process::Stdio;
     let t = fixture();
     let h = t.path();
-    let mut child = Command::new(env!("CARGO_BIN_EXE_agents"))
+    // The read end goes before agents starts, so every write sees a closed
+    // pipe, however the scheduler orders the two processes.
+    let (reader, writer) = std::io::pipe().expect("pipe");
+    drop(reader);
+    let out = Command::new(env!("CARGO_BIN_EXE_agents"))
         .env("AGENTS_UPDATE_CHECK", "off")
         .args(["--home".as_ref(), h.join(".agents").as_os_str()])
         .args(["status", "--long"])
@@ -368,14 +372,10 @@ fn a_reader_that_closes_the_pipe_early_ends_agents_quietly() {
         .env_remove("AGENTS_CONFIG")
         .env_remove("CODEX_HOME")
         .env_remove("GROK_HOME")
-        .stdout(Stdio::piped())
+        .stdout(writer)
         .stderr(Stdio::piped())
-        .spawn()
+        .output()
         .expect("agents");
-    // The read end goes before the first line is written, so every write
-    // sees a closed pipe.
-    drop(child.stdout.take());
-    let out = child.wait_with_output().expect("agents");
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(err.is_empty(), "{err}");
     // SIGPIPE is 13 on every Unix this crate builds for.
