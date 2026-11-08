@@ -42,6 +42,7 @@ jobs:
         run: python3 scripts/check-links.py
 
       - name: CLI (fmt, clippy, tests, parity with the scripts)
+        if: github.repository == 'Madgeniusblink/dot-agents'
         working-directory: cli
         shell: bash
         run: |
@@ -50,6 +51,7 @@ jobs:
           cargo test
 
       - name: agents check on the template
+        if: github.repository == 'Madgeniusblink/dot-agents'
         working-directory: cli
         shell: bash
         run: cargo run --quiet -- --home .. check --template
