@@ -140,6 +140,10 @@ enum Cmd {
     },
 
     /// Clone your home, add the template as upstream, then wire
+    ///
+    /// A clone with the template's layout, the home under home/, or an
+    /// empty repository first gets one commit whose tree is home/, so its
+    /// root is the home.
     Init {
         /// Your own copy of the template, the one you push to
         url: String,
@@ -149,6 +153,9 @@ enum Cmd {
     },
 
     /// Merge the template's main into the home, then report
+    ///
+    /// Adds -X subtree=home when the template keeps the home under home/,
+    /// and --allow-unrelated-histories when the histories share no commit.
     Update {
         /// Write the plan. Without it, print only
         #[arg(long)]
