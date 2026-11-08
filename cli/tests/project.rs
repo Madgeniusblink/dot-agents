@@ -164,6 +164,209 @@ fn remove_and_keep_never_write_inside_the_checkout() {
     assert!(r.join(".claude/skills/alpha/SKILL.md").is_file());
 }
 
+/// T8: the moves of `remove_and_keep_never_write_inside_the_checkout`, made
+/// from the Skills view of `agents ui`. `r` and `K` show the plan and move
+/// nothing; `A` runs that plan, as `--apply` does.
+#[cfg(unix)]
+#[test]
+fn t8_remove_and_keep_from_the_view_never_write_inside_the_checkout() {
+    let (home, repo) = fixture();
+    let (h, r) = (home.path(), repo.path());
+    // The view opens only with an agent home.
+    fs::create_dir_all(h.join(".agents")).unwrap();
+    fs::write(h.join(".agents/AGENTS.md"), "# home\n").unwrap();
+    let mut ui = view::Ui::open(h, r);
+    ui.press("2", "yours, BROKEN, or a copy");
+
+    ui.select("alpha");
+    let plan = ui.press("r", "dry run of agents skills");
+    assert!(plan.contains(": the project owns it."), "{plan}");
+    assert!(plan.contains("move ~/.claude/skills/alpha -> "), "{plan}");
+    assert!(
+        h.join(".claude/skills/alpha").exists(),
+        "the plan moved alpha"
+    );
+    assert_eq!(git(r, &["status", "--porcelain"]), "");
+    let done = ui.press("A", "applied.");
+    assert!(done.contains(": the project owns it."), "{done}");
+    assert_eq!(git(r, &["status", "--porcelain"]), "");
+    assert!(!h.join(".claude/skills/alpha").exists());
+    assert!(r.join(".claude/skills/alpha/SKILL.md").is_file());
+
+    ui.press("\x1b", "yours, BROKEN, or a copy");
+    ui.select("beta");
+    let plan = ui.press("K", "dry run of agents skills");
+    assert!(plan.contains(": the project owns it."), "{plan}");
+    assert!(
+        h.join(".claude/skills/ghost").exists(),
+        "the plan moved ghost"
+    );
+    assert_eq!(git(r, &["status", "--porcelain"]), "");
+    let done = ui.press("A", "applied.");
+    assert!(done.contains(": the project owns it."), "{done}");
+    assert_eq!(git(r, &["status", "--porcelain"]), "");
+    assert!(!h.join(".claude/skills/ghost").exists());
+    assert!(h.join(".claude/skills/beta").exists());
+    ui.quit();
+}
+
+/// `agents ui` on a pseudo-terminal, driven one key at a time as a person
+/// drives it. The screen redraws every 100 ms, so each wait reads the last
+/// whole frame.
+#[cfg(unix)]
+mod view {
+    use rustix::pty::{grantpt, openpt, ptsname, unlockpt, OpenptFlags};
+    use rustix::termios::{tcsetwinsize, Winsize};
+    use std::fs::File;
+    use std::io::{Read, Write};
+    use std::path::Path;
+    use std::process::{Child, Command, Stdio};
+    use std::sync::{Arc, Mutex};
+    use std::time::{Duration, Instant};
+
+    pub struct Ui {
+        master: File,
+        out: Arc<Mutex<Vec<u8>>>,
+        child: Child,
+    }
+
+    impl Ui {
+        pub fn open(home: &Path, cwd: &Path) -> Ui {
+            let master = openpt(OpenptFlags::RDWR | OpenptFlags::NOCTTY).unwrap();
+            grantpt(&master).unwrap();
+            unlockpt(&master).unwrap();
+            let name = ptsname(&master, Vec::new()).unwrap();
+            let slave = File::options()
+                .read(true)
+                .write(true)
+                .open(name.to_str().unwrap())
+                .unwrap();
+            let size = Winsize {
+                ws_row: 40,
+                ws_col: 400,
+                ws_xpixel: 0,
+                ws_ypixel: 0,
+            };
+            tcsetwinsize(&slave, size).unwrap();
+            let child = Command::new(env!("CARGO_BIN_EXE_agents"))
+                .env("AGENTS_UPDATE_CHECK", "off")
+                .arg("ui")
+                .current_dir(cwd)
+                .env("HOME", home)
+                .env_remove("AGENTS_HOME")
+                .env_remove("AGENTS_CONFIG")
+                .env_remove("CODEX_HOME")
+                .stdin(slave.try_clone().unwrap())
+                .stdout(slave)
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap();
+            let master = File::from(master);
+            let out = Arc::new(Mutex::new(Vec::new()));
+            let (mut reader, sink) = (master.try_clone().unwrap(), out.clone());
+            std::thread::spawn(move || {
+                let mut buf = [0u8; 8192];
+                while let Ok(n @ 1..) = reader.read(&mut buf) {
+                    sink.lock().unwrap().extend_from_slice(&buf[..n]);
+                }
+            });
+            // Raw mode flushes the input, so a key sent before the first
+            // frame is lost.
+            let ui = Ui { master, out, child };
+            ui.wait("the tab bar", |f| f.contains(" 1 Status "));
+            ui
+        }
+
+        /// The last frame drawn in full, without escape sequences.
+        fn frame(&self) -> String {
+            let out = String::from_utf8_lossy(&self.out.lock().unwrap()).into_owned();
+            let mut frames: Vec<&str> = out.split("\x1b[H").collect();
+            frames.pop();
+            strip(frames.last().copied().unwrap_or_default())
+        }
+
+        /// The first frame that `ok` accepts, within ten seconds.
+        fn wait(&self, what: &str, ok: impl Fn(&str) -> bool) -> String {
+            let end = Instant::now() + Duration::from_secs(10);
+            loop {
+                let f = self.frame();
+                if ok(&f) {
+                    return f;
+                }
+                assert!(Instant::now() < end, "no frame with {what}:\n{f}");
+                std::thread::sleep(Duration::from_millis(20));
+            }
+        }
+
+        /// Press `key`, then wait for a frame that shows `text`.
+        pub fn press(&mut self, key: &str, text: &str) -> String {
+            self.master.write_all(key.as_bytes()).unwrap();
+            self.wait(text, |f| f.contains(text))
+        }
+
+        /// Move down the Skills list until the selected row is `name`.
+        pub fn select(&mut self, name: &str) {
+            for _ in 0..20 {
+                let f = self.wait("a selected row", |f| selected(f).is_some());
+                let now = selected(&f).unwrap();
+                if now == name {
+                    return;
+                }
+                self.master.write_all(b"j").unwrap();
+                self.wait("the next row", |f| selected(f).is_some_and(|s| s != now));
+            }
+            panic!("no row {name}:\n{}", self.frame());
+        }
+
+        pub fn quit(mut self) {
+            self.master.write_all(b"q").unwrap();
+            let end = Instant::now() + Duration::from_secs(10);
+            while self.child.try_wait().unwrap().is_none() {
+                assert!(Instant::now() < end, "agents ui did not quit");
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            assert!(self.child.wait().unwrap().success());
+        }
+    }
+
+    /// The name on the row that starts with `>`.
+    fn selected(frame: &str) -> Option<String> {
+        let row = frame.split("\r\n").find(|l| l.starts_with('>'))?;
+        let name = row[1..].trim_start_matches('*').split_whitespace().next()?;
+        Some(name.to_string())
+    }
+
+    /// `s` without its CSI and OSC sequences. An OSC ends in BEL or ESC `\`.
+    fn strip(s: &str) -> String {
+        let mut text = String::new();
+        let mut chars = s.chars();
+        while let Some(c) = chars.next() {
+            if c != '\x1b' {
+                text.push(c);
+                continue;
+            }
+            match chars.next() {
+                Some('[') => {
+                    for c in chars.by_ref() {
+                        if ('\x40'..='\x7e').contains(&c) {
+                            break;
+                        }
+                    }
+                }
+                Some(']') => {
+                    while let Some(c) = chars.next() {
+                        if c == '\x07' || (c == '\x1b' && chars.next() == Some('\\')) {
+                            break;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        text
+    }
+}
+
 /// `git` with a fixed commit date, to backdate a commit.
 fn git_at(dir: &Path, date: &str, args: &[&str]) {
     let out = Command::new("git")

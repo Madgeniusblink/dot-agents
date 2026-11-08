@@ -30,6 +30,11 @@ rustix = { version = "1", features = ["termios"] }
 [dev-dependencies]
 tempfile = "3"
 
+# A pseudo-terminal, so a test drives `agents ui` as a person does. The same
+# rustix, so no crate is added.
+[target.'cfg(unix)'.dev-dependencies]
+rustix = { version = "1", features = ["termios", "pty"] }
+
 [package.metadata.dist]
 # The formula carries the binary's name: brew install madgeniusblink/tap/agents
 formula = "agents"

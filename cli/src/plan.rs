@@ -4,6 +4,7 @@
 
 use anyhow::{Context, Result};
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -78,17 +79,22 @@ impl Plan {
     }
 
     pub fn run(&self, apply: bool) -> Result<()> {
+        self.run_to(apply, &mut std::io::stdout().lock())
+    }
+
+    /// `run`, printing to `out`. `agents ui` draws the lines itself.
+    pub fn run_to(&self, apply: bool, out: &mut impl Write) -> Result<()> {
         for step in &self.steps {
             match step {
-                Step::Header(h) => println!("{h}"),
-                Step::Say(t) => println!("  {t}"),
-                Step::Text(t) => println!("{t}"),
-                Step::Blank => println!(),
+                Step::Header(h) => writeln!(out, "{h}")?,
+                Step::Say(t) => writeln!(out, "  {t}")?,
+                Step::Text(t) => writeln!(out, "{t}")?,
+                Step::Blank => writeln!(out)?,
                 Step::Do(action, t) => {
                     if apply {
                         exec(action).with_context(|| format!("failed: {t}"))?;
                     }
-                    println!("  {t}");
+                    writeln!(out, "  {t}")?;
                 }
             }
         }
