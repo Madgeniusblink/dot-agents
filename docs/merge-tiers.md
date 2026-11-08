@@ -25,7 +25,7 @@ Aim for about one red PR in twenty.
 3. It writes one comment on the PR, or updates it. The comment names the tier and each path that set it.
 4. A green or red PR passes at once. A yellow PR goes to a model with [review-prompt.md](../scripts/githooks/review-prompt.md), the diff, the list of tracked files, and `context/upstream.json`. The job fails when the last line of the reply is `BLOCK`.
 
-The job reads the model key from the Actions secret `REVIEW_API_KEY`. A yellow PR fails when that secret is not set. The model ID is in the workflow.
+The job reads the model key from the Actions secret `REVIEW_API_KEY`. When that secret is not set, a yellow PR gets no model review and the job passes, so the required checks are the whole gate. The model ID is in the workflow.
 
 ## Turn it on
 
