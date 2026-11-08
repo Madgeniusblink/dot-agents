@@ -154,22 +154,22 @@ impl Group {
 
 /// The view's state: the groups of the scan document, the filter, and the
 /// selected row among the groups the filter keeps.
-pub struct Scan {
+pub struct View {
     groups: Vec<Group>,
     filter: Filter,
     selected: usize,
 }
 
-impl Scan {
+impl View {
     /// The groups of a scan document, by remote in byte order, `no remote`
     /// for a checkout without one.
-    pub fn from(report: &Value) -> Scan {
+    pub fn new(report: &Value) -> View {
         let mut groups: BTreeMap<String, Vec<Checkout>> = BTreeMap::new();
         for p in report["projects"].as_array().into_iter().flatten() {
             let remote = p["remote"].as_str().unwrap_or("no remote").to_string();
             groups.entry(remote).or_default().push(Checkout::read(p));
         }
-        Scan {
+        View {
             groups: groups
                 .into_iter()
                 .map(|(remote, checkouts)| Group { remote, checkouts })
@@ -306,8 +306,12 @@ mod tests {
     /// worktree whose source directory was moved.
     fn fixture() -> (tempfile::TempDir, PathBuf) {
         let tmp = tempfile::tempdir().unwrap();
-        // git reports resolved paths: macOS /var is a link.
-        let root = tmp.path().canonicalize().unwrap();
+        // git reports resolved paths: macOS /var is a link, and a Windows
+        // temp dir can be a short name. Resolve it, then drop the `\\?\`
+        // prefix Windows adds, which git cannot use.
+        let resolved = tmp.path().canonicalize().unwrap();
+        let text = resolved.to_string_lossy();
+        let root = PathBuf::from(text.strip_prefix(r"\\?\").unwrap_or(&text));
         let s = |p: &Path| p.to_string_lossy().into_owned();
         let seed = root.join("seed");
         fs::create_dir_all(&seed).unwrap();
@@ -354,10 +358,10 @@ mod tests {
         (tmp, root)
     }
 
-    fn view(root: &Path) -> Scan {
+    fn view(root: &Path) -> View {
         let report = crate::scan::report(&[root.to_path_buf()], false, None, &Config::default());
         assert_eq!(report["projects"].as_array().unwrap().len(), 6, "{report}");
-        Scan::from(&report)
+        View::new(&report)
     }
 
     /// The row lines: after the filter line, up to the blank.
@@ -434,34 +438,39 @@ mod tests {
         assert_eq!(d[0], "team/app, 4 checkouts");
         let facts: Vec<&str> = d[1..].iter().map(|l| l.trim_start()).collect();
         assert_eq!(facts.len(), 4, "{d:#?}");
-        let find = |name: &str| {
-            let prefix = format!("{}/{name} ", root.display());
+        // Paths print in the system's form, so build each one with join.
+        let at = |parts: &[&str]| parts.iter().fold(root.clone(), |p, s| p.join(s));
+        let find = |parts: &[&str]| {
+            let prefix = format!("{} ", at(parts).display());
             facts
                 .iter()
                 .find(|f| f.starts_with(&prefix))
-                .unwrap_or_else(|| panic!("{name} in {facts:#?}"))
+                .unwrap_or_else(|| panic!("{prefix} in {facts:#?}"))
         };
         assert!(
-            find("a").ends_with(
+            find(&["a"]).ends_with(
                 "clone, branch main, 0 ahead 0 behind, 0 uncommitted, last commit 2020-01-02, stale"
             ),
             "{}",
-            find("a")
+            find(&["a"])
         );
         assert!(
-            find("b").contains("clone, branch main, 1 ahead 0 behind"),
+            find(&["b"]).contains("clone, branch main, 1 ahead 0 behind"),
             "{}",
-            find("b")
+            find(&["b"])
         );
         assert!(
-            find("wt").contains(&format!("worktree of {}/a, branch side", root.display())),
+            find(&["wt"]).contains(&format!(
+                "worktree of {}, branch side",
+                at(&["a"]).display()
+            )),
             "{}",
-            find("wt")
+            find(&["wt"])
         );
         assert!(
-            find("b/sub").contains(&format!("submodule of {}/b, ", root.display())),
+            find(&["b", "sub"]).contains(&format!("submodule of {}, ", at(&["b"]).display())),
             "{}",
-            find("b/sub")
+            find(&["b", "sub"])
         );
         assert!(lines.iter().all(|l| l.chars().count() <= 240), "{lines:#?}");
     }
@@ -476,7 +485,10 @@ mod tests {
         assert_eq!(lines.len(), 5, "{lines:#?}");
         assert!(lines[1].starts_with("> team/app"), "{lines:#?}");
         assert_eq!(lines[3], "team/app, 4 checkouts");
-        assert!(lines[4].contains("/a  clone,"), "{lines:#?}");
+        assert!(
+            lines[4].contains(&format!("{}  clone,", root.join("a").display())),
+            "{lines:#?}"
+        );
         // Seven lines: both rows, then two of four items and the count.
         let lines = v.render(160, 7);
         assert_eq!(lines.len(), 7, "{lines:#?}");
