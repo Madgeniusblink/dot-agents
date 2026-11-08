@@ -165,9 +165,13 @@ fn cursor_hooks_of_the_users_own_survive_wire_and_unwire() {
     let before = r#"{"version": 1, "hooks": {"beforeShellExecution": [{"command": "./guard.sh"}], "sessionStart": [{"command": "sh /old/home/scripts/cursor-context.sh"}, {"command": "./banner.sh"}]}, "extra": true}"#;
     fs::write(&path, before).unwrap();
 
+    let shown = Path::new(".cursor")
+        .join("hooks.json")
+        .display()
+        .to_string();
     let out = cli(t.path(), &["wire", "--apply"]);
     assert!(
-        out.contains("write .cursor/hooks.json (sessionStart hook)"),
+        out.contains(&format!("write {shown} (sessionStart hook)")),
         "{out}"
     );
     let doc: serde_json::Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
@@ -207,9 +211,13 @@ fn an_unreadable_cursor_hooks_file_is_skipped() {
     let t = fixture();
     let path = t.path().join(".cursor").join("hooks.json");
     fs::write(&path, "{ not json").unwrap();
+    let shown = Path::new(".cursor")
+        .join("hooks.json")
+        .display()
+        .to_string();
     let out = cli(t.path(), &["wire", "--apply"]);
     assert!(
-        out.contains("SKIP .cursor/hooks.json: not valid JSON"),
+        out.contains(&format!("SKIP {shown}: not valid JSON")),
         "{out}"
     );
     assert_eq!(fs::read_to_string(&path).unwrap(), "{ not json");
