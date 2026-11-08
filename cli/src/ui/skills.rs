@@ -2,11 +2,15 @@
 //! skill that is yours, `BROKEN`, or a copy, and a detail pane that shows the
 //! selected skill and each copy of it. The view draws lines; the frame owns
 //! the terminal. It reads the same `Skill` values that `agents skills --json`
-//! prints, so the view and the report cannot disagree.
+//! prints, so the view and the report cannot disagree. `r` and `K` build
+//! the plan of `agents skills remove` and `agents skills keep` for the marked
+//! names; `A` runs that same plan, as `--apply` does (decision 0011).
 
-use crate::home::tilde;
+use crate::home::{tilde, Home};
 use crate::out;
-use crate::skills::{copy_note, Skill, Source, SOURCES};
+use crate::plan::Plan;
+use crate::skills::{self, copy_note, Skill, Source, SOURCES};
+use std::collections::BTreeSet;
 use std::path::Path;
 
 /// The fewest lines the detail pane keeps when the terminal is short.
@@ -21,6 +25,9 @@ pub struct View<'a> {
     selected: usize,
     /// The first row on screen. It moves so the selected row stays visible.
     top: usize,
+    /// The names `m` marked. The commands act on names, so every row with a
+    /// marked name shows the mark.
+    marked: BTreeSet<String>,
 }
 
 impl<'a> View<'a> {
@@ -44,6 +51,7 @@ impl<'a> View<'a> {
             rows,
             selected: 0,
             top: 0,
+            marked: BTreeSet::new(),
         }
     }
 
@@ -59,6 +67,26 @@ impl<'a> View<'a> {
 
     pub fn selected(&self) -> Option<&'a Skill> {
         self.rows.get(self.selected).map(|&i| &self.skills[i])
+    }
+
+    /// Mark the name of the selected row, or unmark it.
+    pub fn mark(&mut self) {
+        if let Some(s) = self.selected() {
+            if !self.marked.remove(&s.name) {
+                self.marked.insert(s.name.clone());
+            }
+        }
+    }
+
+    /// The names `r` and `K` act on: the marked ones, else the selected one.
+    pub fn names(&self) -> Vec<String> {
+        if self.marked.is_empty() {
+            self.selected()
+                .map(|s| vec![s.name.clone()])
+                .unwrap_or_default()
+        } else {
+            self.marked.iter().cloned().collect()
+        }
     }
 
     /// Exactly `height` lines, none wider than `width` on a terminal. The
@@ -86,8 +114,10 @@ impl<'a> View<'a> {
             self.top = self.selected + 1 - list_h;
         }
         for (i, row) in rows.iter().enumerate().skip(self.top).take(list_h) {
-            let mark = if i == self.selected { ">" } else { " " };
-            lines.push(format!("{mark}{}", &row[1..]));
+            let cursor = if i == self.selected { ">" } else { " " };
+            let marked = self.marked.contains(&self.skills[self.rows[i]].name);
+            let mark = if marked { "*" } else { " " };
+            lines.push(format!("{cursor}{mark}{}", &row[2..]));
         }
 
         lines.extend(detail.into_iter().take(detail_h));
@@ -194,6 +224,64 @@ impl<'a> View<'a> {
         lines.extend(s.lint.iter().map(|f| format!("  {f}")));
         lines
     }
+}
+
+/// A plan that `r` or `K` built, and the lines the view shows for it.
+pub struct Pending {
+    plan: Plan,
+    pub lines: Vec<String>,
+    pub done: bool,
+}
+
+impl Pending {
+    /// The dry run of `agents skills remove` or, with `keep`, of
+    /// `agents skills keep`, for `names`. Nothing is written.
+    pub fn new(keep: bool, names: &[String], home: Option<&Home>) -> Pending {
+        let plan = if keep {
+            skills::keep(names, home)
+        } else {
+            skills::remove(names, home)
+        };
+        let mut lines = vec![format!(
+            "dry run of agents skills {} {}. nothing is written. A applies it, esc cancels.",
+            if keep { "keep" } else { "remove" },
+            names.join(" ")
+        )];
+        lines.extend(text(&plan, false).0);
+        Pending {
+            plan,
+            lines,
+            done: false,
+        }
+    }
+
+    /// Run the plan, as `--apply` runs it. The lines then show what ran, or
+    /// the step that failed.
+    pub fn apply(&mut self) {
+        let (lines, ok) = text(&self.plan, true);
+        self.lines = vec![if ok {
+            "applied. esc goes back to the list.".to_string()
+        } else {
+            "FAILED. the steps above the error ran. esc goes back to the list.".to_string()
+        }];
+        self.lines.extend(lines);
+        self.done = true;
+    }
+}
+
+/// The lines `Plan::run_to` prints, then the error if a step failed, and
+/// whether every step ran.
+fn text(plan: &Plan, apply: bool) -> (Vec<String>, bool) {
+    let mut buf = Vec::new();
+    let result = plan.run_to(apply, &mut buf);
+    let mut lines: Vec<String> = String::from_utf8_lossy(&buf)
+        .lines()
+        .map(str::to_string)
+        .collect();
+    if let Err(e) = &result {
+        lines.push(format!("{e:#}"));
+    }
+    (lines, result.is_ok())
 }
 
 /// Whether the list shows `s`: it is yours, it is BROKEN, or it is a copy of

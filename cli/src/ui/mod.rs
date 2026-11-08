@@ -2,7 +2,9 @@
 //! print. Each view reads the same object that `--json` prints, so the view
 //! and the report cannot disagree. Raw mode comes from `rustix` termios and
 //! the drawing is ANSI written here, so no crate is added (decision 0011).
-//! The view writes no file. The frame owns the terminal, the tabs, and the
+//! The view writes a file only through a `Plan` from `cli/src/plan.rs`: the
+//! Skills view shows the plan of `skills keep` or `skills remove`, and `A`
+//! runs it as `--apply` does. The frame owns the terminal, the tabs, and the
 //! keys; each view below draws its own lines.
 
 // The tabs reach these views in later items of #82. Until then only their
@@ -11,7 +13,8 @@
 pub mod files;
 #[allow(dead_code)]
 pub mod scan;
-#[allow(dead_code)]
+// Only the Unix frame draws the Skills view.
+#[cfg_attr(not(unix), allow(dead_code))]
 pub mod skills;
 #[allow(dead_code)]
 pub mod tree;
@@ -35,6 +38,7 @@ mod unix {
     use crate::home::Home;
     use crate::out::{self, State};
     use crate::status;
+    use crate::ui::skills;
     use anyhow::Result;
     use rustix::termios::{self, OptionalActions, SpecialCodeIndex, Termios};
     use serde_json::Value;
@@ -130,26 +134,78 @@ mod unix {
         }
     }
 
-    /// The loop: draw, wait for a key, apply it, until `q`.
+    /// The loop: draw, wait for a key, apply it, until `q`. The outer loop
+    /// reads the skills again after a plan ran.
     fn run(home: &Home, cfg: &Config) -> Result<()> {
+        let root = crate::skills::project_root();
         let mut frame = Frame::default();
-        let mut body = frame.view.lines(home, cfg);
         let mut stdin = io::stdin().lock();
         let mut out = io::stdout().lock();
         loop {
-            let (width, height) = size();
-            let lines = screen(&frame, &body, width, height);
-            draw(&mut out, &lines)?;
-            let mut buf = [0u8; 16];
-            let n = stdin.read(&mut buf)?;
-            let Some(key) = key(&buf[..n]) else { continue };
-            let before = frame.view;
-            if !frame.press(key, body.len(), height.saturating_sub(2)) {
-                return Ok(());
+            let found = crate::skills::find(Some(home));
+            let mut list = skills::View::new(&found, root.as_deref());
+            let mut body = frame.view.lines(home, cfg);
+            let mut pending: Option<skills::Pending> = None;
+            loop {
+                let (width, height) = size();
+                let rows = height.saturating_sub(2);
+                let (shown, keys) = match (&pending, frame.view) {
+                    (Some(p), _) if p.done => (p.lines.clone(), Some(DONE_KEYS)),
+                    (Some(p), _) => (p.lines.clone(), Some(PLAN_KEYS)),
+                    (None, View::Skills) => (list.render(width, rows), Some(SKILLS_KEYS)),
+                    (None, View::Status) => (body.clone(), None),
+                };
+                draw(&mut out, &screen_with(&frame, &shown, keys, width, height))?;
+                let mut buf = [0u8; 16];
+                let n = stdin.read(&mut buf)?;
+                let Some(key) = key(&buf[..n]) else { continue };
+                if let Some(p) = pending.as_mut().filter(|_| !frame.help) {
+                    match key {
+                        Key::Apply if !p.done => {
+                            p.apply();
+                            frame.top = 0;
+                            continue;
+                        }
+                        Key::Esc if p.done => break,
+                        Key::Esc => {
+                            pending = None;
+                            frame.top = 0;
+                            continue;
+                        }
+                        Key::Next | Key::Prev | Key::View(_) => continue,
+                        _ => {}
+                    }
+                } else if pending.is_none() && frame.view == View::Skills && !frame.help {
+                    match key {
+                        Key::Down => list.down(),
+                        Key::Up => list.up(),
+                        Key::Mark => list.mark(),
+                        Key::Remove | Key::Keep => {
+                            let names = list.names();
+                            if !names.is_empty() {
+                                let keep = key == Key::Keep;
+                                pending = Some(skills::Pending::new(keep, &names, Some(home)));
+                                frame.top = 0;
+                            }
+                        }
+                        _ => {}
+                    }
+                    if matches!(
+                        key,
+                        Key::Down | Key::Up | Key::Mark | Key::Remove | Key::Keep
+                    ) {
+                        continue;
+                    }
+                }
+                let before = frame.view;
+                if !frame.press(key, shown.len(), rows) {
+                    return Ok(());
+                }
+                if frame.view != before {
+                    body = frame.view.lines(home, cfg);
+                }
             }
-            if frame.view != before {
-                body = frame.view.lines(home, cfg);
-            }
+            frame.top = 0;
         }
     }
 
@@ -191,6 +247,12 @@ mod unix {
         Top,
         Bottom,
         Esc,
+        /// The Skills view: mark a row, then plan a remove or a keep of the
+        /// marked names, then apply the plan.
+        Mark,
+        Remove,
+        Keep,
+        Apply,
         Other,
     }
 
@@ -210,6 +272,10 @@ mod unix {
             b"g" | b"\x1b[H" => Key::Top,
             b"G" | b"\x1b[F" => Key::Bottom,
             b"\x1b" => Key::Esc,
+            b"m" => Key::Mark,
+            b"r" => Key::Remove,
+            b"K" => Key::Keep,
+            b"A" => Key::Apply,
             _ => Key::Other,
         })
     }
@@ -218,14 +284,16 @@ mod unix {
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub(super) enum View {
         Status,
+        Skills,
     }
 
     impl View {
-        pub(super) const ALL: [View; 1] = [View::Status];
+        pub(super) const ALL: [View; 2] = [View::Status, View::Skills];
 
         pub(super) fn name(self) -> &'static str {
             match self {
                 View::Status => "Status",
+                View::Skills => "Skills",
             }
         }
 
@@ -237,6 +305,8 @@ mod unix {
                     Some(&home.dir),
                     status::data(home, cfg),
                 )),
+                // The Skills view keeps a selection, so the loop draws it.
+                View::Skills => Vec::new(),
             }
         }
     }
@@ -281,7 +351,7 @@ mod unix {
                 Key::PageUp => self.top = self.top.saturating_sub(rows),
                 Key::Top => self.top = 0,
                 Key::Bottom => self.top = last,
-                Key::Other => {}
+                Key::Mark | Key::Remove | Key::Keep | Key::Apply | Key::Other => {}
             }
             true
         }
@@ -296,9 +366,21 @@ mod unix {
 
     /// Every row of one screen: the tab bar, the body or the help, and the
     /// key bar. Exactly `height` rows, none wider than `width`.
+    #[cfg(test)]
     pub(super) fn screen(
         frame: &Frame,
         body: &[String],
+        width: usize,
+        height: usize,
+    ) -> Vec<String> {
+        screen_with(frame, body, None, width, height)
+    }
+
+    /// `screen`, with the key bar `keys` when help is closed.
+    fn screen_with(
+        frame: &Frame,
+        body: &[String],
+        keys: Option<&[(&str, &str)]>,
         width: usize,
         height: usize,
     ) -> Vec<String> {
@@ -325,7 +407,8 @@ mod unix {
             }
         }
         if height > 1 {
-            rows.push(key_bar(frame.help, width));
+            let keys = if frame.help { None } else { keys };
+            rows.push(key_bar(keys, frame.help, width));
         }
         rows
     }
@@ -352,8 +435,10 @@ mod unix {
     }
 
     /// The keys a person needs next, each key in reverse video.
-    fn key_bar(help: bool, width: usize) -> String {
-        let keys: &[(&str, &str)] = if help {
+    fn key_bar(keys: Option<&[(&str, &str)]>, help: bool, width: usize) -> String {
+        let keys: &[(&str, &str)] = if let Some(keys) = keys {
+            keys
+        } else if help {
             &[("esc", "close"), ("q", "quit")]
         } else {
             &[
@@ -371,7 +456,24 @@ mod unix {
         cut(&bar, width)
     }
 
-    const HELP: [&str; 14] = [
+    const SKILLS_KEYS: &[(&str, &str)] = &[
+        ("?", "help"),
+        ("j/k", "select"),
+        ("m", "mark"),
+        ("r", "remove"),
+        ("K", "keep only"),
+        ("tab", "view"),
+        ("q", "quit"),
+    ];
+    const PLAN_KEYS: &[(&str, &str)] = &[
+        ("A", "apply"),
+        ("esc", "cancel"),
+        ("j/k", "scroll"),
+        ("q", "quit"),
+    ];
+    const DONE_KEYS: &[(&str, &str)] = &[("esc", "back"), ("j/k", "scroll"), ("q", "quit")];
+
+    const HELP: [&str; 20] = [
         "Keys",
         "",
         "  ?            this help; again to close",
@@ -383,9 +485,15 @@ mod unix {
         "  g, G         top, bottom",
         "  esc          close this help",
         "",
-        "Each view reads what its command prints with --json, so the view and",
-        "the report say the same thing. The view writes no file.",
+        "Skills",
+        "  m            mark the selected skill, or unmark it",
+        "  r            plan agents skills remove for the marked, else the selected",
+        "  K            plan agents skills keep for the marked, else the selected",
+        "  A            apply the plan shown, as --apply does; esc cancels it",
         "",
+        "Each view reads what its command prints with --json, so the view and",
+        "the report say the same thing. The view writes a file only after A,",
+        "through the same plan the command prints. Files move to ~/.agents-reset/.",
     ];
 
     /// `s` in at most `width` visible characters. Escape sequences take no
@@ -689,10 +797,18 @@ mod tests {
     #[test]
     fn t2_tabs_cycle_and_scroll_stays_in_the_body() {
         let mut f = Frame::default();
-        for k in [Key::Next, Key::Prev, Key::View(0), Key::View(8)] {
+        for (k, view) in [
+            (Key::Next, View::Skills),
+            (Key::Next, View::Status),
+            (Key::Prev, View::Skills),
+            (Key::View(0), View::Status),
+            (Key::View(1), View::Skills),
+            (Key::View(8), View::Skills),
+        ] {
             assert!(f.press(k, 10, 5));
-            assert_eq!(f.view, View::Status);
+            assert_eq!(f.view, view, "{k:?}");
         }
+        f.press(Key::View(0), 10, 5);
         assert_eq!(key(b"\t"), Some(Key::Next));
         assert_eq!(key(b"\x1b[Z"), Some(Key::Prev));
         assert_eq!(key(b"3"), Some(Key::View(2)));
