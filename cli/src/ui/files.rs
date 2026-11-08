@@ -57,6 +57,21 @@ impl FilesView {
         self.entries.get(self.selected)
     }
 
+    /// Select the entry on `line` of a `render` of `height` lines. A line
+    /// outside the list selects nothing.
+    pub fn pick(&mut self, line: usize, height: usize) {
+        let body_h = height.saturating_sub(2);
+        let start = window(self.selected, body_h);
+        if let Some(i) = line
+            .checked_sub(2)
+            .filter(|r| *r < body_h)
+            .map(|r| start + r)
+            .filter(|i| *i < self.entries.len())
+        {
+            self.selected = i;
+        }
+    }
+
     /// Into the selected directory. A file or a link stays where it is.
     pub fn enter(&mut self) {
         if let Some(n) = self.selected().filter(|n| n.kind == Kind::Dir) {
@@ -354,5 +369,21 @@ mod tests {
             split(&["abc".to_string()], &["r".to_string()], 30, 30, 1),
             ["abc"]
         );
+    }
+
+    #[test]
+    fn t9_a_click_on_a_row_selects_that_entry() {
+        let t = fixture();
+        let mut v = FilesView::load(t.path(), false, None);
+        let lines = v.render(80, 10);
+        assert!(lines[4].starts_with("  AGENTS.md"), "{}", lines[4]);
+        v.pick(4, 10);
+        assert_eq!(v.selected().unwrap().name, "AGENTS.md");
+        for outside in [0, 1, 7, 9, 40] {
+            v.pick(outside, 10);
+            assert_eq!(v.selected().unwrap().name, "AGENTS.md", "line {outside}");
+        }
+        v.pick(2, 10);
+        assert_eq!(v.selected().unwrap().name, "rules");
     }
 }

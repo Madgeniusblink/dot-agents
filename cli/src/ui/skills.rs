@@ -25,6 +25,10 @@ pub struct View<'a> {
     selected: usize,
     /// The first row on screen. It moves so the selected row stays visible.
     top: usize,
+    /// The line of the first list row and the list height, from the last
+    /// `render`, so a click lands on the row that was drawn there.
+    list_at: usize,
+    list_h: usize,
     /// The names `m` marked. The commands act on names, so every row with a
     /// marked name shows the mark.
     marked: BTreeSet<String>,
@@ -51,6 +55,8 @@ impl<'a> View<'a> {
             rows,
             selected: 0,
             top: 0,
+            list_at: 0,
+            list_h: 0,
             marked: BTreeSet::new(),
         }
     }
@@ -67,6 +73,17 @@ impl<'a> View<'a> {
 
     pub fn selected(&self) -> Option<&'a Skill> {
         self.rows.get(self.selected).map(|&i| &self.skills[i])
+    }
+
+    /// Select the row drawn on `line` of the last `render`. A line outside
+    /// the list selects nothing.
+    pub fn pick(&mut self, line: usize) {
+        let Some(at) = line.checked_sub(self.list_at).filter(|r| *r < self.list_h) else {
+            return;
+        };
+        if self.top + at < self.rows.len() {
+            self.selected = self.top + at;
+        }
     }
 
     /// Mark the name of the selected row, or unmark it.
@@ -135,6 +152,7 @@ impl<'a> View<'a> {
         } else if self.selected >= self.top + list_h {
             self.top = self.selected + 1 - list_h;
         }
+        (self.list_at, self.list_h) = (lines.len(), list_h);
         for (i, row) in rows.iter().enumerate().skip(self.top).take(list_h) {
             let cursor = if i == self.selected { ">" } else { " " };
             let marked = self.marked.contains(&self.skills[self.rows[i]].name);
@@ -532,5 +550,21 @@ mod tests {
         assert!(has(&lines, "yours, BROKEN, or a copy (0):"));
         assert!(has(&lines, "  nothing is yours, BROKEN, or a copy."));
         assert!(!lines.iter().any(|l| l.starts_with("> ")));
+    }
+
+    #[test]
+    fn t9_a_click_on_a_row_selects_that_skill() {
+        let skills = fixture();
+        let root = PathBuf::from("/p");
+        let mut view = View::new(&skills, Some(&root));
+        let lines = view.render(100, 30);
+        assert!(lines[10].starts_with("  pdf"), "{}", lines[10]);
+        view.pick(10);
+        let lines = view.render(100, 30);
+        assert!(lines[10].starts_with("> pdf"), "{}", lines[10]);
+        for outside in [0, 7, 29] {
+            view.pick(outside);
+            assert_eq!(view.selected, 2, "line {outside}");
+        }
     }
 }

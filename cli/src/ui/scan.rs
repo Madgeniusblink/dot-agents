@@ -210,6 +210,29 @@ impl View {
             .collect()
     }
 
+    /// The first row on screen and the room for rows, for `n` rows in
+    /// `height` lines. The filter line, a blank, and the detail header take
+    /// three lines. The rows get up to half of the rest.
+    fn list(&self, n: usize, height: usize) -> (usize, usize) {
+        let room = height.saturating_sub(3);
+        let row_room = n.min(room.div_ceil(2)).max(1);
+        (self.selected.saturating_sub(row_room - 1), row_room)
+    }
+
+    /// Select the group on `line` of a `render` of `height` lines. A line
+    /// outside the rows, or on the `… N more` line, selects nothing.
+    pub fn pick(&mut self, line: usize, height: usize) {
+        let n = self.shown().len();
+        let (first, row_room) = self.list(n, height);
+        let mut drawn = row_room.min(n - first.min(n));
+        if drawn < n - first.min(n) && drawn >= 2 {
+            drawn -= 1;
+        }
+        if let Some(r) = line.checked_sub(1).filter(|r| *r < drawn) {
+            self.selected = first + r;
+        }
+    }
+
     /// The pane as at most `height` lines of at most `width` characters:
     /// the filter, the rows with `>` at the selected one, then the selected
     /// group's checkouts. A list too long for its room ends in `… N more`.
@@ -231,11 +254,7 @@ impl View {
         }
         let rows: Vec<out::Row> = shown.iter().map(|(g, kept)| g.row(kept)).collect();
         let rows = out::rows(&rows, width.saturating_sub(2));
-        // The filter line, a blank, and the detail header take three lines.
-        // The rows get up to half of the rest, and the detail the remainder.
-        let room = height.saturating_sub(3);
-        let row_room = rows.len().min(room.div_ceil(2)).max(1);
-        let first = self.selected.saturating_sub(row_room - 1);
+        let (first, row_room) = self.list(rows.len(), height);
         let marked = rows
             .iter()
             .enumerate()
@@ -498,5 +517,21 @@ mod tests {
         let lines = v.render(40, 7);
         assert!(lines[1].starts_with("> no remote"), "{lines:#?}");
         assert!(lines.iter().all(|l| l.chars().count() <= 40), "{lines:#?}");
+    }
+
+    #[test]
+    fn t9_a_click_on_a_row_selects_that_group() {
+        let (_tmp, root) = fixture();
+        let mut v = view(&root);
+        let lines = v.render(160, 7);
+        assert!(lines[2].starts_with("  team/app"), "{lines:#?}");
+        v.pick(2, 7);
+        assert_eq!(v.selected, 1);
+        for outside in [0, 3, 6] {
+            v.pick(outside, 7);
+            assert_eq!(v.selected, 1, "line {outside}");
+        }
+        v.pick(1, 7);
+        assert!(v.render(160, 7)[1].starts_with("> no remote"));
     }
 }
