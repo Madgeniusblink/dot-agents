@@ -3,9 +3,11 @@
 //! built here as text, so a test can read its bytes.
 
 use crate::home::expand_home;
+use std::ffi::OsStr;
+use std::io::{self, Write};
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 /// The string terminator that ends an OSC sequence.
 const ST: &str = "\x1b\\";
@@ -14,6 +16,64 @@ const ST: &str = "\x1b\\";
 /// does the copy, so it works over ssh and needs no clipboard tool.
 pub fn copy(text: &str) -> String {
     format!("\x1b]52;c;{}{ST}", base64(text.as_bytes()))
+}
+
+/// The clipboard commands, first found on `PATH` wins. macOS Terminal.app
+/// ignores OSC 52, so `pbcopy` is what makes `c` work there (#103).
+const TOOLS: [(&str, &[&str]); 4] = [
+    ("pbcopy", &[]),
+    ("wl-copy", &[]),
+    ("xclip", &["-selection", "clipboard"]),
+    ("xsel", &["--clipboard", "--input"]),
+];
+
+/// Put `text` on the clipboard with the first command of `TOOLS` on `path`
+/// (`PATH` when `None`) that takes it. A tool that fails, as `xclip` does
+/// with no display, gives way to the next. The name of the command that
+/// ran; `None` when no tool exists; the last failure when every tool failed.
+pub fn copy_with_tool(text: &str, path: Option<&OsStr>) -> io::Result<Option<&'static str>> {
+    use std::os::unix::fs::PermissionsExt;
+    let path = path
+        .map(OsStr::to_os_string)
+        .or_else(|| std::env::var_os("PATH"));
+    let dirs: Vec<_> = path.iter().flat_map(std::env::split_paths).collect();
+    let executable = |b: &Path| {
+        b.metadata()
+            .is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+    };
+    let mut failed = None;
+    for (name, args) in TOOLS {
+        let Some(bin) = dirs.iter().map(|d| d.join(name)).find(|b| executable(b)) else {
+            continue;
+        };
+        match pipe_to(&bin, args, text) {
+            Ok(()) => return Ok(Some(name)),
+            Err(e) => failed = Some(io::Error::other(format!("{name}: {e}"))),
+        }
+    }
+    failed.map_or(Ok(None), Err)
+}
+
+/// Run `bin` with `text` on its stdin, and fail unless it exits 0.
+fn pipe_to(bin: &Path, args: &[&str], text: &str) -> io::Result<()> {
+    let mut child = Command::new(bin)
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()?;
+    // A tool that quits early closes the pipe; its exit status says why.
+    let _ = child
+        .stdin
+        .take()
+        .expect("piped stdin")
+        .write_all(text.as_bytes());
+    let status = child.wait()?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(io::Error::other(status.to_string()))
+    }
 }
 
 /// `label` as a link to `path`, which a terminal opens on a click. A path
@@ -100,6 +160,61 @@ mod tests {
         ] {
             assert_eq!(base64(text.as_bytes()), want, "{text}");
         }
+    }
+
+    /// A fake clipboard command named `name` alone on a `PATH`. It writes
+    /// its stdin to `log`.
+    fn fake_tool(name: &str) -> (tempfile::TempDir, std::path::PathBuf) {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let log = dir.path().join("log");
+        let bin = dir.path().join(name);
+        std::fs::write(&bin, format!("#!/bin/sh\ncat > '{}'\n", log.display())).unwrap();
+        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+        (dir, log)
+    }
+
+    #[test]
+    fn c_also_copies_with_a_clipboard_command_on_path() {
+        let (dir, log) = fake_tool("pbcopy");
+        let tool = copy_with_tool("~/.agents", Some(dir.path().as_os_str())).unwrap();
+        assert_eq!(tool, Some("pbcopy"));
+        assert_eq!(std::fs::read_to_string(&log).unwrap(), "~/.agents");
+
+        // The first tool found wins; xclip gets the clipboard selection.
+        let (dir, log) = fake_tool("xclip");
+        let tool = copy_with_tool("x", Some(dir.path().as_os_str())).unwrap();
+        assert_eq!(tool, Some("xclip"));
+        assert_eq!(std::fs::read_to_string(&log).unwrap(), "x");
+    }
+
+    #[test]
+    fn c_moves_to_the_next_tool_when_one_fails_or_is_not_executable() {
+        use std::os::unix::fs::PermissionsExt;
+        // pbcopy is a plain file, wl-copy quits with 1 before it reads, and
+        // xclip takes the text.
+        let (dir, log) = fake_tool("xclip");
+        std::fs::write(dir.path().join("pbcopy"), "not a program").unwrap();
+        let bad = dir.path().join("wl-copy");
+        std::fs::write(&bad, "#!/bin/sh\nexit 1\n").unwrap();
+        std::fs::set_permissions(&bad, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let tool = copy_with_tool("x", Some(dir.path().as_os_str())).unwrap();
+        assert_eq!(tool, Some("xclip"));
+        assert_eq!(std::fs::read_to_string(&log).unwrap(), "x");
+
+        // Every tool failed: the last failure, with the tool's name.
+        std::fs::remove_file(dir.path().join("xclip")).unwrap();
+        let err = copy_with_tool("x", Some(dir.path().as_os_str())).unwrap_err();
+        assert_eq!(err.to_string(), "wl-copy: exit status: 1");
+    }
+
+    #[test]
+    fn c_without_a_clipboard_command_is_terminal_only() {
+        let empty = tempfile::tempdir().unwrap();
+        let tool = copy_with_tool("x", Some(empty.path().as_os_str())).unwrap();
+        assert_eq!(tool, None);
+        // OSC 52 still goes to the terminal; that part does not depend on PATH.
+        assert!(copy("x").starts_with("\x1b]52;c;"));
     }
 
     #[test]
