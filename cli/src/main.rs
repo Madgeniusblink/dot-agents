@@ -209,6 +209,14 @@ enum SkillsAction {
 }
 
 fn main() -> ExitCode {
+    // Rust starts with SIGPIPE ignored, so a print after the reader has closed
+    // the pipe fails and panics. The default action ends the process quietly,
+    // which is what `agents status | head` expects.
+    #[cfg(unix)]
+    // SAFETY: one call, before any other thread exists, with constant arguments.
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
     let code = match run() {
         Ok(code) => code,
         Err(e) => {

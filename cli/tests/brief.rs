@@ -349,6 +349,39 @@ fn o1_scan_long_in_a_pipe_keeps_a_long_path_whole() {
     assert!(!out.contains('…'), "{out}");
 }
 
+/// `agents status | head -1`: the reader closes the pipe early, and agents
+/// ends the way every other command does, with nothing on stderr.
+#[cfg(unix)]
+#[test]
+fn a_reader_that_closes_the_pipe_early_ends_agents_quietly() {
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::Stdio;
+    let t = fixture();
+    let h = t.path();
+    // The read end goes before agents starts, so every write sees a closed
+    // pipe, however the scheduler orders the two processes.
+    let (reader, writer) = std::io::pipe().expect("pipe");
+    drop(reader);
+    let out = Command::new(env!("CARGO_BIN_EXE_agents"))
+        .env("AGENTS_UPDATE_CHECK", "off")
+        .args(["--home".as_ref(), h.join(".agents").as_os_str()])
+        .args(["status", "--long"])
+        .current_dir(h)
+        .env("HOME", h)
+        .env_remove("AGENTS_HOME")
+        .env_remove("AGENTS_CONFIG")
+        .env_remove("CODEX_HOME")
+        .env_remove("GROK_HOME")
+        .stdout(writer)
+        .stderr(Stdio::piped())
+        .output()
+        .expect("agents");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.is_empty(), "{err}");
+    // SIGPIPE is 13 on every Unix this crate builds for.
+    assert_eq!(out.status.signal(), Some(13), "{:?}", out.status);
+}
+
 #[test]
 fn o2_scan_counts_test_fixtures_under_the_home_on_their_own() {
     let t = fixture();

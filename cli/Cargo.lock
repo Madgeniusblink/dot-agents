@@ -132,6 +132,7 @@ dependencies = [
  "anyhow",
  "basic-toml",
  "clap",
+ "libc",
  "rustix",
  "serde_json",
  "tempfile",
