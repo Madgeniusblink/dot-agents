@@ -26,6 +26,9 @@ walkdir = "2"
 # crate is added (decision 0011).
 [target.'cfg(unix)'.dependencies]
 rustix = { version = "1", features = ["termios"] }
+# The SIGPIPE default, so a closed pipe ends the process and does not panic a
+# print. Already in the tree through rustix, so no crate is added.
+libc = "0.2"
 
 [dev-dependencies]
 tempfile = "3"
