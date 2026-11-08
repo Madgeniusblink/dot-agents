@@ -263,3 +263,16 @@ pub fn settings_order(dir: &Path, root: Option<&Path>, main: Option<&Path>) -> V
 pub fn settings_note(tool: &str) -> Option<&'static str> {
     (tool == "codex").then_some("Codex reads a project layer only in a project you trust.")
 }
+
+/// The tool a terminal pane runs, from the name of its foreground command.
+/// The view offers only these panes as a place to send text.
+#[cfg(unix)]
+pub fn pane_label(command: &str) -> Option<&'static str> {
+    match command {
+        "claude" => Some("claude code"),
+        "codex" => Some("codex"),
+        "grok" => Some("grok"),
+        "cursor-agent" => Some("cursor"),
+        _ => None,
+    }
+}
