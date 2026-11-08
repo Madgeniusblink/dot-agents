@@ -1,9 +1,7 @@
-//! The views `agents ui` shows, one per file. Each view reads what the
-//! report prints, renders into lines of a given width and height, and
-//! writes no file. The frame owns the terminal and the keys.
-// The frame lands in a later slice. Until it wires these views in, nothing
-// in the binary calls them.
-#![allow(dead_code)]
+//! The views of `agents ui`, one per file. Each view draws lines for a
+//! width and a height and keeps its own selection. The frame owns the
+//! terminal, the tabs, and the keys, per decision 0011.
 
 pub mod files;
+pub mod skills;
 pub mod tree;

@@ -18,6 +18,9 @@ mod scan;
 mod skills;
 mod status;
 mod tree;
+// The frame of `agents ui` (#82 T2) is its only caller. Until it lands,
+// nothing reaches the views.
+#[allow(dead_code)]
 mod ui;
 mod version;
 mod wire;
