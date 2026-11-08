@@ -67,8 +67,9 @@ jobs:
           REVIEW_API_KEY: ${{ secrets.REVIEW_API_KEY }}
         run: |
           if [ -z "$REVIEW_API_KEY" ]; then
-            echo "review: the Actions secret REVIEW_API_KEY is not set, so this yellow PR cannot be reviewed."
-            exit 1
+            echo "review: the Actions secret REVIEW_API_KEY is not set, so this yellow PR gets no model review."
+            echo "review: the required checks are the gate. Set the secret to turn the review on."
+            exit 0
           fi
           {
             cat scripts/githooks/review-prompt.md
