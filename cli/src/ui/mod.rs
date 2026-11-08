@@ -13,6 +13,8 @@
 pub mod act;
 #[cfg_attr(not(unix), allow(dead_code))]
 pub mod files;
+#[cfg(unix)]
+pub mod live;
 #[cfg_attr(not(unix), allow(dead_code))]
 pub mod scan;
 #[cfg(unix)]
@@ -38,6 +40,7 @@ pub use unix::ui;
 #[cfg(unix)]
 mod unix {
     use super::act;
+    use super::live;
     use super::send::{Pane, Tmux};
     use crate::config::Config;
     use crate::home::{tilde, Home};
@@ -54,6 +57,7 @@ mod unix {
     use std::path::PathBuf;
     use std::process::{Command, ExitCode};
     use std::sync::{Mutex, Once, PoisonError};
+    use std::time::Instant;
 
     /// The alternate screen, with the cursor hidden.
     const ENTER: &str = "\x1b[?1049h\x1b[?25l";
@@ -157,10 +161,12 @@ mod unix {
     }
 
     /// The loop: draw, wait for a key, apply it, until `q`. The outer loop
-    /// reads the skills and the files again after a plan ran.
+    /// reads the skills again after a plan ran, after `R`, and when a file
+    /// time changed. A refresh keeps the scroll, the selection, and the marks.
+    /// Files and Tree are read again too; after a plan they start at the home.
     fn run<T: Term>(term: &mut T, home: &Home, cfg: &Config) -> Result<()> {
         let root = crate::skills::project_root();
-        let roots = match cfg.roots() {
+        let scan_roots = match cfg.roots() {
             r if r.is_empty() => vec![crate::home::user_home()],
             r => r,
         };
@@ -168,22 +174,30 @@ mod unix {
         let mut frame = Frame::default();
         let mut stdin = io::stdin().lock();
         let mut out = io::stdout().lock();
+        let mut kept = None;
+        let mut files = FilesView::load(&home.dir, false, Some(home));
+        let mut tree = TreeView::load(&home.dir, 4, false, Some(home));
+        // A scan walks every root, so it runs when the tab opens, and again
+        // only after `R` or a plan.
+        let mut groups: Option<scan::View> = None;
         loop {
             let found = crate::skills::find(Some(home));
             let mut list = skills::View::new(&found, root.as_deref());
-            let mut files = FilesView::load(&home.dir, false, Some(home));
-            let mut tree = TreeView::load(&home.dir, 4, false, Some(home));
-            // A scan walks every root, so it runs when the tab first opens.
-            let mut groups: Option<scan::View> = None;
+            if let Some(state) = kept.take() {
+                list.restore(state);
+            }
+            let roots = live::roots(&home.dir, &found);
+            let seen = live::stamp(&roots);
+            let mut checked = Instant::now();
             let mut body = frame.view.lines(home, cfg);
             let mut pending: Option<skills::Pending> = None;
-            loop {
+            let refresh = loop {
                 let (width, height) = size();
                 let rows = height.saturating_sub(2);
                 if frame.view == View::Scan && groups.is_none() {
-                    let wait = [format!("scanning {} …", tilde(&roots[0]))];
+                    let wait = [format!("scanning {} …", tilde(&scan_roots[0]))];
                     draw(&mut out, &screen_with(&frame, &wait, None, width, height))?;
-                    let report = crate::scan::report(&roots, false, Some(home), cfg);
+                    let report = crate::scan::report(&scan_roots, false, Some(home), cfg);
                     groups = Some(scan::View::new(&report));
                 }
                 let (shown, keys) = match (&pending, frame.view) {
@@ -203,9 +217,22 @@ mod unix {
                 draw(&mut out, &screen_with(&frame, &shown, keys, width, height))?;
                 let mut buf = [0u8; 16];
                 let n = stdin.read(&mut buf)?;
-                let Some(key) = key(&buf[..n]) else { continue };
+                let Some(key) = key(&buf[..n]) else {
+                    // A plan on screen is not read again under the person.
+                    if pending.is_none() && checked.elapsed() >= live::EVERY {
+                        checked = Instant::now();
+                        if live::stamp(&roots) != seen {
+                            break true;
+                        }
+                    }
+                    continue;
+                };
                 if sending(&mut frame, key, &shown, &tmux) {
                     continue;
+                }
+                if key == Key::Refresh && pending.is_none() {
+                    groups = None;
+                    break true;
                 }
                 frame.note.clear();
                 if let Some(p) = pending.as_mut().filter(|_| !frame.help) {
@@ -215,7 +242,7 @@ mod unix {
                             frame.top = 0;
                             continue;
                         }
-                        Key::Esc if p.done => break,
+                        Key::Esc if p.done => break false,
                         Key::Esc => {
                             pending = None;
                             frame.top = 0;
@@ -298,8 +325,21 @@ mod unix {
                 if frame.view != before {
                     body = frame.view.lines(home, cfg);
                 }
+            };
+            if refresh {
+                kept = Some(list.state());
+                let (at, dir) = (files.selected, files.dir.clone());
+                files = FilesView::load(&dir, false, Some(home));
+                files.selected = at.min(files.entries.len().saturating_sub(1));
+                let at = tree.selected;
+                tree = TreeView::load(&home.dir, 4, false, Some(home));
+                tree.selected = at.min(tree.rows.len().saturating_sub(1));
+            } else {
+                frame.top = 0;
+                files = FilesView::load(&home.dir, false, Some(home));
+                tree = TreeView::load(&home.dir, 4, false, Some(home));
+                groups = None;
             }
-            frame.top = 0;
         }
     }
 
@@ -347,6 +387,8 @@ mod unix {
         Remove,
         Keep,
         Apply,
+        /// Read every view again now. `r` is taken by remove.
+        Refresh,
         Send,
         Yes,
         Copy,
@@ -379,6 +421,7 @@ mod unix {
             b"r" => Key::Remove,
             b"K" => Key::Keep,
             b"A" => Key::Apply,
+            b"R" => Key::Refresh,
             b"s" => Key::Send,
             b"y" => Key::Yes,
             b"c" => Key::Copy,
@@ -565,6 +608,7 @@ mod unix {
                 | Key::Remove
                 | Key::Keep
                 | Key::Apply
+                | Key::Refresh
                 | Key::Send
                 | Key::Yes
                 | Key::Copy
@@ -729,7 +773,7 @@ mod unix {
     ];
     const DONE_KEYS: &[(&str, &str)] = &[("esc", "back"), ("j/k", "scroll"), ("q", "quit")];
 
-    const HELP: [&str; 34] = [
+    const HELP: [&str; 35] = [
         "Keys",
         "",
         "  ?            this help; again to close",
@@ -743,6 +787,7 @@ mod unix {
         "  s            send the top line to an agent pane in tmux, after y",
         "  c            copy the view's path; the terminal holds the copy",
         "  o            open the view's path in $EDITOR",
+        "  R            read every view again now; a changed file does it in 2 s",
         "",
         "Skills",
         "  m            mark the selected skill, or unmark it",
@@ -1274,6 +1319,18 @@ mod tests {
         assert!(sending(&mut f, Key::Send, &[String::new()], &tmux));
         assert_eq!(f.note, "nothing to send on the top line");
         assert!(!calls(&log).contains("send-keys"));
+    }
+
+    #[test]
+    fn t10_shift_r_refreshes_and_r_stays_remove() {
+        assert_eq!(key(b"R"), Some(Key::Refresh));
+        assert_eq!(key(b"r"), Some(Key::Remove));
+        let mut f = Frame {
+            top: 2,
+            ..Frame::default()
+        };
+        assert!(f.press(Key::Refresh, 10, 5));
+        assert_eq!((f.view, f.help, f.top), (View::Status, false, 2));
     }
 
     #[test]

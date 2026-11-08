@@ -210,6 +210,26 @@ fn t8_remove_and_keep_from_the_view_never_write_inside_the_checkout() {
     ui.quit();
 }
 
+/// T10: a skill an agent adds while the view is open shows within the 2 s
+/// poll, with no key pressed, and the selection stays on its row.
+#[cfg(unix)]
+#[test]
+fn t10_the_open_view_shows_a_new_skill_with_no_key() {
+    let (home, repo) = fixture();
+    let (h, r) = (home.path(), repo.path());
+    fs::create_dir_all(h.join(".agents")).unwrap();
+    fs::write(h.join(".agents/AGENTS.md"), "# home\n").unwrap();
+    let mut ui = view::Ui::open(h, r);
+    ui.press("2", "yours, BROKEN, or a copy");
+    ui.select("ghost");
+    assert!(!ui.frame().contains("zeta"));
+
+    skill(&h.join(".claude/skills"), "zeta", "", "Zeta body.");
+    let f = ui.wait("the new row", |f| f.contains("zeta"));
+    assert_eq!(view::selected(&f).as_deref(), Some("ghost"), "{f}");
+    ui.quit();
+}
+
 /// `agents ui` on a pseudo-terminal, driven one key at a time as a person
 /// drives it. The screen redraws every 100 ms, so each wait reads the last
 /// whole frame.
@@ -278,7 +298,7 @@ mod view {
         }
 
         /// The last frame drawn in full, without escape sequences.
-        fn frame(&self) -> String {
+        pub fn frame(&self) -> String {
             let out = String::from_utf8_lossy(&self.out.lock().unwrap()).into_owned();
             let mut frames: Vec<&str> = out.split("\x1b[H").collect();
             frames.pop();
@@ -286,7 +306,7 @@ mod view {
         }
 
         /// The first frame that `ok` accepts, within ten seconds.
-        fn wait(&self, what: &str, ok: impl Fn(&str) -> bool) -> String {
+        pub fn wait(&self, what: &str, ok: impl Fn(&str) -> bool) -> String {
             let end = Instant::now() + Duration::from_secs(10);
             loop {
                 let f = self.frame();
@@ -330,7 +350,7 @@ mod view {
     }
 
     /// The name on the row that starts with `>`.
-    fn selected(frame: &str) -> Option<String> {
+    pub fn selected(frame: &str) -> Option<String> {
         let row = frame.split("\r\n").find(|l| l.starts_with('>'))?;
         let name = row[1..].trim_start_matches('*').split_whitespace().next()?;
         Some(name.to_string())
