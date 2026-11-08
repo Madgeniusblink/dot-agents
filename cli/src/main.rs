@@ -18,6 +18,7 @@ mod scan;
 mod skills;
 mod status;
 mod tree;
+mod ui;
 mod version;
 mod wire;
 
