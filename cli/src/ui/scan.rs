@@ -279,6 +279,7 @@ fn cut(mut lines: Vec<String>, total: usize, width: usize) -> Vec<String> {
 mod tests {
     use super::*;
     use crate::config::Config;
+    use crate::home::tilde;
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::process::Command;
@@ -438,10 +439,11 @@ mod tests {
         assert_eq!(d[0], "team/app, 4 checkouts");
         let facts: Vec<&str> = d[1..].iter().map(|l| l.trim_start()).collect();
         assert_eq!(facts.len(), 4, "{d:#?}");
-        // Paths print in the system's form, so build each one with join.
-        let at = |parts: &[&str]| parts.iter().fold(root.clone(), |p, s| p.join(s));
+        // The report prints each path as `tilde` does: from `~` when it is
+        // under the user's home, as a Windows runner's temp dir is.
+        let at = |parts: &[&str]| tilde(&parts.iter().fold(root.clone(), |p, s| p.join(s)));
         let find = |parts: &[&str]| {
-            let prefix = format!("{} ", at(parts).display());
+            let prefix = format!("{} ", at(parts));
             facts
                 .iter()
                 .find(|f| f.starts_with(&prefix))
@@ -460,15 +462,12 @@ mod tests {
             find(&["b"])
         );
         assert!(
-            find(&["wt"]).contains(&format!(
-                "worktree of {}, branch side",
-                at(&["a"]).display()
-            )),
+            find(&["wt"]).contains(&format!("worktree of {}, branch side", at(&["a"]))),
             "{}",
             find(&["wt"])
         );
         assert!(
-            find(&["b", "sub"]).contains(&format!("submodule of {}, ", at(&["b"]).display())),
+            find(&["b", "sub"]).contains(&format!("submodule of {}, ", at(&["b"]))),
             "{}",
             find(&["b", "sub"])
         );
@@ -486,7 +485,7 @@ mod tests {
         assert!(lines[1].starts_with("> team/app"), "{lines:#?}");
         assert_eq!(lines[3], "team/app, 4 checkouts");
         assert!(
-            lines[4].contains(&format!("{}  clone,", root.join("a").display())),
+            lines[4].contains(&format!("{}  clone,", tilde(&root.join("a")))),
             "{lines:#?}"
         );
         // Seven lines: both rows, then two of four items and the count.

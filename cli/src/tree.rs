@@ -8,7 +8,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Build output and vendored trees, never a file anyone reads.
-const SKIP: &[&str] = &[
+pub const SKIP: &[&str] = &[
     ".git",
     "node_modules",
     "target",
