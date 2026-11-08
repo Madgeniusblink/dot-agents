@@ -18,6 +18,7 @@ mod scan;
 mod skills;
 mod status;
 mod tree;
+mod ui;
 mod version;
 mod wire;
 
@@ -50,6 +51,9 @@ enum Cmd {
         #[arg(long)]
         json: bool,
     },
+
+    /// A full-screen view of the reports. Unix only
+    Ui,
 
     /// The home, or any directory, as a tree: structure and sizes, not content
     Tree {
@@ -225,6 +229,7 @@ fn run() -> Result<ExitCode> {
             status::status(&Home::locate(cli.home)?, &cfg, long, json);
             Ok(ok)
         }
+        Cmd::Ui => ui::ui(cli.home, &cfg),
         Cmd::Tree { root, depth, all } => {
             let home = Home::locate(cli.home.clone()).ok();
             let root = match (root, &home) {

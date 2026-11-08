@@ -22,6 +22,11 @@ serde_json = "1"
 terminal_size = "0.4"
 walkdir = "2"
 
+# Raw mode for `agents ui`. Already in the tree through terminal_size, so no
+# crate is added (decision 0011).
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", features = ["termios"] }
+
 [dev-dependencies]
 tempfile = "3"
 

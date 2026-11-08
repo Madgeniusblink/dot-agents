@@ -333,7 +333,9 @@ fn report(home: &Home, cfg: &Config) {
 }
 
 /// The same facts the text shows, as data.
-fn data(home: &Home, cfg: &Config) -> Value {
+/// Every fact of the report as one object: what `--json` prints under the
+/// envelope, and what `agents ui` draws.
+pub fn data(home: &Home, cfg: &Config) -> Value {
     let git = home.git(&["rev-parse", "--is-inside-work-tree"]).map(|_| {
         let behind = home
             .git(&["rev-parse", "--verify", "-q", "upstream/main"])
@@ -387,6 +389,7 @@ fn data(home: &Home, cfg: &Config) -> Value {
                 "imports": {"home": r.mine, "elsewhere": r.foreign, "broken": r.broken},
                 "over_cap": r.over_cap.map(|(bytes, cap)| json!({"bytes": bytes, "cap": cap})),
                 "stale": r.stale,
+                "ours": !r.not_ours,
                 "own_rule_lines": r.own_rules,
                 "generator_lines": r.generator,
             })
