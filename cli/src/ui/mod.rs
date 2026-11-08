@@ -834,9 +834,11 @@ mod unix {
         cut(&bar, width)
     }
 
-    /// One tab of the tab bar, by number and name.
+    /// One tab of the tab bar, `1:Status` as tmux writes its windows. The
+    /// number is the key that opens it; a space between the two reads as a
+    /// count, "2 Skills".
     fn tab(i: usize, v: View) -> String {
-        format!(" {} {} ", i + 1, v.name())
+        format!(" {}:{} ", i + 1, v.name())
     }
 
     /// The keys the key bar shows: a send question, help, then the view's.
@@ -1301,7 +1303,7 @@ mod tests {
         }
         let bar = screen(&f, &[], 80, 3)[0].clone();
         for (i, v) in five.iter().enumerate() {
-            assert!(bar.contains(&format!(" {} {} ", i + 1, v.name())), "{bar}");
+            assert!(bar.contains(&format!(" {}:{} ", i + 1, v.name())), "{bar}");
         }
     }
 
@@ -1357,7 +1359,7 @@ mod tests {
         };
         let rows = screen(&f, &body, 50, 10);
         assert_eq!(rows.len(), 10);
-        assert!(rows[0].contains(" 1 Status "), "{}", rows[0]);
+        assert!(rows[0].contains(" 1:Status "), "{}", rows[0]);
         assert!(rows[0].contains("\x1b[7m"), "the open tab is inverted");
         assert!(rows[1].starts_with("line 3 "), "{}", rows[1]);
         assert!(
