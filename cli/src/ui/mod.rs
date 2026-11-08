@@ -320,8 +320,18 @@ mod unix {
                 .unwrap_or_else(|| frame.view.target(home));
                 match key {
                     Key::Copy => {
-                        out.write_all(act::copy(&tilde(&target)).as_bytes())?;
+                        let text = tilde(&target);
+                        out.write_all(act::copy(&text).as_bytes())?;
                         out.flush()?;
+                        // Terminal.app ignores OSC 52, so a clipboard command
+                        // does the copy too, and the note says which (#103).
+                        frame.note = match act::copy_with_tool(&text, None) {
+                            Ok(Some(tool)) => format!("copied with {tool}"),
+                            Ok(None) => {
+                                "copied through the terminal only: no pbcopy, wl-copy, xclip, or xsel on PATH".to_string()
+                            }
+                            Err(e) => format!("copy failed: {e}"),
+                        };
                         continue;
                     }
                     Key::Open => {
@@ -919,7 +929,7 @@ mod unix {
         "  g, G         top, bottom",
         "  esc          close this help",
         "  s            send the top line to an agent pane in tmux, after y",
-        "  c            copy the view's path; the terminal holds the copy",
+        "  c            copy the view's path, through the terminal and pbcopy or xclip",
         "  o            open the view's path in $EDITOR",
         "  R            read every view again now; a changed file does it in 2 s",
         "  click        a tab opens it, a row selects it, a key below runs it",
