@@ -24,7 +24,7 @@ pub enum Source {
     Project,
 }
 
-const SOURCES: [Source; 6] = [
+pub(crate) const SOURCES: [Source; 6] = [
     Source::Home,
     Source::User,
     Source::Codex,
@@ -40,7 +40,7 @@ impl Source {
     }
 
     /// Who may move it: the user, a tool or service, or the project.
-    fn scope(self) -> &'static str {
+    pub(crate) fn scope(self) -> &'static str {
         match self {
             Source::Project => "project",
             s if s.managed() => "managed",
@@ -60,7 +60,7 @@ impl Source {
         }
     }
 
-    fn label(self) -> &'static str {
+    pub(crate) fn label(self) -> &'static str {
         match self {
             Source::Home => "home",
             Source::User => "claude code, user skills",
@@ -794,7 +794,7 @@ fn refs(dir: &Path, body: &str) -> Refs {
 /// `metadata.source` names that skill, or its body is the same. An absolute
 /// source path that names no file is reported as missing. A URL or a
 /// repository-relative path needs its repository, so it is not checked.
-fn copy_note(s: &Skill, project: &[&Skill], root: Option<&Path>) -> Option<String> {
+pub(crate) fn copy_note(s: &Skill, project: &[&Skill], root: Option<&Path>) -> Option<String> {
     if s.source == Source::Project {
         return None;
     }
