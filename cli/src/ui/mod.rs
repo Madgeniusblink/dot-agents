@@ -8,20 +8,18 @@
 //! an editor, which writes only what the person saves. The frame owns the
 //! terminal, the tabs, and the keys; each view below draws its own lines.
 
+// Only the Unix frame draws the views; on Windows only their tests call them.
 #[cfg(unix)]
 pub mod act;
-// The tabs reach these views in later items of #82. Until then only their
-// tests call them.
-#[allow(dead_code)]
+#[cfg_attr(not(unix), allow(dead_code))]
 pub mod files;
-#[allow(dead_code)]
+#[cfg_attr(not(unix), allow(dead_code))]
 pub mod scan;
 #[cfg(unix)]
 pub mod send;
-// Only the Unix frame draws the Skills view.
 #[cfg_attr(not(unix), allow(dead_code))]
 pub mod skills;
-#[allow(dead_code)]
+#[cfg_attr(not(unix), allow(dead_code))]
 pub mod tree;
 
 /// On Windows the view does not compile: `rustix` termios is Unix only.
@@ -45,7 +43,9 @@ mod unix {
     use crate::home::{tilde, Home};
     use crate::out::{self, State};
     use crate::status;
-    use crate::ui::skills;
+    use crate::ui::files::FilesView;
+    use crate::ui::tree::TreeView;
+    use crate::ui::{scan, skills};
     use anyhow::Result;
     use rustix::termios::{self, OptionalActions, SpecialCodeIndex, Termios};
     use serde_json::Value;
@@ -157,9 +157,13 @@ mod unix {
     }
 
     /// The loop: draw, wait for a key, apply it, until `q`. The outer loop
-    /// reads the skills again after a plan ran.
+    /// reads the skills and the files again after a plan ran.
     fn run<T: Term>(term: &mut T, home: &Home, cfg: &Config) -> Result<()> {
         let root = crate::skills::project_root();
+        let roots = match cfg.roots() {
+            r if r.is_empty() => vec![crate::home::user_home()],
+            r => r,
+        };
         let tmux = Tmux::from_env();
         let mut frame = Frame::default();
         let mut stdin = io::stdin().lock();
@@ -167,15 +171,33 @@ mod unix {
         loop {
             let found = crate::skills::find(Some(home));
             let mut list = skills::View::new(&found, root.as_deref());
+            let mut files = FilesView::load(&home.dir, false, Some(home));
+            let mut tree = TreeView::load(&home.dir, 4, false, Some(home));
+            // A scan walks every root, so it runs when the tab first opens.
+            let mut groups: Option<scan::View> = None;
             let mut body = frame.view.lines(home, cfg);
             let mut pending: Option<skills::Pending> = None;
             loop {
                 let (width, height) = size();
                 let rows = height.saturating_sub(2);
+                if frame.view == View::Scan && groups.is_none() {
+                    let wait = [format!("scanning {} …", tilde(&roots[0]))];
+                    draw(&mut out, &screen_with(&frame, &wait, None, width, height))?;
+                    let report = crate::scan::report(&roots, false, Some(home), cfg);
+                    groups = Some(scan::View::new(&report));
+                }
                 let (shown, keys) = match (&pending, frame.view) {
                     (Some(p), _) if p.done => (p.lines.clone(), Some(DONE_KEYS)),
                     (Some(p), _) => (p.lines.clone(), Some(PLAN_KEYS)),
                     (None, View::Skills) => (list.render(width, rows), Some(SKILLS_KEYS)),
+                    (None, View::Scan) => (
+                        groups
+                            .as_ref()
+                            .map_or_else(Vec::new, |g| g.render(width, rows)),
+                        Some(SCAN_KEYS),
+                    ),
+                    (None, View::Files) => (files.render(width, rows), Some(FILES_KEYS)),
+                    (None, View::Tree) => (tree.render(width, rows), Some(TREE_KEYS)),
                     (None, View::Status) => (body.clone(), None),
                 };
                 draw(&mut out, &screen_with(&frame, &shown, keys, width, height))?;
@@ -223,12 +245,39 @@ mod unix {
                     ) {
                         continue;
                     }
+                } else if pending.is_none() && !frame.help {
+                    match (frame.view, key, groups.as_mut()) {
+                        (View::Scan, Key::Down, Some(g)) => g.down(),
+                        (View::Scan, Key::Up, Some(g)) => g.up(),
+                        (View::Scan, Key::Filter, Some(g)) => {
+                            g.next_filter();
+                            frame.note = format!("filter: {:?}", g.filter()).to_lowercase();
+                        }
+                        (View::Files, Key::Down, _) => files.down(),
+                        (View::Files, Key::Up, _) => files.up(),
+                        (View::Files, Key::Enter, _) => files.enter(),
+                        (View::Files, Key::Back, _) => files.parent(),
+                        (View::Tree, Key::Down, _) => tree.down(),
+                        (View::Tree, Key::Up, _) => tree.up(),
+                        _ => {}
+                    }
+                    if matches!(
+                        (frame.view, key),
+                        (View::Scan, Key::Down | Key::Up | Key::Filter)
+                            | (View::Files, Key::Down | Key::Up | Key::Enter | Key::Back)
+                            | (View::Tree, Key::Down | Key::Up)
+                    ) {
+                        continue;
+                    }
                 }
-                // On the Skills list, `c` and `o` take the selected skill.
-                let target = match (frame.view, &pending, list.selected()) {
-                    (View::Skills, None, Some(s)) => s.dir.clone(),
-                    _ => frame.view.target(home),
-                };
+                // On a list, `c` and `o` take the selected row.
+                let target = match (frame.view, &pending) {
+                    (View::Skills, None) => list.selected().map(|s| s.dir.clone()),
+                    (View::Files, None) => files.selected().map(|n| n.path.clone()),
+                    (View::Tree, None) => tree.selected().map(|n| n.path.clone()),
+                    _ => None,
+                }
+                .unwrap_or_else(|| frame.view.target(home));
                 match key {
                     Key::Copy => {
                         out.write_all(act::copy(&tilde(&target)).as_bytes())?;
@@ -302,6 +351,11 @@ mod unix {
         Yes,
         Copy,
         Open,
+        /// The Scan view: the next kind. The Files view: into a directory
+        /// and back up.
+        Filter,
+        Enter,
+        Back,
         Other,
     }
 
@@ -329,6 +383,9 @@ mod unix {
             b"y" => Key::Yes,
             b"c" => Key::Copy,
             b"o" => Key::Open,
+            b"f" => Key::Filter,
+            b"\r" | b"\n" => Key::Enter,
+            b"\x7f" | b"\x08" => Key::Back,
             _ => Key::Other,
         })
     }
@@ -338,23 +395,36 @@ mod unix {
     pub(super) enum View {
         Status,
         Skills,
+        Scan,
+        Files,
+        Tree,
     }
 
     impl View {
-        pub(super) const ALL: [View; 2] = [View::Status, View::Skills];
+        pub(super) const ALL: [View; 5] = [
+            View::Status,
+            View::Skills,
+            View::Scan,
+            View::Files,
+            View::Tree,
+        ];
 
         pub(super) fn name(self) -> &'static str {
             match self {
                 View::Status => "Status",
                 View::Skills => "Skills",
+                View::Scan => "Scan",
+                View::Files => "Files",
+                View::Tree => "Tree",
             }
         }
 
-        /// The path `c` copies and `o` opens. Status reports on the home.
+        /// The path `c` copies and `o` opens when no row is selected. Status
+        /// reports on the home, and Files and Tree open on it.
         pub(super) fn target(self, home: &Home) -> PathBuf {
             match self {
-                View::Status => home.dir.clone(),
                 View::Skills => home.dir.join("skills"),
+                View::Status | View::Scan | View::Files | View::Tree => home.dir.clone(),
             }
         }
 
@@ -366,8 +436,8 @@ mod unix {
                     Some(&home.dir),
                     status::data(home, cfg),
                 )),
-                // The Skills view keeps a selection, so the loop draws it.
-                View::Skills => Vec::new(),
+                // These views keep a selection, so the loop draws them.
+                View::Skills | View::Scan | View::Files | View::Tree => Vec::new(),
             }
         }
     }
@@ -499,6 +569,9 @@ mod unix {
                 | Key::Yes
                 | Key::Copy
                 | Key::Open
+                | Key::Filter
+                | Key::Enter
+                | Key::Back
                 | Key::Other => {}
             }
             true
@@ -623,6 +696,31 @@ mod unix {
         ("q", "quit"),
         ("s", "send"),
     ];
+    const SCAN_KEYS: &[(&str, &str)] = &[
+        ("?", "help"),
+        ("j/k", "select"),
+        ("f", "filter"),
+        ("tab", "view"),
+        ("q", "quit"),
+        ("s", "send"),
+    ];
+    const FILES_KEYS: &[(&str, &str)] = &[
+        ("?", "help"),
+        ("j/k", "select"),
+        ("enter", "open dir"),
+        ("bksp", "up"),
+        ("c/o", "copy/open"),
+        ("tab", "view"),
+        ("q", "quit"),
+    ];
+    const TREE_KEYS: &[(&str, &str)] = &[
+        ("?", "help"),
+        ("j/k", "select"),
+        ("c/o", "copy/open"),
+        ("tab", "view"),
+        ("q", "quit"),
+        ("s", "send"),
+    ];
     const PLAN_KEYS: &[(&str, &str)] = &[
         ("A", "apply"),
         ("esc", "cancel"),
@@ -631,7 +729,7 @@ mod unix {
     ];
     const DONE_KEYS: &[(&str, &str)] = &[("esc", "back"), ("j/k", "scroll"), ("q", "quit")];
 
-    const HELP: [&str; 25] = [
+    const HELP: [&str; 34] = [
         "Keys",
         "",
         "  ?            this help; again to close",
@@ -652,6 +750,15 @@ mod unix {
         "  K            plan agents skills keep for the marked, else the selected",
         "  A            apply the plan shown, as --apply does; esc cancels it",
         "  c, o         copy or open the selected skill's directory",
+        "",
+        "Scan",
+        "  j, k         select a checkout group; its checkouts show below",
+        "  f            filter by the next kind: clone, worktree, submodule",
+        "",
+        "Files and Tree",
+        "  j, k         select an entry; its preview shows at the right",
+        "  enter, bksp  Files: into the selected directory, back up",
+        "  c, o         copy or open the selected path",
         "",
         "Each view reads what its command prints with --json, so the view and",
         "the report say the same thing. Each path is a link in a terminal that",
@@ -970,12 +1077,48 @@ mod tests {
     }
 
     #[test]
+    fn t2_tab_cycle_reaches_all_five_views_by_tab_and_by_number() {
+        let five = [
+            View::Status,
+            View::Skills,
+            View::Scan,
+            View::Files,
+            View::Tree,
+        ];
+        let mut f = Frame::default();
+        let mut seen = vec![f.view];
+        for _ in 0..5 {
+            f.press(Key::Next, 10, 5);
+            seen.push(f.view);
+        }
+        assert_eq!(
+            seen,
+            [&five[..], &five[..1]].concat(),
+            "tab wraps to Status"
+        );
+        for want in five.iter().rev() {
+            f.press(Key::Prev, 10, 5);
+            assert_eq!(f.view, *want);
+        }
+        for (i, want) in five.iter().enumerate() {
+            f.press(key(&[b'1' + i as u8]).unwrap(), 10, 5);
+            assert_eq!(f.view, *want);
+        }
+        let bar = screen(&f, &[], 80, 3)[0].clone();
+        for (i, v) in five.iter().enumerate() {
+            assert!(bar.contains(&format!(" {} {} ", i + 1, v.name())), "{bar}");
+        }
+    }
+
+    #[test]
     fn t2_tabs_cycle_and_scroll_stays_in_the_body() {
         let mut f = Frame::default();
         for (k, view) in [
             (Key::Next, View::Skills),
-            (Key::Next, View::Status),
+            (Key::Next, View::Scan),
             (Key::Prev, View::Skills),
+            (Key::Prev, View::Status),
+            (Key::Prev, View::Tree),
             (Key::View(0), View::Status),
             (Key::View(1), View::Skills),
             (Key::View(8), View::Skills),
