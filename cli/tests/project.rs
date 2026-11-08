@@ -336,19 +336,31 @@ mod view {
         Some(name.to_string())
     }
 
-    /// `s` without its CSI sequences.
+    /// `s` without its CSI and OSC sequences. An OSC ends in BEL or ESC `\`.
     fn strip(s: &str) -> String {
         let mut text = String::new();
         let mut chars = s.chars();
         while let Some(c) = chars.next() {
             if c != '\x1b' {
                 text.push(c);
-            } else if chars.next() == Some('[') {
-                for c in chars.by_ref() {
-                    if ('\x40'..='\x7e').contains(&c) {
-                        break;
+                continue;
+            }
+            match chars.next() {
+                Some('[') => {
+                    for c in chars.by_ref() {
+                        if ('\x40'..='\x7e').contains(&c) {
+                            break;
+                        }
                     }
                 }
+                Some(']') => {
+                    while let Some(c) = chars.next() {
+                        if c == '\x07' || (c == '\x1b' && chars.next() == Some('\\')) {
+                            break;
+                        }
+                    }
+                }
+                _ => {}
             }
         }
         text

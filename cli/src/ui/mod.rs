@@ -4,15 +4,20 @@
 //! the drawing is ANSI written here, so no crate is added (decision 0011).
 //! The view writes a file only through a `Plan` from `cli/src/plan.rs`: the
 //! Skills view shows the plan of `skills keep` or `skills remove`, and `A`
-//! runs it as `--apply` does. The frame owns the terminal, the tabs, and the
-//! keys; each view below draws its own lines.
+//! runs it as `--apply` does. `c` copies through the terminal and `o` opens
+//! an editor, which writes only what the person saves. The frame owns the
+//! terminal, the tabs, and the keys; each view below draws its own lines.
 
+#[cfg(unix)]
+pub mod act;
 // The tabs reach these views in later items of #82. Until then only their
 // tests call them.
 #[allow(dead_code)]
 pub mod files;
 #[allow(dead_code)]
 pub mod scan;
+#[cfg(unix)]
+pub mod send;
 // Only the Unix frame draws the Skills view.
 #[cfg_attr(not(unix), allow(dead_code))]
 pub mod skills;
@@ -34,8 +39,10 @@ pub use unix::ui;
 
 #[cfg(unix)]
 mod unix {
+    use super::act;
+    use super::send::{Pane, Tmux};
     use crate::config::Config;
-    use crate::home::Home;
+    use crate::home::{tilde, Home};
     use crate::out::{self, State};
     use crate::status;
     use crate::ui::skills;
@@ -45,8 +52,8 @@ mod unix {
     use std::io::{self, Read, Write};
     use std::panic::{self, AssertUnwindSafe};
     use std::path::PathBuf;
-    use std::process::ExitCode;
-    use std::sync::{Mutex, PoisonError};
+    use std::process::{Command, ExitCode};
+    use std::sync::{Mutex, Once, PoisonError};
 
     /// The alternate screen, with the cursor hidden.
     const ENTER: &str = "\x1b[?1049h\x1b[?25l";
@@ -55,6 +62,8 @@ mod unix {
     /// Reverse video, and the end of every attribute.
     const INVERT: &str = "\x1b[7m";
     const RESET: &str = "\x1b[0m";
+    /// The end of an OSC 8 link.
+    const LINK_END: &str = "\x1b]8;;\x1b\\";
 
     /// Open the view, or print one line and exit 1 when there is no terminal.
     pub fn ui(home: Option<PathBuf>, cfg: &Config) -> Result<ExitCode> {
@@ -64,7 +73,7 @@ mod unix {
         }
         let home = Home::locate(home)?;
         let mut tty = Tty;
-        guarded(&mut tty, |_| run(&home, cfg))??;
+        guarded(&mut tty, |t| run(t, &home, cfg))??;
         Ok(ExitCode::SUCCESS)
     }
 
@@ -86,8 +95,19 @@ mod unix {
         }
     }
 
+    /// `cmd` on the main screen with line discipline on, then the view
+    /// again. The person's own editor needs the terminal as it was.
+    pub(super) fn open<T: Term>(term: &mut T, mut cmd: Command) -> io::Result<()> {
+        term.leave();
+        let status = cmd.status();
+        term.enter()?;
+        status.map(drop)
+    }
+
     /// The settings the terminal had before `enter`. `None` once restored.
     static SAVED: Mutex<Option<Termios>> = Mutex::new(None);
+    /// `enter` runs again after `o`; the panic hook goes in once.
+    static HOOK: Once = Once::new();
 
     /// The real terminal: raw mode on stdin, the alternate screen on stdout.
     struct Tty;
@@ -119,11 +139,13 @@ mod unix {
             termios::tcsetattr(&stdin, OptionalActions::Flush, &raw)?;
             // Restore before the panic message prints, so it lands on the
             // main screen with line discipline on.
-            let previous = panic::take_hook();
-            panic::set_hook(Box::new(move |info| {
-                Tty::restore();
-                previous(info);
-            }));
+            HOOK.call_once(|| {
+                let previous = panic::take_hook();
+                panic::set_hook(Box::new(move |info| {
+                    Tty::restore();
+                    previous(info);
+                }));
+            });
             let mut out = io::stdout().lock();
             out.write_all(ENTER.as_bytes())?;
             out.flush()
@@ -136,8 +158,9 @@ mod unix {
 
     /// The loop: draw, wait for a key, apply it, until `q`. The outer loop
     /// reads the skills again after a plan ran.
-    fn run(home: &Home, cfg: &Config) -> Result<()> {
+    fn run<T: Term>(term: &mut T, home: &Home, cfg: &Config) -> Result<()> {
         let root = crate::skills::project_root();
+        let tmux = Tmux::from_env();
         let mut frame = Frame::default();
         let mut stdin = io::stdin().lock();
         let mut out = io::stdout().lock();
@@ -159,6 +182,10 @@ mod unix {
                 let mut buf = [0u8; 16];
                 let n = stdin.read(&mut buf)?;
                 let Some(key) = key(&buf[..n]) else { continue };
+                if sending(&mut frame, key, &shown, &tmux) {
+                    continue;
+                }
+                frame.note.clear();
                 if let Some(p) = pending.as_mut().filter(|_| !frame.help) {
                     match key {
                         Key::Apply if !p.done => {
@@ -196,6 +223,24 @@ mod unix {
                     ) {
                         continue;
                     }
+                }
+                // On the Skills list, `c` and `o` take the selected skill.
+                let target = match (frame.view, &pending, list.selected()) {
+                    (View::Skills, None, Some(s)) => s.dir.clone(),
+                    _ => frame.view.target(home),
+                };
+                match key {
+                    Key::Copy => {
+                        out.write_all(act::copy(&tilde(&target)).as_bytes())?;
+                        out.flush()?;
+                        continue;
+                    }
+                    Key::Open => {
+                        let editor = std::env::var("EDITOR").ok();
+                        open(term, act::editor(editor.as_deref(), &target))?;
+                        continue;
+                    }
+                    _ => {}
                 }
                 let before = frame.view;
                 if !frame.press(key, shown.len(), rows) {
@@ -253,6 +298,10 @@ mod unix {
         Remove,
         Keep,
         Apply,
+        Send,
+        Yes,
+        Copy,
+        Open,
         Other,
     }
 
@@ -276,6 +325,10 @@ mod unix {
             b"r" => Key::Remove,
             b"K" => Key::Keep,
             b"A" => Key::Apply,
+            b"s" => Key::Send,
+            b"y" => Key::Yes,
+            b"c" => Key::Copy,
+            b"o" => Key::Open,
             _ => Key::Other,
         })
     }
@@ -297,6 +350,14 @@ mod unix {
             }
         }
 
+        /// The path `c` copies and `o` opens. Status reports on the home.
+        pub(super) fn target(self, home: &Home) -> PathBuf {
+            match self {
+                View::Status => home.dir.clone(),
+                View::Skills => home.dir.join("skills"),
+            }
+        }
+
         /// The body, read fresh each time the view is opened.
         fn lines(self, home: &Home, cfg: &Config) -> Vec<String> {
             match self {
@@ -311,12 +372,22 @@ mod unix {
         }
     }
 
-    /// Which tab shows, whether help covers it, and the first body row.
+    /// Text the person must confirm before it goes to `pane`.
+    #[derive(Debug)]
+    pub(super) struct Ask {
+        pub(super) text: String,
+        pub(super) pane: Pane,
+    }
+
+    /// Which tab shows, whether help covers it, the first body row, a send
+    /// that waits for its answer, and the result of the last action.
     #[derive(Debug)]
     pub(super) struct Frame {
         pub(super) view: View,
         pub(super) help: bool,
         pub(super) top: usize,
+        pub(super) ask: Option<Ask>,
+        pub(super) note: String,
     }
 
     impl Default for Frame {
@@ -325,8 +396,77 @@ mod unix {
                 view: View::Status,
                 help: false,
                 top: 0,
+                ask: None,
+                note: String::new(),
             }
         }
+    }
+
+    /// `s` and its answer; `false` when the key is not theirs. `s` shows the
+    /// top body line and the first agent pane. Only `y` then sends it; any
+    /// other key cancels.
+    pub(super) fn sending(frame: &mut Frame, key: Key, body: &[String], tmux: &Tmux) -> bool {
+        if let Some(ask) = frame.ask.take() {
+            frame.note = match key {
+                Key::Yes => match tmux.send(&ask.pane, &ask.text) {
+                    Ok(()) => format!("sent to the {} pane {}", ask.pane.label, ask.pane.id),
+                    Err(e) => format!("not sent: {e}"),
+                },
+                _ => "not sent".to_string(),
+            };
+            return true;
+        }
+        if key != Key::Send || frame.help {
+            return false;
+        }
+        let text = body
+            .get(frame.top)
+            .map(|l| plain(l).trim().to_string())
+            .unwrap_or_default();
+        frame.note.clear();
+        if text.is_empty() {
+            frame.note = "nothing to send on the top line".to_string();
+        } else if let Some(pane) = tmux.panes().into_iter().next() {
+            frame.ask = Some(Ask { text, pane });
+        } else {
+            frame.note = "no agent pane in tmux".to_string();
+        }
+        true
+    }
+
+    /// `s` with every escape sequence taken out.
+    fn plain(s: &str) -> String {
+        let mut text = String::new();
+        let mut esc = false;
+        for c in s.chars() {
+            if esc {
+                esc = c != 'm';
+            } else if c == '\x1b' {
+                esc = true;
+            } else {
+                text.push(c);
+            }
+        }
+        text
+    }
+
+    /// The rows that ask before a send: the pane, then the whole text,
+    /// wrapped and never cut, so the person sees all of what goes.
+    fn ask_lines(ask: &Ask, width: usize) -> Vec<String> {
+        let mut lines = vec![
+            format!(
+                "Send this text to the {} pane {}?",
+                ask.pane.label, ask.pane.id
+            ),
+            String::new(),
+        ];
+        let chars: Vec<char> = ask.text.chars().collect();
+        for chunk in chars.chunks(width.saturating_sub(2).max(1)) {
+            lines.push(format!("  {}", chunk.iter().collect::<String>()));
+        }
+        lines.push(String::new());
+        lines.push("It is typed with no Enter. y sends it; any other key cancels.".to_string());
+        lines
     }
 
     impl Frame {
@@ -351,7 +491,15 @@ mod unix {
                 Key::PageUp => self.top = self.top.saturating_sub(rows),
                 Key::Top => self.top = 0,
                 Key::Bottom => self.top = last,
-                Key::Mark | Key::Remove | Key::Keep | Key::Apply | Key::Other => {}
+                Key::Mark
+                | Key::Remove
+                | Key::Keep
+                | Key::Apply
+                | Key::Send
+                | Key::Yes
+                | Key::Copy
+                | Key::Open
+                | Key::Other => {}
             }
             true
         }
@@ -392,7 +540,10 @@ mod unix {
         if height > 2 {
             let room = height - 2;
             let help = HELP.iter().map(|l| l.to_string()).collect::<Vec<_>>();
-            let (lines, top) = if frame.help {
+            let asking = frame.ask.as_ref().map(|a| ask_lines(a, width));
+            let (lines, top) = if let Some(a) = &asking {
+                (&a[..], 0)
+            } else if frame.help {
                 (&help[..], 0)
             } else {
                 (body, frame.top.min(body.len().saturating_sub(room)))
@@ -407,8 +558,7 @@ mod unix {
             }
         }
         if height > 1 {
-            let keys = if frame.help { None } else { keys };
-            rows.push(key_bar(keys, frame.help, width));
+            rows.push(key_bar(frame, keys, width));
         }
         rows
     }
@@ -435,24 +585,31 @@ mod unix {
     }
 
     /// The keys a person needs next, each key in reverse video.
-    fn key_bar(keys: Option<&[(&str, &str)]>, help: bool, width: usize) -> String {
-        let keys: &[(&str, &str)] = if let Some(keys) = keys {
-            keys
-        } else if help {
+    fn key_bar(frame: &Frame, keys: Option<&[(&str, &str)]>, width: usize) -> String {
+        let keys: &[(&str, &str)] = if frame.ask.is_some() {
+            &[("y", "send"), ("any key", "cancel")]
+        } else if frame.help {
             &[("esc", "close"), ("q", "quit")]
+        } else if let Some(keys) = keys {
+            keys
         } else {
             &[
                 ("?", "help"),
                 ("j/k", "scroll"),
                 ("tab", "view"),
                 ("q", "quit"),
+                ("s", "send"),
             ]
         };
-        let bar = keys
+        let mut bar = keys
             .iter()
             .map(|(k, what)| format!("{INVERT} {k} {RESET} {what}"))
             .collect::<Vec<_>>()
             .join("  ");
+        // The result of the last action comes first, so a narrow bar keeps it.
+        if !frame.note.is_empty() {
+            bar = format!("{}  {bar}", frame.note);
+        }
         cut(&bar, width)
     }
 
@@ -464,6 +621,7 @@ mod unix {
         ("K", "keep only"),
         ("tab", "view"),
         ("q", "quit"),
+        ("s", "send"),
     ];
     const PLAN_KEYS: &[(&str, &str)] = &[
         ("A", "apply"),
@@ -473,7 +631,7 @@ mod unix {
     ];
     const DONE_KEYS: &[(&str, &str)] = &[("esc", "back"), ("j/k", "scroll"), ("q", "quit")];
 
-    const HELP: [&str; 20] = [
+    const HELP: [&str; 25] = [
         "Keys",
         "",
         "  ?            this help; again to close",
@@ -484,16 +642,21 @@ mod unix {
         "  space, b     one page down, up",
         "  g, G         top, bottom",
         "  esc          close this help",
+        "  s            send the top line to an agent pane in tmux, after y",
+        "  c            copy the view's path; the terminal holds the copy",
+        "  o            open the view's path in $EDITOR",
         "",
         "Skills",
         "  m            mark the selected skill, or unmark it",
         "  r            plan agents skills remove for the marked, else the selected",
         "  K            plan agents skills keep for the marked, else the selected",
         "  A            apply the plan shown, as --apply does; esc cancels it",
+        "  c, o         copy or open the selected skill's directory",
         "",
         "Each view reads what its command prints with --json, so the view and",
-        "the report say the same thing. The view writes a file only after A,",
-        "through the same plan the command prints. Files move to ~/.agents-reset/.",
+        "the report say the same thing. Each path is a link in a terminal that",
+        "shows links. The view writes a file only after A, through the same",
+        "plan the command prints. Files move to ~/.agents-reset/.",
     ];
 
     /// `s` in at most `width` visible characters. Escape sequences take no
@@ -507,22 +670,30 @@ mod unix {
         }
         let mut text = String::new();
         let mut shown = 0;
-        let mut esc = false;
-        for c in s.chars() {
-            if esc {
-                text.push(c);
-                esc = c != 'm';
-            } else if c == '\x1b' {
-                text.push(c);
-                esc = true;
+        let mut link = false;
+        let mut rest = s;
+        while let Some(c) = rest.chars().next() {
+            if c == '\x1b' {
+                let (esc, after) = rest.split_at(out::escape_len(rest));
+                if let Some(body) = esc.strip_prefix("\x1b]8;") {
+                    // An empty URI ends a link; any other opens one.
+                    let body = body.trim_end_matches(['\x07', '\\']);
+                    link = !body.trim_end_matches('\x1b').ends_with(';');
+                }
+                text.push_str(esc);
+                rest = after;
             } else if shown + 1 < width {
                 text.push(c);
                 shown += 1;
+                rest = &rest[c.len_utf8()..];
             } else {
                 break;
             }
         }
         text.push('…');
+        if link {
+            text.push_str(LINK_END);
+        }
         text.push_str(RESET);
         text
     }
@@ -540,13 +711,14 @@ mod unix {
     pub(super) fn status_lines(doc: &Value) -> Vec<String> {
         let mut lines = Vec::new();
         let config = &doc["config"];
+        let path = act::link_shown(s(config, "path"));
         let file = if config["exists"].as_bool() == Some(true) {
-            s(config, "path").to_string()
+            path
         } else {
-            format!("{} (no file, so defaults)", s(config, "path"))
+            format!("{path} (no file, so defaults)")
         };
         lines.push(format!("machine: {}, config: {file}", s(doc, "machine")));
-        let mut home = format!("home: {}", s(doc, "home"));
+        let mut home = format!("home: {}", act::link_shown(s(doc, "home")));
         match &doc["git"] {
             Value::Null => home.push_str(", NOT a git checkout"),
             git => {
@@ -598,7 +770,7 @@ mod unix {
                 Some(t) => format!(", a link to {t}"),
                 None => String::new(),
             };
-            lines.push(format!("  {}{link}", s(h, "path")));
+            lines.push(format!("  {}{link}", act::link_shown(s(h, "path"))));
             if h["exists"].as_bool() == Some(true) {
                 let imports = &h["imports"];
                 let broken = imports["broken"].as_array().map(Vec::len).unwrap_or(0);
@@ -644,7 +816,7 @@ mod unix {
         }
 
         if let Some(hooks) = doc["hooks"].as_object() {
-            let settings = hooks["settings"].as_str().unwrap_or_default();
+            let settings = act::link_shown(hooks["settings"].as_str().unwrap_or_default());
             if hooks["valid_json"].as_bool() == Some(true) {
                 let missing = hooks["missing_paths"]
                     .as_array()
@@ -683,7 +855,11 @@ mod unix {
             } else {
                 out::state(State::Ok)
             };
-            lines.push(format!("  {state} {} -> {}", s(l, "path"), s(l, "target")));
+            lines.push(format!(
+                "  {state} {} -> {}",
+                act::link_shown(s(l, "path")),
+                act::link_shown(s(l, "target"))
+            ));
         }
         lines
     }
@@ -713,14 +889,13 @@ mod tests {
     /// the test runs on, and the facts are in the words.
     fn words(s: &str) -> String {
         let mut text = String::new();
-        let mut esc = false;
-        for c in s.chars() {
-            if esc {
-                esc = c != 'm';
-            } else if c == '\x1b' {
-                esc = true;
+        let mut rest = s;
+        while let Some(c) = rest.chars().next() {
+            if c == '\x1b' {
+                rest = &rest[crate::out::escape_len(rest)..];
             } else {
                 text.push(c);
+                rest = &rest[c.len_utf8()..];
             }
         }
         ["✓ ", "✗ ", "! ", "= ", "≠ "]
@@ -840,6 +1015,7 @@ mod tests {
             view: View::Status,
             help: false,
             top: 3,
+            ..Frame::default()
         };
         let rows = screen(&f, &body, 50, 10);
         assert_eq!(rows.len(), 10);
@@ -869,12 +1045,180 @@ mod tests {
         assert_eq!(screen(&f, &body, 80, 0).len(), 0);
     }
 
+    /// A fake `tmux` alone on `PATH`. It logs each call, one bracket per
+    /// argument, and lists four panes: a shell, two agent tools, an editor.
+    fn fake_tmux() -> (tempfile::TempDir, std::path::PathBuf, super::send::Tmux) {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let log = dir.path().join("log");
+        let bin = dir.path().join("tmux");
+        let script = format!(
+            "#!/bin/sh\n\
+             for a in \"$@\"; do printf '[%s]' \"$a\"; done >> '{log}'\n\
+             echo >> '{log}'\n\
+             case \"$1\" in list-panes) printf '%%1\\tzsh\\n%%2\\tclaude\\n%%3\\tcodex\\n%%4\\tvim\\n';; esac\n",
+            log = log.display()
+        );
+        std::fs::write(&bin, script).unwrap();
+        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let tmux = super::send::Tmux {
+            path: Some(dir.path().into()),
+            here: Some("%2".to_string()),
+        };
+        (dir, log, tmux)
+    }
+
+    fn calls(log: &std::path::Path) -> String {
+        std::fs::read_to_string(log).unwrap_or_default()
+    }
+
+    #[test]
+    fn t7_s_shows_the_text_and_sends_it_to_the_pane_only_after_y() {
+        let (_dir, log, tmux) = fake_tmux();
+        let body = vec!["\x1b[32m-n review\x1b[0m this file ".to_string()];
+        let mut f = Frame::default();
+        assert_eq!(key(b"s"), Some(Key::Send));
+        assert_eq!(key(b"y"), Some(Key::Yes));
+
+        // The own pane %2 is skipped; %3 runs an agent tool, labelled by harness.rs.
+        assert!(sending(&mut f, Key::Send, &body, &tmux));
+        let ask = f.ask.as_ref().expect("s asks before it sends");
+        assert_eq!((ask.pane.id.as_str(), ask.pane.label), ("%3", "codex"));
+        let rows = screen(&f, &body, 80, 12);
+        let shown = rows.join("\n");
+        assert!(
+            shown.contains("Send this text to the codex pane %3?"),
+            "{shown}"
+        );
+        assert!(shown.contains("  -n review this file"), "{shown}");
+        assert!(rows[11].contains("y \x1b[0m send"), "{}", rows[11]);
+        assert!(!calls(&log).contains("send-keys"), "nothing goes before y");
+
+        // Any other key cancels.
+        assert!(sending(&mut f, Key::Other, &body, &tmux));
+        assert!(f.ask.is_none());
+        assert_eq!(f.note, "not sent");
+        assert!(!calls(&log).contains("send-keys"));
+
+        // y sends the shown text, literal, with no Enter.
+        assert!(sending(&mut f, Key::Send, &body, &tmux));
+        assert!(sending(&mut f, Key::Yes, &body, &tmux));
+        assert_eq!(f.note, "sent to the codex pane %3");
+        let log_text = calls(&log);
+        let sent: Vec<&str> = log_text
+            .lines()
+            .filter(|l| l.starts_with("[send-keys]"))
+            .collect();
+        assert_eq!(sent, ["[send-keys][-t][%3][-l][--][-n review this file]"]);
+        assert!(screen(&f, &body, 80, 12)[11].contains("sent to the codex pane %3"));
+    }
+
+    #[test]
+    fn t7_s_with_no_agent_pane_or_no_tmux_sends_nothing() {
+        let (dir, log, mut tmux) = fake_tmux();
+        let body = vec!["text".to_string()];
+        let mut f = Frame::default();
+        tmux.here = Some("%3".to_string());
+        assert_eq!(tmux.panes()[0].label, "claude code");
+        tmux.path = Some(dir.path().join("empty").into());
+        assert!(sending(&mut f, Key::Send, &body, &tmux));
+        assert!(f.ask.is_none());
+        assert_eq!(f.note, "no agent pane in tmux");
+        assert!(
+            !sending(&mut f, Key::Down, &body, &tmux),
+            "other keys go to the frame"
+        );
+        assert!(sending(&mut f, Key::Send, &[String::new()], &tmux));
+        assert_eq!(f.note, "nothing to send on the top line");
+        assert!(!calls(&log).contains("send-keys"));
+    }
+
     #[test]
     fn t2_cut_keeps_escapes_and_ends_in_a_reset() {
         assert_eq!(cut("abc", 3), "abc");
         assert_eq!(cut("abcdef", 4), "abc…\x1b[0m");
         assert_eq!(cut("\x1b[32mabcdef\x1b[0m", 4), "\x1b[32mabc…\x1b[0m");
         assert_eq!(cut("abc", 0), "");
+    }
+
+    #[test]
+    fn t6_c_and_o_are_keys_that_leave_the_frame_as_it_was() {
+        assert_eq!(key(b"c"), Some(Key::Copy));
+        assert_eq!(key(b"o"), Some(Key::Open));
+        let mut f = Frame {
+            top: 2,
+            ..Frame::default()
+        };
+        assert!(f.press(Key::Copy, 10, 5) && f.press(Key::Open, 10, 5));
+        assert_eq!((f.view, f.help, f.top), (View::Status, false, 2));
+        let home = crate::home::Home {
+            dir: std::path::PathBuf::from("/h/.agents"),
+        };
+        assert_eq!(View::Status.target(&home), home.dir);
+    }
+
+    #[test]
+    fn t6_o_runs_the_editor_outside_raw_mode_then_the_view_comes_back() {
+        use std::os::unix::fs::PermissionsExt;
+        let t = tempfile::tempdir().unwrap();
+        let script = t.path().join("ed");
+        std::fs::write(&script, "#!/bin/sh\nprintf %s \"$1\" > \"$SEEN\"\n").unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let seen = t.path().join("seen");
+        let target = t.path().join("a file.md");
+        let mut cmd = super::act::editor(Some(script.to_str().unwrap()), &target);
+        cmd.env("SEEN", &seen);
+        let mut fake = Fake::default();
+        fake.enter().unwrap();
+        open(&mut fake, cmd).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&seen).unwrap(),
+            target.to_str().unwrap()
+        );
+        assert!(fake.raw, "the view is back in raw mode");
+        assert_eq!((fake.entered, fake.left), (2, 1));
+        let missing = super::act::editor(Some("/no/such/editor"), &target);
+        open(&mut fake, missing).unwrap();
+        assert!(fake.raw, "a failed editor still gives the view back");
+    }
+
+    #[test]
+    fn t6_cut_ends_a_link_it_cuts_and_a_link_takes_no_width() {
+        let link = super::act::link(std::path::Path::new("/a/long-name.md"), "long-name.md");
+        assert_eq!(cut(&link, 12), link);
+        let cut5 = cut(&link, 5);
+        assert_eq!(
+            cut5,
+            "\x1b]8;;file:///a/long-name.md\x1b\\long…\x1b]8;;\x1b\\\x1b[0m"
+        );
+        assert_eq!(crate::out::visible(&cut5), 5);
+        let after = format!("{link} and more text");
+        assert_eq!(cut(&after, 15), format!("{link} a…\x1b[0m"));
+    }
+
+    #[test]
+    fn t6_status_view_paths_are_links() {
+        let doc = json!({
+            "home": "~/.agents", "machine": "box",
+            "config": {"path": "~/.config/agents/config.toml", "exists": true},
+            "always_on": {},
+            "harnesses": [{"label": "codex", "path": "~/.codex/AGENTS.md", "exists": false}],
+            "hooks": {"settings": "~/.claude/settings.json", "valid_json": true, "missing_paths": []},
+            "links": [{"path": "~/.claude/skills", "target": "~/.agents/skills", "broken": false}]
+        });
+        let text = status_lines(&doc).join("\n");
+        for p in [
+            "~/.agents",
+            "~/.config/agents/config.toml",
+            "~/.codex/AGENTS.md",
+            "~/.claude/settings.json",
+            "~/.claude/skills",
+            "~/.agents/skills",
+        ] {
+            let l = super::act::link_shown(p);
+            assert!(l.starts_with("\x1b]8;;file:///"), "{l:?}");
+            assert!(text.contains(&l), "no link for {p} in:\n{text:?}");
+        }
     }
 
     #[test]
