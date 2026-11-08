@@ -180,6 +180,21 @@ impl TreeView {
         self.rows.get(self.selected).map(|r| &r.node)
     }
 
+    /// Select the row on `line` of a `render` of `height` lines. A line
+    /// outside the list selects nothing.
+    pub fn pick(&mut self, line: usize, height: usize) {
+        let body_h = height.saturating_sub(2);
+        let start = window(self.selected, body_h);
+        if let Some(i) = line
+            .checked_sub(1)
+            .filter(|r| *r < body_h)
+            .map(|r| start + r)
+            .filter(|i| *i < self.rows.len())
+        {
+            self.selected = i;
+        }
+    }
+
     /// `height` lines of at most `width` characters: the root, the rows
     /// around the selection beside a preview of it, then the counts.
     pub fn render(&self, width: usize, height: usize) -> Vec<String> {
@@ -399,5 +414,19 @@ pub(crate) mod tests {
         assert_eq!(window(9, 10), 0);
         assert_eq!(window(10, 10), 1);
         assert_eq!(window(3, 0), 3);
+    }
+
+    #[test]
+    fn t9_a_click_on_a_row_selects_that_node() {
+        let t = fixture();
+        let mut v = TreeView::load(t.path(), 4, false, None);
+        let lines = v.render(80, 10);
+        assert!(lines[2].contains("boundaries.md"), "{}", lines[2]);
+        v.pick(2, 10);
+        assert_eq!(v.selected().unwrap().name, "boundaries.md");
+        for outside in [0, 9, 40] {
+            v.pick(outside, 10);
+            assert_eq!(v.selected, 1, "line {outside}");
+        }
     }
 }

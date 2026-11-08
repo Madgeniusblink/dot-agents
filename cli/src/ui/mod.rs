@@ -59,10 +59,12 @@ mod unix {
     use std::sync::{Mutex, Once, PoisonError};
     use std::time::Instant;
 
-    /// The alternate screen, with the cursor hidden.
-    const ENTER: &str = "\x1b[?1049h\x1b[?25l";
-    /// The undo of `ENTER`: show the cursor, then the main screen again.
-    const LEAVE: &str = "\x1b[?25h\x1b[?1049l";
+    /// The alternate screen, with the cursor hidden and SGR mouse reports
+    /// of each press and release (modes 1000 and 1006).
+    pub(super) const ENTER: &str = "\x1b[?1049h\x1b[?25l\x1b[?1000h\x1b[?1006h";
+    /// The undo of `ENTER`: no mouse reports, show the cursor, then the main
+    /// screen again. `restore` writes it on exit and on panic.
+    pub(super) const LEAVE: &str = "\x1b[?1006l\x1b[?1000l\x1b[?25h\x1b[?1049l";
     /// Reverse video, and the end of every attribute.
     const INVERT: &str = "\x1b[7m";
     const RESET: &str = "\x1b[0m";
@@ -215,7 +217,7 @@ mod unix {
                     (None, View::Status) => (body.clone(), None),
                 };
                 draw(&mut out, &screen_with(&frame, &shown, keys, width, height))?;
-                let mut buf = [0u8; 16];
+                let mut buf = [0u8; 32];
                 let n = stdin.read(&mut buf)?;
                 let Some(key) = key(&buf[..n]) else {
                     // A plan on screen is not read again under the person.
@@ -226,6 +228,10 @@ mod unix {
                         }
                     }
                     continue;
+                };
+                let key = match key {
+                    Key::Click { x, y } => clicked(&frame, keys, x, y, height),
+                    k => k,
                 };
                 if sending(&mut frame, key, &shown, &tmux) {
                     continue;
@@ -256,6 +262,7 @@ mod unix {
                         Key::Down => list.down(),
                         Key::Up => list.up(),
                         Key::Mark => list.mark(),
+                        Key::Row(line) => list.pick(line),
                         Key::Remove | Key::Keep => {
                             let names = list.names();
                             if !names.is_empty() {
@@ -268,7 +275,7 @@ mod unix {
                     }
                     if matches!(
                         key,
-                        Key::Down | Key::Up | Key::Mark | Key::Remove | Key::Keep
+                        Key::Down | Key::Up | Key::Mark | Key::Row(_) | Key::Remove | Key::Keep
                     ) {
                         continue;
                     }
@@ -276,23 +283,29 @@ mod unix {
                     match (frame.view, key, groups.as_mut()) {
                         (View::Scan, Key::Down, Some(g)) => g.down(),
                         (View::Scan, Key::Up, Some(g)) => g.up(),
+                        (View::Scan, Key::Row(line), Some(g)) => g.pick(line, rows),
                         (View::Scan, Key::Filter, Some(g)) => {
                             g.next_filter();
                             frame.note = format!("filter: {:?}", g.filter()).to_lowercase();
                         }
                         (View::Files, Key::Down, _) => files.down(),
                         (View::Files, Key::Up, _) => files.up(),
+                        (View::Files, Key::Row(line), _) => files.pick(line, rows),
                         (View::Files, Key::Enter, _) => files.enter(),
                         (View::Files, Key::Back, _) => files.parent(),
                         (View::Tree, Key::Down, _) => tree.down(),
                         (View::Tree, Key::Up, _) => tree.up(),
+                        (View::Tree, Key::Row(line), _) => tree.pick(line, rows),
                         _ => {}
                     }
                     if matches!(
                         (frame.view, key),
-                        (View::Scan, Key::Down | Key::Up | Key::Filter)
-                            | (View::Files, Key::Down | Key::Up | Key::Enter | Key::Back)
-                            | (View::Tree, Key::Down | Key::Up)
+                        (View::Scan, Key::Down | Key::Up | Key::Row(_) | Key::Filter)
+                            | (
+                                View::Files,
+                                Key::Down | Key::Up | Key::Row(_) | Key::Enter | Key::Back
+                            )
+                            | (View::Tree, Key::Down | Key::Up | Key::Row(_))
                     ) {
                         continue;
                     }
@@ -398,11 +411,24 @@ mod unix {
         Filter,
         Enter,
         Back,
+        /// A left press at column `x`, row `y`, both from 0. `clicked` turns
+        /// it into the key it stands for.
+        Click {
+            x: usize,
+            y: usize,
+        },
+        /// A click on this line of the body: the view selects the row drawn
+        /// there.
+        Row(usize),
         Other,
     }
 
-    /// The key the bytes of one read name; `None` for an empty read.
+    /// The key the bytes of one read name; `None` for an empty read and for
+    /// a mouse report that does nothing, such as a release.
     pub(super) fn key(bytes: &[u8]) -> Option<Key> {
+        if let Some(report) = bytes.strip_prefix(b"\x1b[<") {
+            return mouse(report);
+        }
         Some(match bytes {
             b"" => return None,
             b"q" | b"\x03" => Key::Quit,
@@ -431,6 +457,99 @@ mod unix {
             b"\x7f" | b"\x08" => Key::Back,
             _ => Key::Other,
         })
+    }
+
+    /// An SGR mouse report after its `ESC [ <`: `b;x;y`, then `M` for a
+    /// press or `m` for a release, with `x` and `y` from 1. A left press is
+    /// a click and the wheel scrolls; a report cut short is `Other`.
+    fn mouse(report: &[u8]) -> Option<Key> {
+        let Some(end) = report.iter().position(|c| matches!(c, b'M' | b'm')) else {
+            return Some(Key::Other);
+        };
+        let fields: Vec<Option<usize>> = std::str::from_utf8(&report[..end])
+            .unwrap_or_default()
+            .split(';')
+            .map(|f| f.parse().ok())
+            .collect();
+        let [Some(b), Some(x), Some(y)] = fields[..] else {
+            return Some(Key::Other);
+        };
+        match (report[end], b) {
+            (b'M', 0) => Some(Key::Click {
+                x: x.saturating_sub(1),
+                y: y.saturating_sub(1),
+            }),
+            (b'M', 64) => Some(Key::Up),
+            (b'M', 65) => Some(Key::Down),
+            _ => None,
+        }
+    }
+
+    /// What a click at column `x`, row `y` of a screen `height` rows high
+    /// does: a tab opens, a key label runs its key, and a body line is
+    /// `Key::Row`. Help and a send question have no rows. Anything else is
+    /// `Other`.
+    pub(super) fn clicked(
+        frame: &Frame,
+        keys: Option<Keys>,
+        x: usize,
+        y: usize,
+        height: usize,
+    ) -> Key {
+        let key = if y == 0 {
+            tab_at(x).map(Key::View)
+        } else if y + 1 == height {
+            key_at(frame, keys, x)
+        } else if y + 1 < height && frame.ask.is_none() && !frame.help {
+            Some(Key::Row(y - 1))
+        } else {
+            None
+        };
+        key.unwrap_or(Key::Other)
+    }
+
+    /// The number of the tab drawn at column `x` of the tab bar.
+    fn tab_at(x: usize) -> Option<usize> {
+        let mut end = 0;
+        for (i, v) in View::ALL.iter().enumerate() {
+            end += tab(i, *v).chars().count();
+            if x < end {
+                return Some(i);
+            }
+        }
+        None
+    }
+
+    /// The key whose label `key_bar` draws at column `x`. A label `a/b`
+    /// runs `a` left of its slash and `b` from the slash on.
+    fn key_at(frame: &Frame, keys: Option<Keys>, x: usize) -> Option<Key> {
+        let mut start = match out::visible(&frame.note) {
+            0 => 0,
+            n => n + 2,
+        };
+        for (k, what) in bar_keys(frame, keys) {
+            let end = start + k.chars().count() + 3 + what.chars().count();
+            if (start..end).contains(&x) {
+                return Some(match k.split_once('/') {
+                    Some((a, _)) if x < start + 1 + a.chars().count() => label_key(a),
+                    Some((_, b)) => label_key(b),
+                    None => label_key(k),
+                });
+            }
+            start = end + 2;
+        }
+        None
+    }
+
+    /// The key a key bar label names.
+    fn label_key(label: &str) -> Key {
+        match label {
+            "tab" => Key::Next,
+            "esc" => Key::Esc,
+            "enter" => Key::Enter,
+            "bksp" => Key::Back,
+            k => key(k.as_bytes()).unwrap_or(Key::Other),
+        }
     }
 
     /// A tab. Each one reads the object its command prints with `--json`.
@@ -616,6 +735,8 @@ mod unix {
                 | Key::Filter
                 | Key::Enter
                 | Key::Back
+                | Key::Click { .. }
+                | Key::Row(_)
                 | Key::Other => {}
             }
             true
@@ -641,11 +762,14 @@ mod unix {
         screen_with(frame, body, None, width, height)
     }
 
+    /// The keys of one key bar, each with what it does.
+    pub(super) type Keys = &'static [(&'static str, &'static str)];
+
     /// `screen`, with the key bar `keys` when help is closed.
-    fn screen_with(
+    pub(super) fn screen_with(
         frame: &Frame,
         body: &[String],
-        keys: Option<&[(&str, &str)]>,
+        keys: Option<Keys>,
         width: usize,
         height: usize,
     ) -> Vec<String> {
@@ -685,7 +809,7 @@ mod unix {
     fn tab_bar(open: View, width: usize) -> String {
         let mut bar = String::new();
         for (i, v) in View::ALL.iter().enumerate() {
-            let tab = format!(" {} {} ", i + 1, v.name());
+            let tab = tab(i, *v);
             if *v == open {
                 bar.push_str(&format!("{INVERT}{tab}{RESET}"));
             } else {
@@ -701,9 +825,14 @@ mod unix {
         cut(&bar, width)
     }
 
-    /// The keys a person needs next, each key in reverse video.
-    fn key_bar(frame: &Frame, keys: Option<&[(&str, &str)]>, width: usize) -> String {
-        let keys: &[(&str, &str)] = if frame.ask.is_some() {
+    /// One tab of the tab bar, by number and name.
+    fn tab(i: usize, v: View) -> String {
+        format!(" {} {} ", i + 1, v.name())
+    }
+
+    /// The keys the key bar shows: a send question, help, then the view's.
+    fn bar_keys(frame: &Frame, keys: Option<Keys>) -> Keys {
+        if frame.ask.is_some() {
             &[("y", "send"), ("any key", "cancel")]
         } else if frame.help {
             &[("esc", "close"), ("q", "quit")]
@@ -717,8 +846,13 @@ mod unix {
                 ("q", "quit"),
                 ("s", "send"),
             ]
-        };
-        let mut bar = keys
+        }
+    }
+
+    /// The keys a person needs next, each key in reverse video. `key_at`
+    /// reads the same layout, so a click lands on the label drawn there.
+    fn key_bar(frame: &Frame, keys: Option<Keys>, width: usize) -> String {
+        let mut bar = bar_keys(frame, keys)
             .iter()
             .map(|(k, what)| format!("{INVERT} {k} {RESET} {what}"))
             .collect::<Vec<_>>()
@@ -730,7 +864,7 @@ mod unix {
         cut(&bar, width)
     }
 
-    const SKILLS_KEYS: &[(&str, &str)] = &[
+    pub(super) const SKILLS_KEYS: Keys = &[
         ("?", "help"),
         ("j/k", "select"),
         ("m", "mark"),
@@ -740,7 +874,7 @@ mod unix {
         ("q", "quit"),
         ("s", "send"),
     ];
-    const SCAN_KEYS: &[(&str, &str)] = &[
+    pub(super) const SCAN_KEYS: Keys = &[
         ("?", "help"),
         ("j/k", "select"),
         ("f", "filter"),
@@ -748,7 +882,7 @@ mod unix {
         ("q", "quit"),
         ("s", "send"),
     ];
-    const FILES_KEYS: &[(&str, &str)] = &[
+    pub(super) const FILES_KEYS: Keys = &[
         ("?", "help"),
         ("j/k", "select"),
         ("enter", "open dir"),
@@ -757,7 +891,7 @@ mod unix {
         ("tab", "view"),
         ("q", "quit"),
     ];
-    const TREE_KEYS: &[(&str, &str)] = &[
+    pub(super) const TREE_KEYS: Keys = &[
         ("?", "help"),
         ("j/k", "select"),
         ("c/o", "copy/open"),
@@ -765,15 +899,15 @@ mod unix {
         ("q", "quit"),
         ("s", "send"),
     ];
-    const PLAN_KEYS: &[(&str, &str)] = &[
+    pub(super) const PLAN_KEYS: Keys = &[
         ("A", "apply"),
         ("esc", "cancel"),
         ("j/k", "scroll"),
         ("q", "quit"),
     ];
-    const DONE_KEYS: &[(&str, &str)] = &[("esc", "back"), ("j/k", "scroll"), ("q", "quit")];
+    pub(super) const DONE_KEYS: Keys = &[("esc", "back"), ("j/k", "scroll"), ("q", "quit")];
 
-    const HELP: [&str; 35] = [
+    const HELP: [&str; 36] = [
         "Keys",
         "",
         "  ?            this help; again to close",
@@ -788,6 +922,7 @@ mod unix {
         "  c            copy the view's path; the terminal holds the copy",
         "  o            open the view's path in $EDITOR",
         "  R            read every view again now; a changed file does it in 2 s",
+        "  click        a tab opens it, a row selects it, a key below runs it",
         "",
         "Skills",
         "  m            mark the selected skill, or unmark it",
@@ -1479,5 +1614,135 @@ mod tests {
         assert!(text.contains("NOT a git checkout"), "{text}");
         assert!(text.contains("codex: ok"), "{text}");
         assert!(text.contains("links: none"), "{text}");
+    }
+
+    /// The SGR report of a left press at column `x`, row `y`, both from 0.
+    fn press(x: usize, y: usize) -> Vec<u8> {
+        format!("\x1b[<0;{};{}M", x + 1, y + 1).into_bytes()
+    }
+
+    #[test]
+    fn t9_sgr_reports_decode_to_a_click_the_wheel_or_nothing() {
+        assert_eq!(key(b"\x1b[<0;5;1M"), Some(Key::Click { x: 4, y: 0 }));
+        assert_eq!(key(b"\x1b[<0;120;45M"), Some(Key::Click { x: 119, y: 44 }));
+        assert_eq!(key(b"\x1b[<0;5;1m"), None, "a release does nothing");
+        assert_eq!(key(b"\x1b[<2;5;1M"), None, "a right press does nothing");
+        assert_eq!(key(b"\x1b[<64;5;1M"), Some(Key::Up));
+        assert_eq!(key(b"\x1b[<65;5;1M"), Some(Key::Down));
+        assert_eq!(
+            key(b"\x1b[<0;5;1M\x1b[<0;5;1m"),
+            Some(Key::Click { x: 4, y: 0 }),
+            "a release in the same read is dropped"
+        );
+        assert_eq!(key(b"\x1b[<0;5"), Some(Key::Other), "a cut report");
+        assert_eq!(key(b"\x1b[<0;x;1M"), Some(Key::Other));
+    }
+
+    #[test]
+    fn t9_a_click_on_a_tab_name_opens_it() {
+        let mut f = Frame::default();
+        let bar = words(&screen(&f, &[], 80, 24)[0]);
+        for (i, v) in View::ALL.iter().enumerate().rev() {
+            let x = bar.find(v.name()).unwrap();
+            let Some(Key::Click { x, y }) = key(&press(x, 0)) else {
+                panic!("not a click")
+            };
+            let k = clicked(&f, None, x, y, 24);
+            assert_eq!(k, Key::View(i), "{}", v.name());
+            f.press(k, 0, 22);
+            assert_eq!(f.view, *v);
+        }
+        let x = bar.find("agents").unwrap();
+        assert_eq!(clicked(&f, None, x, 0, 24), Key::Other, "the version");
+    }
+
+    #[test]
+    fn t9_a_click_on_a_key_label_runs_that_key() {
+        let cases: [(Keys, &str, Key); 12] = [
+            (SKILLS_KEYS, "?  help", Key::Help),
+            (SKILLS_KEYS, "m  mark", Key::Mark),
+            (SKILLS_KEYS, "mark", Key::Mark),
+            (SKILLS_KEYS, "r  remove", Key::Remove),
+            (SKILLS_KEYS, "K  keep only", Key::Keep),
+            (SKILLS_KEYS, "j/k", Key::Down),
+            (SKILLS_KEYS, "k  select", Key::Up),
+            (SKILLS_KEYS, "tab  view", Key::Next),
+            (SKILLS_KEYS, "q  quit", Key::Quit),
+            (FILES_KEYS, "c/o", Key::Copy),
+            (FILES_KEYS, "o  copy/open", Key::Open),
+            (FILES_KEYS, "bksp  up", Key::Back),
+        ];
+        for (keys, label, want) in cases {
+            let mut f = Frame::default();
+            for note in ["", "filter: clones"] {
+                f.note = note.to_string();
+                let bar = words(&screen_with(&f, &[], Some(keys), 160, 24)[23]);
+                let x = bar
+                    .find(label)
+                    .unwrap_or_else(|| panic!("{label} in {bar}"));
+                let Some(Key::Click { x, y }) = key(&press(x, 23)) else {
+                    panic!("not a click")
+                };
+                assert_eq!(
+                    clicked(&f, Some(keys), x, y, 24),
+                    want,
+                    "{label:?} {note:?}"
+                );
+            }
+        }
+        let f = Frame::default();
+        let bar = words(&screen_with(&f, &[], Some(PLAN_KEYS), 160, 24)[23]);
+        assert_eq!(
+            clicked(&f, Some(PLAN_KEYS), bar.find("A  apply").unwrap(), 23, 24),
+            Key::Apply
+        );
+        assert_eq!(
+            clicked(&f, Some(PLAN_KEYS), bar.find("esc").unwrap(), 23, 24),
+            Key::Esc
+        );
+        assert_eq!(
+            clicked(&f, Some(PLAN_KEYS), bar.len() + 5, 23, 24),
+            Key::Other,
+            "past the last label"
+        );
+    }
+
+    #[test]
+    fn t9_a_click_on_y_sends_and_a_click_elsewhere_cancels() {
+        let (_dir, log, tmux) = fake_tmux();
+        let body = vec!["text".to_string()];
+        let mut f = Frame::default();
+        assert!(sending(&mut f, Key::Send, &body, &tmux));
+        let k = clicked(&f, None, 3, 5, 12);
+        assert_eq!(k, Key::Other, "no rows under a question");
+        assert!(sending(&mut f, k, &body, &tmux));
+        assert_eq!(f.note, "not sent");
+        assert!(sending(&mut f, Key::Send, &body, &tmux));
+        let bar = words(&screen(&f, &body, 80, 12)[11]);
+        let k = clicked(&f, None, bar.find("y  send").unwrap(), 11, 12);
+        assert_eq!(k, Key::Yes);
+        assert!(sending(&mut f, k, &body, &tmux));
+        assert!(calls(&log).contains("[send-keys][-t][%3][-l][--][text]"));
+    }
+
+    #[test]
+    fn t9_a_click_on_a_body_line_selects_its_row_and_help_has_none() {
+        let mut f = Frame::default();
+        let Some(Key::Click { x, y }) = key(&press(10, 5)) else {
+            panic!("not a click")
+        };
+        assert_eq!(clicked(&f, Some(TREE_KEYS), x, y, 24), Key::Row(4));
+        assert!(f.press(Key::Row(4), 10, 22), "a row is not quit");
+        f.help = true;
+        assert_eq!(clicked(&f, Some(TREE_KEYS), x, y, 24), Key::Other);
+    }
+
+    #[test]
+    fn t9_mouse_reporting_is_on_in_the_view_and_off_after() {
+        for mode in ["1000", "1006"] {
+            assert!(ENTER.contains(&format!("\x1b[?{mode}h")), "{mode}");
+            assert!(LEAVE.contains(&format!("\x1b[?{mode}l")), "{mode}");
+        }
+        assert!(LEAVE.ends_with("\x1b[?1049l"), "the main screen comes last");
     }
 }
