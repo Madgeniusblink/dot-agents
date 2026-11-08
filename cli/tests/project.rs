@@ -293,7 +293,7 @@ mod view {
             // Raw mode flushes the input, so a key sent before the first
             // frame is lost.
             let ui = Ui { master, out, child };
-            ui.wait("the tab bar", |f| f.contains(" 1 Status "));
+            ui.wait("the tab bar", |f| f.contains(" 1:Status "));
             ui
         }
 

@@ -1297,7 +1297,7 @@ mod tests {
         }
         let bar = screen(&f, &[], 80, 3)[0].clone();
         for (i, v) in five.iter().enumerate() {
-            assert!(bar.contains(&format!(" {} {} ", i + 1, v.name())), "{bar}");
+            assert!(bar.contains(&format!(" {}:{} ", i + 1, v.name())), "{bar}");
         }
     }
 
