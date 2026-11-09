@@ -214,7 +214,17 @@ mod unix {
                     ),
                     (None, View::Files) => (files.render(width, rows), Some(FILES_KEYS)),
                     (None, View::Tree) => (tree.render(width, rows), Some(TREE_KEYS)),
-                    (None, View::Status) => (body.clone(), None),
+                    (None, View::Status) => (body.clone(), Some(STATUS_KEYS)),
+                };
+                frame.send_line = if pending.is_none()
+                    && frame.ask.is_none()
+                    && !frame.help
+                    && frame.view == View::Status
+                    && shown.len() > 1
+                {
+                    Some((frame.top + 1, shown.len()))
+                } else {
+                    None
                 };
                 draw(&mut out, &screen_with(&frame, &shown, keys, width, height))?;
                 let mut buf = [0u8; 32];
@@ -618,6 +628,9 @@ mod unix {
     pub(super) struct Ask {
         pub(super) text: String,
         pub(super) pane: Pane,
+        /// The line `s` takes from the body, counted from 1.
+        pub(super) line: usize,
+        pub(super) total: usize,
     }
 
     /// Which tab shows, whether help covers it, the first body row, a send
@@ -629,6 +642,8 @@ mod unix {
         pub(super) top: usize,
         pub(super) ask: Option<Ask>,
         pub(super) note: String,
+        /// Status: which body line `s` would send, when the list scrolls.
+        pub(super) send_line: Option<(usize, usize)>,
     }
 
     impl Default for Frame {
@@ -639,6 +654,7 @@ mod unix {
                 top: 0,
                 ask: None,
                 note: String::new(),
+                send_line: None,
             }
         }
     }
@@ -666,9 +682,14 @@ mod unix {
             .unwrap_or_default();
         frame.note.clear();
         if text.is_empty() {
-            frame.note = "nothing to send on the top line".to_string();
+            frame.note = format!("nothing to send on line {} (top visible)", frame.top + 1);
         } else if let Some(pane) = tmux.panes().into_iter().next() {
-            frame.ask = Some(Ask { text, pane });
+            frame.ask = Some(Ask {
+                text,
+                pane,
+                line: frame.top + 1,
+                total: body.len(),
+            });
         } else {
             frame.note = "no agent pane in tmux".to_string();
         }
@@ -696,8 +717,8 @@ mod unix {
     fn ask_lines(ask: &Ask, width: usize) -> Vec<String> {
         let mut lines = vec![
             format!(
-                "Send this text to the {} pane {}?",
-                ask.pane.label, ask.pane.id
+                "Send line {} of {} to the {} pane {}?",
+                ask.line, ask.total, ask.pane.label, ask.pane.id
             ),
             String::new(),
         ];
@@ -869,18 +890,30 @@ mod unix {
             .collect::<Vec<_>>()
             .join("  ");
         // The result of the last action comes first, so a narrow bar keeps it.
-        if !frame.note.is_empty() {
+        if frame.note.is_empty() {
+            if let Some((line, total)) = frame.send_line {
+                bar = format!("s sends line {line}/{total}  {bar}");
+            }
+        } else {
             bar = format!("{}  {bar}", frame.note);
         }
         cut(&bar, width)
     }
 
+    pub(super) const STATUS_KEYS: Keys = &[
+        ("?", "help"),
+        ("j/k", "scroll"),
+        ("c/o", "copy/open"),
+        ("tab", "view"),
+        ("q", "quit"),
+        ("s", "send line"),
+    ];
     pub(super) const SKILLS_KEYS: Keys = &[
         ("?", "help"),
         ("j/k", "select"),
         ("m", "mark"),
-        ("r", "remove"),
-        ("K", "keep only"),
+        ("r/K", "remove/keep"),
+        ("R", "refresh"),
         ("tab", "view"),
         ("q", "quit"),
         ("s", "send"),
@@ -888,7 +921,9 @@ mod unix {
     pub(super) const SCAN_KEYS: Keys = &[
         ("?", "help"),
         ("j/k", "select"),
+        ("c/o", "copy/open"),
         ("f", "filter"),
+        ("R", "refresh"),
         ("tab", "view"),
         ("q", "quit"),
         ("s", "send"),
@@ -918,7 +953,7 @@ mod unix {
     ];
     pub(super) const DONE_KEYS: Keys = &[("esc", "back"), ("j/k", "scroll"), ("q", "quit")];
 
-    const HELP: [&str; 36] = [
+    const HELP: [&str; 39] = [
         "Keys",
         "",
         "  ?            this help; again to close",
@@ -929,7 +964,7 @@ mod unix {
         "  space, b     one page down, up",
         "  g, G         top, bottom",
         "  esc          close this help",
-        "  s            send the top line to an agent pane in tmux, after y",
+        "  s            send the top visible line (see the key bar) to a tmux pane, after y",
         "  c            copy the view's path, through the terminal and pbcopy or xclip",
         "  o            open the view's path in $EDITOR",
         "  R            read every view again now; a changed file does it in 2 s",
@@ -938,17 +973,20 @@ mod unix {
         "Skills",
         "  m            mark the selected skill, or unmark it",
         "  r            plan agents skills remove for the marked, else the selected",
-        "  K            plan agents skills keep for the marked, else the selected",
+        "  K            keep-only plan for the marked, else the selected (uppercase K)",
         "  A            apply the plan shown, as --apply does; esc cancels it",
         "  c, o         copy or open the selected skill's directory",
+        "  R            read skills again now",
         "",
         "Scan",
         "  j, k         select a checkout group; its checkouts show below",
         "  f            filter by the next kind: clone, worktree, submodule",
+        "  R            read checkouts again now",
         "",
         "Files and Tree",
         "  j, k         select an entry; its preview shows at the right",
-        "  enter, bksp  Files: into the selected directory, back up",
+        "  enter        Files: into the selected directory",
+        "  bksp         Files: back up to the parent directory",
         "  c, o         copy or open the selected path",
         "",
         "Each view reads what its command prints with --json, so the view and",
@@ -1347,6 +1385,174 @@ mod tests {
     }
 
     #[test]
+    fn t2_status_key_bar_shows_copy_and_open_at_80_columns() {
+        let f = Frame::default();
+        let rows = screen_with(
+            &f,
+            &["machine: test".to_string()],
+            Some(STATUS_KEYS),
+            80,
+            24,
+        );
+        assert_eq!(rows.len(), 24);
+        let kb = &rows[23];
+        assert!(kb.contains("c/o") && kb.contains("copy/open"), "{kb}");
+        assert!(crate::out::visible(kb) <= 80, "{kb}");
+    }
+
+    #[test]
+    fn t2_status_key_bar_shows_which_line_s_will_send() {
+        let body: Vec<String> = (0..30).map(|i| format!("line {i}")).collect();
+        let f = Frame {
+            top: 5,
+            send_line: Some((6, 30)),
+            ..Frame::default()
+        };
+        for width in [80, 120] {
+            let rows = screen_with(&f, &body, Some(STATUS_KEYS), width, 24);
+            let kb = &rows[23];
+            assert!(kb.contains("s sends line 6/30"), "{width}x24: {kb}");
+            assert!(width < 120 || kb.contains("send line"), "{width}x24: {kb}");
+            assert!(crate::out::visible(kb) <= width, "{kb}");
+        }
+    }
+
+    #[test]
+    fn t7_send_ask_names_the_scrolled_line() {
+        let (_dir, _log, tmux) = fake_tmux();
+        let body: Vec<String> = (0..20).map(|i| format!("line {i}")).collect();
+        let mut f = Frame {
+            top: 4,
+            ..Frame::default()
+        };
+        assert!(sending(&mut f, Key::Send, &body, &tmux));
+        let shown = screen(&f, &body, 120, 40).join("\n");
+        assert!(
+            shown.contains("Send line 5 of 20 to the codex pane %3?"),
+            "{shown}"
+        );
+        assert!(shown.contains("  line 4"), "{shown}");
+    }
+
+    #[test]
+    fn t2_skills_and_scan_key_bars_show_refresh_at_80_and_120_columns() {
+        let cases = [(View::Skills, SKILLS_KEYS), (View::Scan, SCAN_KEYS)];
+        let body = vec!["row".to_string()];
+        for (view, keys) in cases {
+            let f = Frame {
+                view,
+                ..Frame::default()
+            };
+            for width in [80, 120] {
+                let kb = &screen_with(&f, &body, Some(keys), width, 24)[23];
+                assert!(
+                    kb.contains("R") && kb.contains("refresh"),
+                    "{view:?} {width}x24: {kb}"
+                );
+                assert!(crate::out::visible(kb) <= width, "{kb}");
+            }
+        }
+    }
+
+    #[test]
+    fn t2_skills_key_bar_pairs_r_and_capital_k_at_80_and_120_columns() {
+        let f = Frame {
+            view: View::Skills,
+            ..Frame::default()
+        };
+        let body = vec!["skill".to_string()];
+        for width in [80, 120] {
+            let kb = &screen_with(&f, &body, Some(SKILLS_KEYS), width, 24)[23];
+            assert!(
+                kb.contains("r/K") && kb.contains("remove/keep"),
+                "{width}x24: {kb}"
+            );
+            assert!(
+                !kb.contains("keep only"),
+                "shorter paired label: {width}x24: {kb}"
+            );
+            assert!(crate::out::visible(kb) <= width, "{kb}");
+        }
+    }
+
+    #[test]
+    fn t2_scan_key_bar_shows_copy_and_open_at_80_columns() {
+        let f = Frame {
+            view: View::Scan,
+            ..Frame::default()
+        };
+        let rows = screen_with(
+            &f,
+            &["filter: all kinds  (0 of 0 groups)".to_string()],
+            Some(SCAN_KEYS),
+            80,
+            24,
+        );
+        assert_eq!(rows.len(), 24);
+        let kb = &rows[23];
+        assert!(kb.contains("c/o") && kb.contains("copy/open"), "{kb}");
+        assert!(crate::out::visible(kb) <= 80, "{kb}");
+    }
+
+    #[test]
+    fn t2_help_lists_enter_and_bksp_under_files_and_tree() {
+        let f = Frame {
+            help: true,
+            ..Frame::default()
+        };
+        for width in [80, 120] {
+            let rows = screen(&f, &[], width, 40);
+            let text = rows.join("\n");
+            assert!(
+                text.contains("  enter        Files: into the selected directory"),
+                "{width}x40"
+            );
+            assert!(
+                text.contains("  bksp         Files: back up to the parent directory"),
+                "{width}x40"
+            );
+            assert!(
+                !text.contains("enter, bksp  Files:"),
+                "one line each: {width}x40"
+            );
+            assert!(
+                rows.iter().all(|r| crate::out::visible(r) <= width),
+                "{rows:#?}"
+            );
+        }
+    }
+
+    #[test]
+    fn t2_files_and_tree_key_bars_fit_at_80_and_120_columns() {
+        let body = vec!["row".to_string()];
+        let cases = [
+            (
+                View::Files,
+                FILES_KEYS,
+                &["c/o", "copy/open", "enter", "open dir", "bksp", "up"][..],
+            ),
+            (
+                View::Tree,
+                TREE_KEYS,
+                &["c/o", "copy/open", "s", "send"][..],
+            ),
+        ];
+        for (view, keys, labels) in cases {
+            let f = Frame {
+                view,
+                ..Frame::default()
+            };
+            for width in [80, 120] {
+                let kb = &screen_with(&f, &body, Some(keys), width, 24)[23];
+                for label in labels {
+                    assert!(kb.contains(label), "{view:?} {width}x24: {kb}");
+                }
+                assert!(crate::out::visible(kb) <= width, "{kb}");
+            }
+        }
+    }
+
+    #[test]
     fn t2_screen_is_tab_bar_body_key_bar_within_the_size() {
         let body: Vec<String> = (0..30)
             .map(|i| format!("line {i} {}", "x".repeat(50)))
@@ -1427,7 +1633,7 @@ mod tests {
         let rows = screen(&f, &body, 80, 12);
         let shown = rows.join("\n");
         assert!(
-            shown.contains("Send this text to the codex pane %3?"),
+            shown.contains("Send line 1 of 1 to the codex pane %3?"),
             "{shown}"
         );
         assert!(shown.contains("  -n review this file"), "{shown}");
@@ -1469,7 +1675,7 @@ mod tests {
             "other keys go to the frame"
         );
         assert!(sending(&mut f, Key::Send, &[String::new()], &tmux));
-        assert_eq!(f.note, "nothing to send on the top line");
+        assert_eq!(f.note, "nothing to send on line 1 (top visible)");
         assert!(!calls(&log).contains("send-keys"));
     }
 
@@ -1676,15 +1882,16 @@ mod tests {
 
     #[test]
     fn t9_a_click_on_a_key_label_runs_that_key() {
-        let cases: [(Keys, &str, Key); 12] = [
+        let cases: [(Keys, &str, Key); 13] = [
             (SKILLS_KEYS, "?  help", Key::Help),
             (SKILLS_KEYS, "m  mark", Key::Mark),
             (SKILLS_KEYS, "mark", Key::Mark),
-            (SKILLS_KEYS, "r  remove", Key::Remove),
-            (SKILLS_KEYS, "K  keep only", Key::Keep),
+            (SKILLS_KEYS, "r/K  remove/keep", Key::Remove),
+            (SKILLS_KEYS, "K  remove/keep", Key::Keep),
             (SKILLS_KEYS, "j/k", Key::Down),
             (SKILLS_KEYS, "k  select", Key::Up),
             (SKILLS_KEYS, "tab  view", Key::Next),
+            (SKILLS_KEYS, "R  refresh", Key::Refresh),
             (SKILLS_KEYS, "q  quit", Key::Quit),
             (FILES_KEYS, "c/o", Key::Copy),
             (FILES_KEYS, "o  copy/open", Key::Open),
