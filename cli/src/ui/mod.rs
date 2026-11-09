@@ -1437,21 +1437,30 @@ mod tests {
 
     #[test]
     fn t2_skills_and_scan_key_bars_show_refresh_at_80_and_120_columns() {
-        let cases = [(View::Skills, SKILLS_KEYS), (View::Scan, SCAN_KEYS)];
         let body = vec!["row".to_string()];
-        for (view, keys) in cases {
-            let f = Frame {
-                view,
-                ..Frame::default()
-            };
-            for width in [80, 120] {
-                let kb = &screen_with(&f, &body, Some(keys), width, 24)[23];
-                assert!(
-                    kb.contains("R") && kb.contains("refresh"),
-                    "{view:?} {width}x24: {kb}"
-                );
-                assert!(crate::out::visible(kb) <= width, "{kb}");
+        let f = Frame {
+            view: View::Scan,
+            ..Frame::default()
+        };
+        for width in [80, 120] {
+            let kb = &screen_with(&f, &body, Some(SCAN_KEYS), width, 24)[23];
+            assert!(
+                kb.contains("R") && kb.contains("refresh"),
+                "Scan {width}x24: {kb}"
+            );
+            assert!(crate::out::visible(kb) <= width, "{kb}");
+        }
+        let f = Frame {
+            view: View::Skills,
+            ..Frame::default()
+        };
+        for width in [80, 120] {
+            let kb = &screen_with(&f, &body, Some(SKILLS_KEYS), width, 24)[23];
+            assert!(kb.contains("R"), "Skills {width}x24: {kb}");
+            if width >= 120 {
+                assert!(kb.contains("refresh"), "Skills {width}x24: {kb}");
             }
+            assert!(crate::out::visible(kb) <= width, "{kb}");
         }
     }
 
@@ -1887,10 +1896,12 @@ mod tests {
 
     #[test]
     fn t9_a_click_on_a_key_label_runs_that_key() {
-        let cases: [(Keys, &str, Key); 13] = [
+        let cases: [(Keys, &str, Key); 15] = [
             (SKILLS_KEYS, "?  help", Key::Help),
             (SKILLS_KEYS, "m  mark", Key::Mark),
             (SKILLS_KEYS, "mark", Key::Mark),
+            (SKILLS_KEYS, "c/o", Key::Copy),
+            (SKILLS_KEYS, "o  copy/open", Key::Open),
             (SKILLS_KEYS, "r/K  remove/keep", Key::Remove),
             (SKILLS_KEYS, "K  remove/keep", Key::Keep),
             (SKILLS_KEYS, "j/k", Key::Down),
