@@ -214,7 +214,7 @@ mod unix {
                     ),
                     (None, View::Files) => (files.render(width, rows), Some(FILES_KEYS)),
                     (None, View::Tree) => (tree.render(width, rows), Some(TREE_KEYS)),
-                    (None, View::Status) => (body.clone(), None),
+                    (None, View::Status) => (body.clone(), Some(STATUS_KEYS)),
                 };
                 draw(&mut out, &screen_with(&frame, &shown, keys, width, height))?;
                 let mut buf = [0u8; 32];
@@ -875,6 +875,14 @@ mod unix {
         cut(&bar, width)
     }
 
+    pub(super) const STATUS_KEYS: Keys = &[
+        ("?", "help"),
+        ("j/k", "scroll"),
+        ("c/o", "copy/open"),
+        ("tab", "view"),
+        ("q", "quit"),
+        ("s", "send"),
+    ];
     pub(super) const SKILLS_KEYS: Keys = &[
         ("?", "help"),
         ("j/k", "select"),
@@ -1344,6 +1352,22 @@ mod tests {
         assert_eq!(f.top, 0);
         f.press(Key::PageDown, 3, 4);
         assert_eq!(f.top, 0, "a body that fits does not scroll");
+    }
+
+    #[test]
+    fn t2_status_key_bar_shows_copy_and_open_at_80_columns() {
+        let f = Frame::default();
+        let rows = screen_with(
+            &f,
+            &["machine: test".to_string()],
+            Some(STATUS_KEYS),
+            80,
+            24,
+        );
+        assert_eq!(rows.len(), 24);
+        let kb = &rows[23];
+        assert!(kb.contains("c/o") && kb.contains("copy/open"), "{kb}");
+        assert!(crate::out::visible(kb) <= 80, "{kb}");
     }
 
     #[test]
