@@ -912,8 +912,7 @@ mod unix {
         ("?", "help"),
         ("j/k", "select"),
         ("m", "mark"),
-        ("r", "remove"),
-        ("K", "keep only"),
+        ("r/K", "remove/keep"),
         ("R", "refresh"),
         ("tab", "view"),
         ("q", "quit"),
@@ -974,7 +973,7 @@ mod unix {
         "Skills",
         "  m            mark the selected skill, or unmark it",
         "  r            plan agents skills remove for the marked, else the selected",
-        "  K            plan agents skills keep for the marked, else the selected",
+        "  K            keep-only plan for the marked, else the selected (uppercase K)",
         "  A            apply the plan shown, as --apply does; esc cancels it",
         "  c, o         copy or open the selected skill's directory",
         "  R            read skills again now",
@@ -1456,6 +1455,27 @@ mod tests {
     }
 
     #[test]
+    fn t2_skills_key_bar_pairs_r_and_capital_k_at_80_and_120_columns() {
+        let f = Frame {
+            view: View::Skills,
+            ..Frame::default()
+        };
+        let body = vec!["skill".to_string()];
+        for width in [80, 120] {
+            let kb = &screen_with(&f, &body, Some(SKILLS_KEYS), width, 24)[23];
+            assert!(
+                kb.contains("r/K") && kb.contains("remove/keep"),
+                "{width}x24: {kb}"
+            );
+            assert!(
+                !kb.contains("keep only"),
+                "shorter paired label: {width}x24: {kb}"
+            );
+            assert!(crate::out::visible(kb) <= width, "{kb}");
+        }
+    }
+
+    #[test]
     fn t2_scan_key_bar_shows_copy_and_open_at_80_columns() {
         let f = Frame {
             view: View::Scan,
@@ -1836,8 +1856,8 @@ mod tests {
             (SKILLS_KEYS, "?  help", Key::Help),
             (SKILLS_KEYS, "m  mark", Key::Mark),
             (SKILLS_KEYS, "mark", Key::Mark),
-            (SKILLS_KEYS, "r  remove", Key::Remove),
-            (SKILLS_KEYS, "K  keep only", Key::Keep),
+            (SKILLS_KEYS, "r/K  remove/keep", Key::Remove),
+            (SKILLS_KEYS, "K  remove/keep", Key::Keep),
             (SKILLS_KEYS, "j/k", Key::Down),
             (SKILLS_KEYS, "k  select", Key::Up),
             (SKILLS_KEYS, "tab  view", Key::Next),
