@@ -1408,10 +1408,7 @@ mod tests {
             let rows = screen_with(&f, &body, Some(STATUS_KEYS), width, 24);
             let kb = &rows[23];
             assert!(kb.contains("s sends line 6/30"), "{width}x24: {kb}");
-            assert!(
-                width < 120 || kb.contains("send line"),
-                "{width}x24: {kb}"
-            );
+            assert!(width < 120 || kb.contains("send line"), "{width}x24: {kb}");
             assert!(crate::out::visible(kb) <= width, "{kb}");
         }
     }
