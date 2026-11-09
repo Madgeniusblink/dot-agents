@@ -1531,7 +1531,11 @@ mod tests {
                 FILES_KEYS,
                 &["c/o", "copy/open", "enter", "open dir", "bksp", "up"][..],
             ),
-            (View::Tree, TREE_KEYS, &["c/o", "copy/open", "s", "send"][..]),
+            (
+                View::Tree,
+                TREE_KEYS,
+                &["c/o", "copy/open", "s", "send"][..],
+            ),
         ];
         for (view, keys, labels) in cases {
             let f = Frame {
