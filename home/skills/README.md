@@ -6,4 +6,6 @@ One directory per skill: `<skill-id>/SKILL.md` plus optional `scripts/`,
 Rules come first. Add a skill only when a procedure has steps whose order the
 model cannot derive. See [principles.md](../principles.md).
 
-Examples: [agent-home](agent-home/SKILL.md), [patch](patch/SKILL.md), [report](report/SKILL.md), [cris-mode](cris-mode/SKILL.md).
+Examples: [agent-home](agent-home/SKILL.md), [patch](patch/SKILL.md), [report](report/SKILL.md).
+
+Personal mode skills that exceed the template budget live under [contrib/skills/](../../contrib/skills/README.md).
