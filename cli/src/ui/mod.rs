@@ -954,7 +954,7 @@ mod unix {
     ];
     pub(super) const DONE_KEYS: Keys = &[("esc", "back"), ("j/k", "scroll"), ("q", "quit")];
 
-    const HELP: [&str; 38] = [
+    const HELP: [&str; 39] = [
         "Keys",
         "",
         "  ?            this help; again to close",
@@ -986,7 +986,8 @@ mod unix {
         "",
         "Files and Tree",
         "  j, k         select an entry; its preview shows at the right",
-        "  enter, bksp  Files: into the selected directory, back up",
+        "  enter        Files: into the selected directory",
+        "  bksp         Files: back up to the parent directory",
         "  c, o         copy or open the selected path",
         "",
         "Each view reads what its command prints with --json, so the view and",
@@ -1471,6 +1472,34 @@ mod tests {
         let kb = &rows[23];
         assert!(kb.contains("c/o") && kb.contains("copy/open"), "{kb}");
         assert!(crate::out::visible(kb) <= 80, "{kb}");
+    }
+
+    #[test]
+    fn t2_help_lists_enter_and_bksp_under_files_and_tree() {
+        let f = Frame {
+            help: true,
+            ..Frame::default()
+        };
+        for width in [80, 120] {
+            let rows = screen(&f, &[], width, 40);
+            let text = rows.join("\n");
+            assert!(
+                text.contains("  enter        Files: into the selected directory"),
+                "{width}x40"
+            );
+            assert!(
+                text.contains("  bksp         Files: back up to the parent directory"),
+                "{width}x40"
+            );
+            assert!(
+                !text.contains("enter, bksp  Files:"),
+                "one line each: {width}x40"
+            );
+            assert!(
+                rows.iter().all(|r| crate::out::visible(r) <= width),
+                "{rows:#?}"
+            );
+        }
     }
 
     #[test]
