@@ -912,6 +912,7 @@ mod unix {
         ("?", "help"),
         ("j/k", "select"),
         ("m", "mark"),
+        ("c/o", "copy/open"),
         ("r/K", "remove/keep"),
         ("R", "refresh"),
         ("tab", "view"),
@@ -1463,6 +1464,10 @@ mod tests {
         let body = vec!["skill".to_string()];
         for width in [80, 120] {
             let kb = &screen_with(&f, &body, Some(SKILLS_KEYS), width, 24)[23];
+            assert!(
+                kb.contains("c/o") && kb.contains("copy/open"),
+                "{width}x24: {kb}"
+            );
             assert!(
                 kb.contains("r/K") && kb.contains("remove/keep"),
                 "{width}x24: {kb}"
