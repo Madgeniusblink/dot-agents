@@ -914,6 +914,7 @@ mod unix {
         ("m", "mark"),
         ("r", "remove"),
         ("K", "keep only"),
+        ("R", "refresh"),
         ("tab", "view"),
         ("q", "quit"),
         ("s", "send"),
@@ -923,6 +924,7 @@ mod unix {
         ("j/k", "select"),
         ("c/o", "copy/open"),
         ("f", "filter"),
+        ("R", "refresh"),
         ("tab", "view"),
         ("q", "quit"),
         ("s", "send"),
@@ -952,7 +954,7 @@ mod unix {
     ];
     pub(super) const DONE_KEYS: Keys = &[("esc", "back"), ("j/k", "scroll"), ("q", "quit")];
 
-    const HELP: [&str; 36] = [
+    const HELP: [&str; 38] = [
         "Keys",
         "",
         "  ?            this help; again to close",
@@ -975,10 +977,12 @@ mod unix {
         "  K            plan agents skills keep for the marked, else the selected",
         "  A            apply the plan shown, as --apply does; esc cancels it",
         "  c, o         copy or open the selected skill's directory",
+        "  R            read skills again now",
         "",
         "Scan",
         "  j, k         select a checkout group; its checkouts show below",
         "  f            filter by the next kind: clone, worktree, submodule",
+        "  R            read checkouts again now",
         "",
         "Files and Tree",
         "  j, k         select an entry; its preview shows at the right",
@@ -1431,6 +1435,26 @@ mod tests {
     }
 
     #[test]
+    fn t2_skills_and_scan_key_bars_show_refresh_at_80_and_120_columns() {
+        let cases = [(View::Skills, SKILLS_KEYS), (View::Scan, SCAN_KEYS)];
+        let body = vec!["row".to_string()];
+        for (view, keys) in cases {
+            let f = Frame {
+                view,
+                ..Frame::default()
+            };
+            for width in [80, 120] {
+                let kb = &screen_with(&f, &body, Some(keys), width, 24)[23];
+                assert!(
+                    kb.contains("R") && kb.contains("refresh"),
+                    "{view:?} {width}x24: {kb}"
+                );
+                assert!(crate::out::visible(kb) <= width, "{kb}");
+            }
+        }
+    }
+
+    #[test]
     fn t2_scan_key_bar_shows_copy_and_open_at_80_columns() {
         let f = Frame {
             view: View::Scan,
@@ -1779,7 +1803,7 @@ mod tests {
 
     #[test]
     fn t9_a_click_on_a_key_label_runs_that_key() {
-        let cases: [(Keys, &str, Key); 12] = [
+        let cases: [(Keys, &str, Key); 13] = [
             (SKILLS_KEYS, "?  help", Key::Help),
             (SKILLS_KEYS, "m  mark", Key::Mark),
             (SKILLS_KEYS, "mark", Key::Mark),
@@ -1788,6 +1812,7 @@ mod tests {
             (SKILLS_KEYS, "j/k", Key::Down),
             (SKILLS_KEYS, "k  select", Key::Up),
             (SKILLS_KEYS, "tab  view", Key::Next),
+            (SKILLS_KEYS, "R  refresh", Key::Refresh),
             (SKILLS_KEYS, "q  quit", Key::Quit),
             (FILES_KEYS, "c/o", Key::Copy),
             (FILES_KEYS, "o  copy/open", Key::Open),
