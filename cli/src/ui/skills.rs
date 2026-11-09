@@ -131,13 +131,17 @@ impl<'a> View<'a> {
     /// Exactly `height` lines, none wider than `width` on a terminal. The
     /// counts and the list take the top, the detail pane the bottom, with a
     /// rule between. The selected row starts with `>`. On a short terminal
-    /// the counts go first, so one row and the detail pane stay.
+    /// the counts go first, so one row and the detail pane stay. When the
+    /// full count block does not fit, one line still names each source.
     pub fn render(&mut self, width: usize, height: usize) -> Vec<String> {
         let mut lines = vec![format!("tools can load {} skills.", self.skills.len())];
-        let counts = out::rows(&self.counts(), width);
+        let count_rows = self.counts();
+        let counts = out::rows(&count_rows, width);
         if height >= lines.len() + counts.len() + 3 + DETAIL_MIN {
             lines.extend(counts);
             lines.push(String::new());
+        } else if let Some(summary) = self.counts_summary(width, &count_rows) {
+            lines.push(summary);
         }
         lines.push(format!("yours, BROKEN, or a copy ({}):", self.rows.len()));
 
@@ -184,6 +188,19 @@ impl<'a> View<'a> {
                 })
             })
             .collect()
+    }
+
+    /// One line: `3 home, yours; 2 claude code, user skills, yours; …`
+    fn counts_summary(&self, width: usize, rows: &[out::Row]) -> Option<String> {
+        if rows.is_empty() {
+            return None;
+        }
+        let body = rows
+            .iter()
+            .map(|r| format!("{} {}", r.meta.trim(), r.text.trim()))
+            .collect::<Vec<_>>()
+            .join("; ");
+        Some(out::fit(&body, width))
     }
 
     /// The name, the line count with `BROKEN`, then the copy note and the
@@ -521,18 +538,31 @@ mod tests {
                 selected_line(&lines).starts_with("> pdf"),
                 "{width}x{height}: the selected row scrolls into view"
             );
-            // One title, five counts, a blank, a section line, one row, and
-            // the five-line detail pane: 14 lines keep the counts.
-            assert_eq!(
+            assert!(
                 has(&lines, "home, yours"),
-                height >= 14,
-                "{width}x{height}: the counts go first on a short terminal"
+                "{width}x{height}: counts stay visible, in full or one line"
             );
             assert!(
                 has(&lines, "─"),
                 "{width}x{height}: the detail pane keeps its rule"
             );
         }
+    }
+
+    #[test]
+    fn t4_short_terminal_shows_a_one_line_count_summary() {
+        let skills = fixture();
+        let root = PathBuf::from("/p");
+        let mut view = View::new(&skills, Some(&root));
+        let full = view.render(120, 30);
+        assert!(full[1].contains("home, yours"), "full block: {}", full[1]);
+        let lines = view.render(80, 12);
+        assert_eq!(lines.len(), 12);
+        assert!(lines[1].contains("home, yours"), "{}", lines[1]);
+        assert!(lines[1].contains(';'), "summary: {}", lines[1]);
+        assert_eq!(lines[2], "yours, BROKEN, or a copy (5):");
+        let lines = view.render(120, 40);
+        assert!(has(&lines, "home, yours"), "{lines:#?}");
     }
 
     #[test]
