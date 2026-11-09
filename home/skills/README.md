@@ -8,4 +8,4 @@ model cannot derive. See [principles.md](../principles.md).
 
 Examples: [agent-home](agent-home/SKILL.md), [patch](patch/SKILL.md), [report](report/SKILL.md).
 
-Personal mode skills that exceed the template budget live under [contrib/skills/](../../contrib/skills/README.md).
+Personal overlay skills that exceed the template budget are kept in the repository `contrib/skills/` tree (not shipped with the template install).
