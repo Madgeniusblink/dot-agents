@@ -1854,6 +1854,42 @@ mod tests {
         assert!(text.contains("links: none"), "{text}");
     }
 
+    #[test]
+    fn t2_status_default_screen_puts_home_summary_in_first_body_rows() {
+        let doc = json!({
+            "home": "/home/me/.agents",
+            "machine": "laptop",
+            "config": {"path": "/home/me/.config/agents/config.toml", "exists": true},
+            "git": {"branch": "main", "sha": "deadbeef", "uncommitted": 0},
+            "always_on": {
+                "files": [{"name": "AGENTS.md", "bytes": 100}],
+                "bytes": 100,
+                "cap": 250,
+                "cap_source": "default cap"
+            },
+            "on_demand": [],
+            "harnesses": [],
+            "links": []
+        });
+        let body = status_lines(&doc);
+        let f = Frame {
+            view: View::Status,
+            top: 0,
+            ..Frame::default()
+        };
+        let rows = screen_with(&f, &body, Some(STATUS_KEYS), 80, 24);
+        let above_fold: String = rows[1..=4]
+            .iter()
+            .map(|r| words(r))
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert!(above_fold.contains("machine: laptop"), "{above_fold}");
+        assert!(above_fold.contains("/home/me/.agents"), "{above_fold}");
+        assert!(above_fold.contains("main at deadbeef"), "{above_fold}");
+        assert!(above_fold.contains("always-on"), "{above_fold}");
+        assert!(above_fold.contains("100 of 250 bytes"), "{above_fold}");
+    }
+
     /// The SGR report of a left press at column `x`, row `y`, both from 0.
     fn press(x: usize, y: usize) -> Vec<u8> {
         format!("\x1b[<0;{};{}M", x + 1, y + 1).into_bytes()
