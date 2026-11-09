@@ -60,5 +60,5 @@ Compare UX to **Claude Desktop**: browser consent → loopback → app foregroun
 ## References (read when relevant)
 
 - Repo routing: `CONTEXT.md`, `.agents/OPERATING.md`
-- PR babysit: Cursor built-in `autopilot` skill
+- PR babysit: `autopilot` skill (editor skill pack)
 - FabricBloc delivery: estate `implement`, `plan-gate`, `reconcile` skills — do not duplicate here
