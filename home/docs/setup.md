@@ -27,7 +27,7 @@ matches.
 
 ```sh
 cargo install --git https://github.com/Madgeniusblink/dot-agents dot-agents
-agents init <your-copy> --apply    # clone to ~/.agents, add upstream, wire
+agents init <your-repo> --apply    # clone to ~/.agents, make the root the home, add upstream, wire
 ```
 
 Until the first tagged release, `cargo install` builds the binary from this
@@ -45,7 +45,7 @@ writes prints its plan and writes nothing without `--apply`.
 | `agents memory` | The tool's own notes per repository, scored against the home so a note the home already states shows as covered; `prune` moves notes aside and drops their index lines |
 | `agents wire` | Point this machine's tools at the home; `unwire` takes out exactly that |
 | `agents check` | Every rule in `standards/`, the always-on budget, and links; one line per fault. [check.md](check.md) lists the rules |
-| `agents update` | Merge the template's main into the home; `sync` does update, wire, and status |
+| `agents update` | Merge the template's main into the home, with `-X subtree=home` since the template keeps the home under `home/`; `sync` does update, wire, and status |
 | `agents reset` | Move each tool's own instruction files aside, then wire; `--memory` includes the tool's auto memory; `--restore` puts them back |
 | `--json` | On `status`, `scan`, `skills`, `memory`, and `check`: one JSON document instead of the text. [json.md](json.md) lists the keys |
 | `--long` | On `status`, `scan`, `skills`, and `memory`: the full listing. Without it, each prints one screen. Twice on `scan`, `skills`, and `memory`: each item in full |

@@ -1,6 +1,12 @@
 # Changelog
 
-Template semver tracks [upstream.json](context/upstream.json) `template_version`.
+Template semver tracks [upstream.json](home/context/upstream.json) `template_version`.
+
+## 0.18.0 — 2026-11-08
+
+- The home is the `home/` directory of this repository; the root is glue ([decision 0012](docs/decisions/0012-home-directory-is-the-home.md)). `AGENTS.md`, `principles.md`, `rules/`, `context/`, `skills/`, `standards/`, `templates/`, `memory/`, `decisions/`, the home's `docs/` and `scripts/` moved under `home/`. The `cli/` source, `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md`, `LICENSE`, `dist-workspace.toml`, `.github/`, `docs/decisions/`, and the merge-tier and neutrality scripts stay at the root and never enter a home. A home merges the template with `git merge --no-edit -X subtree=home upstream/main`; a home that started before this release sheds the glue it carried on that one merge, and its own files stay.
+- `agents update` and `sync` add `-X subtree=home` when the template keeps the home under `home/`, and `--allow-unrelated-histories` when the two histories share no commit. `agents init` accepts an empty repository or a copy with the template's layout: it makes one commit whose tree is `home/` and resets to it, so the root is the home and the template's history is the merge base. A `--home` that points at a checkout of this repository now says that its home is `home/`.
+- `home/scripts/check-links.py <dir>` checks the links in another directory. `scripts/check.sh` at the root runs the home's checks on `home/`, the root docs' links, neutrality, and the merge tiers. The merge-tier paths gained the `home/` prefix.
 
 ## 0.17.0 — 2026-11-07
 

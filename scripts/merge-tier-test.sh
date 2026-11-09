@@ -17,16 +17,17 @@ expect() {
 }
 
 expect green
-expect green README.md docs/setup.md cli/src/status.rs memory/x.md skills/a/SKILL.md rules/corrections.md
+expect green README.md home/docs/setup.md cli/src/status.rs home/memory/x.md home/skills/a/SKILL.md home/rules/corrections.md
 expect "yellow
-scripts/wire.sh (scripts/*)" docs/setup.md scripts/wire.sh
+home/scripts/wire.sh (home/scripts/*)" home/docs/setup.md home/scripts/wire.sh
+expect yellow scripts/check-neutrality.sh
 expect yellow cli/Cargo.lock
 expect yellow .github/workflows/check.yml
-expect yellow context/upstream.json
+expect yellow home/context/upstream.json
 expect "red
-.github/CODEOWNERS (.github/CODEOWNERS)" scripts/wire.sh .github/CODEOWNERS
+.github/CODEOWNERS (.github/CODEOWNERS)" home/scripts/wire.sh .github/CODEOWNERS
 expect red .github/workflows/review.yml
-expect red rules/boundaries.md docs/setup.md
+expect red home/rules/boundaries.md home/docs/setup.md
 
 tmp=$(mktemp)
 printf 'red:\n  - README.md\n' > "$tmp"

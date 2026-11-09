@@ -19,7 +19,7 @@ Read the brief report first. Add `--long` only when one line of it needs the ful
 agents init <your-copy-url> --apply
 ```
 
-This clones to `~/.agents`, adds the template as `upstream`, and wires every tool it finds. Without the binary: `git clone <your-copy-url> ~/.agents`, then `sh ~/.agents/scripts/wire.sh --apply`.
+This clones to `~/.agents`, makes the root the home when the clone keeps it under `home/`, adds the template as `upstream`, and wires every tool it finds. Without the binary: the start recipe in [standards/adopt.md](../../standards/adopt.md), then `sh ~/.agents/scripts/wire.sh --apply`.
 
 ## Wire a tool
 
@@ -31,7 +31,7 @@ This clones to `~/.agents`, adds the template as `upstream`, and wires every too
 
 ## Update
 
-`agents sync --apply`. It merges the template's main into the home, rewires, and reports. A conflict is a rule you rewrote that moved upstream; resolve it in the file and commit.
+`agents sync --apply`. It merges the template's main into the home with `-X subtree=home`, rewires, and reports. A conflict is a rule you rewrote that moved upstream; resolve it in the file and commit.
 
 ## Edit
 

@@ -2,7 +2,7 @@ You are reviewing a staged git diff of markdown files in the current repository 
 
 Check three things, in this order.
 
-1. Stale facts. A version, path, filename, command, count, or claim that the diff states and that the tree contradicts. Examples: a script named that does not exist, a version that does not match `context/upstream.json`, a flag the script does not accept, a file count that is wrong. For each one write `file:line: stale: <what> — tree says <what>`.
+1. Stale facts. A version, path, filename, command, count, or claim that the diff states and that the tree contradicts. Examples: a script named that does not exist, a version that does not match `home/context/upstream.json`, a flag the script does not accept, a file count that is wrong. For each one write `file:line: stale: <what> — tree says <what>`.
 
 2. Plain writing, per ASD-STE100. An instruction sentence over 20 words; a descriptive sentence over 25 words; a passive-voice instruction; more than one instruction in one sentence; an acronym not expanded at first use; a paragraph over 6 sentences. For each one write `file:line: writing: <rule>`.
 

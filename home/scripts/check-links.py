@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
-"""Check that relative markdown links resolve to existing files."""
+"""Check that relative markdown links resolve to existing files.
+
+Scans the home this script is in. With one argument, scans that directory
+instead; the template repository passes its root to check the maintainer docs.
+"""
 from __future__ import annotations
 
 import re
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).resolve().parent.parent
 SCAN = [ROOT / "AGENTS.md", ROOT / "principles.md", ROOT / "README.md",
         ROOT / "rules", ROOT / "context", ROOT / "standards",
         ROOT / "skills", ROOT / "templates", ROOT / "docs"]

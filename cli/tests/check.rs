@@ -6,11 +6,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-fn repo_root() -> PathBuf {
+/// `home/` in this repository: the tree a home is a checkout of.
+fn template_home() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap()
-        .to_path_buf()
+        .join("home")
 }
 
 fn check(home: &Path, args: &[&str]) -> Output {
@@ -67,10 +68,10 @@ fn a_failing_run_prints_one_line_per_fault_and_nothing_else() {
     );
 }
 
-/// Copy the template's always-on files and skills, the parts the budget reads.
+/// Copy the template's home, the tree the budget reads.
 fn template_copy() -> tempfile::TempDir {
     let t = tempfile::tempdir().unwrap();
-    let root = repo_root();
+    let root = template_home();
     for e in walkdir::WalkDir::new(&root)
         .min_depth(1)
         .into_iter()

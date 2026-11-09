@@ -22,7 +22,7 @@ for tier in red yellow; do
   hits=$(printf '%s\n' "$paths" | while IFS= read -r p; do
     [ -n "$p" ] || continue
     for pat in $pats; do
-      case "$p" in $pat) echo "$p ($pat)"; break ;; esac
+      case "$p" in ($pat) echo "$p ($pat)"; break ;; esac
     done
   done)
   if [ -n "$hits" ]; then

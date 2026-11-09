@@ -60,6 +60,13 @@ impl Home {
     pub fn locate(flag: Option<PathBuf>) -> Result<Home> {
         let dir = std::path::absolute(flag.unwrap_or_else(Self::default_dir))?;
         if !dir.join("AGENTS.md").is_file() {
+            if dir.join("home").join("AGENTS.md").is_file() {
+                bail!(
+                    "{d} is the template repository, not a home; its home is {d}/home. \
+                     run: agents --home {d}/home <command>, or agents init <your-repo-url>",
+                    d = tilde(&dir)
+                );
+            }
             bail!(
                 "no agent home at {}. run: agents init <your-repo-url>",
                 tilde(&dir)

@@ -9,12 +9,12 @@ mode="${1:?usage: check-neutrality.sh context|vendors}"
 case "$mode" in
   context)
     pat='madgeniusblink/context|context-install'
-    if grep -rniE "$pat" AGENTS.md principles.md README.md CONTRIBUTING.md rules context standards skills templates; then
+    if grep -rniE "$pat" home/AGENTS.md home/principles.md README.md CONTRIBUTING.md home/rules home/context home/standards home/skills home/templates; then
       exit 1
     fi
     ;;
   vendors)
-    hits=$(grep -rniE 'cursor|claude code|codex' AGENTS.md principles.md README.md CONTRIBUTING.md rules context standards skills templates || true)
+    hits=$(grep -rniE 'cursor|claude code|codex' home/AGENTS.md home/principles.md README.md CONTRIBUTING.md home/rules home/context home/standards home/skills home/templates || true)
     if [ -n "$hits" ]; then
       echo "$hits"
       exit 1

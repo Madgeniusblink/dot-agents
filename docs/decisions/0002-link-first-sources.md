@@ -10,7 +10,7 @@ Vendor docs and standard formats change. Local copies drift.
 
 ## Decision
 
-Link primary URLs in tree files. Add local templates only when no stable URL exists ([sources-policy.md](../../context/sources-policy.md)).
+Link primary URLs in tree files. Add local templates only when no stable URL exists ([sources-policy.md](../../home/context/sources-policy.md)).
 
 ## Consequences
 

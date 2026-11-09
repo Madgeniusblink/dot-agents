@@ -75,8 +75,8 @@ jobs:
             cat scripts/githooks/review-prompt.md
             printf '\n--- tracked files ---\n'
             git ls-files
-            printf '\n--- context/upstream.json ---\n'
-            cat context/upstream.json
+            printf '\n--- home/context/upstream.json ---\n'
+            cat home/context/upstream.json
             printf '\n--- diff ---\n'
             git diff HEAD^1 HEAD | head -c 400000
           } > "$RUNNER_TEMP/prompt"

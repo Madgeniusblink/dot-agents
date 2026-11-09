@@ -11,14 +11,15 @@ red:
   - scripts/merge-tier.sh
   - scripts/merge-tier-test.sh
   - scripts/githooks/review-prompt.md
-  - rules/boundaries.md
+  - home/rules/boundaries.md
 
 yellow:
   - .github/workflows/*
   - scripts/*
+  - home/scripts/*
   - cli/Cargo.toml
   - cli/Cargo.lock
   - cli/src/wire.rs
   - cli/src/harness.rs
   - dist-workspace.toml
-  - context/upstream.json
+  - home/context/upstream.json
