@@ -216,6 +216,16 @@ mod unix {
                     (None, View::Tree) => (tree.render(width, rows), Some(TREE_KEYS)),
                     (None, View::Status) => (body.clone(), Some(STATUS_KEYS)),
                 };
+                frame.send_line = if pending.is_none()
+                    && frame.ask.is_none()
+                    && !frame.help
+                    && frame.view == View::Status
+                    && shown.len() > 1
+                {
+                    Some((frame.top + 1, shown.len()))
+                } else {
+                    None
+                };
                 draw(&mut out, &screen_with(&frame, &shown, keys, width, height))?;
                 let mut buf = [0u8; 32];
                 let n = stdin.read(&mut buf)?;
@@ -618,6 +628,9 @@ mod unix {
     pub(super) struct Ask {
         pub(super) text: String,
         pub(super) pane: Pane,
+        /// The line `s` takes from the body, counted from 1.
+        pub(super) line: usize,
+        pub(super) total: usize,
     }
 
     /// Which tab shows, whether help covers it, the first body row, a send
@@ -629,6 +642,8 @@ mod unix {
         pub(super) top: usize,
         pub(super) ask: Option<Ask>,
         pub(super) note: String,
+        /// Status: which body line `s` would send, when the list scrolls.
+        pub(super) send_line: Option<(usize, usize)>,
     }
 
     impl Default for Frame {
@@ -639,6 +654,7 @@ mod unix {
                 top: 0,
                 ask: None,
                 note: String::new(),
+                send_line: None,
             }
         }
     }
@@ -666,9 +682,14 @@ mod unix {
             .unwrap_or_default();
         frame.note.clear();
         if text.is_empty() {
-            frame.note = "nothing to send on the top line".to_string();
+            frame.note = format!("nothing to send on line {} (top visible)", frame.top + 1);
         } else if let Some(pane) = tmux.panes().into_iter().next() {
-            frame.ask = Some(Ask { text, pane });
+            frame.ask = Some(Ask {
+                text,
+                pane,
+                line: frame.top + 1,
+                total: body.len(),
+            });
         } else {
             frame.note = "no agent pane in tmux".to_string();
         }
@@ -696,8 +717,8 @@ mod unix {
     fn ask_lines(ask: &Ask, width: usize) -> Vec<String> {
         let mut lines = vec![
             format!(
-                "Send this text to the {} pane {}?",
-                ask.pane.label, ask.pane.id
+                "Send line {} of {} to the {} pane {}?",
+                ask.line, ask.total, ask.pane.label, ask.pane.id
             ),
             String::new(),
         ];
@@ -869,7 +890,11 @@ mod unix {
             .collect::<Vec<_>>()
             .join("  ");
         // The result of the last action comes first, so a narrow bar keeps it.
-        if !frame.note.is_empty() {
+        if frame.note.is_empty() {
+            if let Some((line, total)) = frame.send_line {
+                bar = format!("s sends line {line}/{total}  {bar}");
+            }
+        } else {
             bar = format!("{}  {bar}", frame.note);
         }
         cut(&bar, width)
@@ -881,7 +906,7 @@ mod unix {
         ("c/o", "copy/open"),
         ("tab", "view"),
         ("q", "quit"),
-        ("s", "send"),
+        ("s", "send line"),
     ];
     pub(super) const SKILLS_KEYS: Keys = &[
         ("?", "help"),
@@ -938,7 +963,7 @@ mod unix {
         "  space, b     one page down, up",
         "  g, G         top, bottom",
         "  esc          close this help",
-        "  s            send the top line to an agent pane in tmux, after y",
+        "  s            send the top visible line (see the key bar) to a tmux pane, after y",
         "  c            copy the view's path, through the terminal and pbcopy or xclip",
         "  o            open the view's path in $EDITOR",
         "  R            read every view again now; a changed file does it in 2 s",
@@ -1372,6 +1397,43 @@ mod tests {
     }
 
     #[test]
+    fn t2_status_key_bar_shows_which_line_s_will_send() {
+        let body: Vec<String> = (0..30).map(|i| format!("line {i}")).collect();
+        let f = Frame {
+            top: 5,
+            send_line: Some((6, 30)),
+            ..Frame::default()
+        };
+        for width in [80, 120] {
+            let rows = screen_with(&f, &body, Some(STATUS_KEYS), width, 24);
+            let kb = &rows[23];
+            assert!(kb.contains("s sends line 6/30"), "{width}x24: {kb}");
+            assert!(
+                width < 120 || kb.contains("send line"),
+                "{width}x24: {kb}"
+            );
+            assert!(crate::out::visible(kb) <= width, "{kb}");
+        }
+    }
+
+    #[test]
+    fn t7_send_ask_names_the_scrolled_line() {
+        let (_dir, _log, tmux) = fake_tmux();
+        let body: Vec<String> = (0..20).map(|i| format!("line {i}")).collect();
+        let mut f = Frame {
+            top: 4,
+            ..Frame::default()
+        };
+        assert!(sending(&mut f, Key::Send, &body, &tmux));
+        let shown = screen(&f, &body, 120, 40).join("\n");
+        assert!(
+            shown.contains("Send line 5 of 20 to the codex pane %3?"),
+            "{shown}"
+        );
+        assert!(shown.contains("  line 4"), "{shown}");
+    }
+
+    #[test]
     fn t2_scan_key_bar_shows_copy_and_open_at_80_columns() {
         let f = Frame {
             view: View::Scan,
@@ -1471,7 +1533,7 @@ mod tests {
         let rows = screen(&f, &body, 80, 12);
         let shown = rows.join("\n");
         assert!(
-            shown.contains("Send this text to the codex pane %3?"),
+            shown.contains("Send line 1 of 1 to the codex pane %3?"),
             "{shown}"
         );
         assert!(shown.contains("  -n review this file"), "{shown}");
@@ -1513,7 +1575,7 @@ mod tests {
             "other keys go to the frame"
         );
         assert!(sending(&mut f, Key::Send, &[String::new()], &tmux));
-        assert_eq!(f.note, "nothing to send on the top line");
+        assert_eq!(f.note, "nothing to send on line 1 (top visible)");
         assert!(!calls(&log).contains("send-keys"));
     }
 
