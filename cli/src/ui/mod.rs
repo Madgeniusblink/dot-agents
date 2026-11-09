@@ -1523,6 +1523,36 @@ mod tests {
     }
 
     #[test]
+    fn t2_files_and_tree_key_bars_fit_at_80_and_120_columns() {
+        let body = vec!["row".to_string()];
+        let cases = [
+            (
+                View::Files,
+                FILES_KEYS,
+                &["c/o", "copy/open", "enter", "open dir", "bksp", "up"][..],
+            ),
+            (
+                View::Tree,
+                TREE_KEYS,
+                &["c/o", "copy/open", "s", "send"][..],
+            ),
+        ];
+        for (view, keys, labels) in cases {
+            let f = Frame {
+                view,
+                ..Frame::default()
+            };
+            for width in [80, 120] {
+                let kb = &screen_with(&f, &body, Some(keys), width, 24)[23];
+                for label in labels {
+                    assert!(kb.contains(label), "{view:?} {width}x24: {kb}");
+                }
+                assert!(crate::out::visible(kb) <= width, "{kb}");
+            }
+        }
+    }
+
+    #[test]
     fn t2_screen_is_tab_bar_body_key_bar_within_the_size() {
         let body: Vec<String> = (0..30)
             .map(|i| format!("line {i} {}", "x".repeat(50)))
