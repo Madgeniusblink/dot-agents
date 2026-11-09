@@ -896,6 +896,7 @@ mod unix {
     pub(super) const SCAN_KEYS: Keys = &[
         ("?", "help"),
         ("j/k", "select"),
+        ("c/o", "copy/open"),
         ("f", "filter"),
         ("tab", "view"),
         ("q", "quit"),
@@ -1361,6 +1362,25 @@ mod tests {
             &f,
             &["machine: test".to_string()],
             Some(STATUS_KEYS),
+            80,
+            24,
+        );
+        assert_eq!(rows.len(), 24);
+        let kb = &rows[23];
+        assert!(kb.contains("c/o") && kb.contains("copy/open"), "{kb}");
+        assert!(crate::out::visible(kb) <= 80, "{kb}");
+    }
+
+    #[test]
+    fn t2_scan_key_bar_shows_copy_and_open_at_80_columns() {
+        let f = Frame {
+            view: View::Scan,
+            ..Frame::default()
+        };
+        let rows = screen_with(
+            &f,
+            &["filter: all kinds  (0 of 0 groups)".to_string()],
+            Some(SCAN_KEYS),
             80,
             24,
         );
