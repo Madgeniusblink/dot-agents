@@ -118,6 +118,9 @@ impl Config {
 
     /// True when a `[scan] skip` glob matches the path.
     pub fn skipped(&self, path: &Path) -> bool {
+        if self.skip.is_empty() {
+            return false;
+        }
         let p = path.to_string_lossy().replace('\\', "/");
         let name = path.file_name().map(|n| n.to_string_lossy());
         self.skip.iter().any(|g| {
