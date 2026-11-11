@@ -28,7 +28,7 @@ skip = []
 present = []
 "#;
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct Config {
     pub path: PathBuf,
     pub exists: bool,
