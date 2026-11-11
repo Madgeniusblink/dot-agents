@@ -911,7 +911,7 @@ mod unix {
     pub(super) const SKILLS_KEYS: Keys = &[
         ("?", "help"),
         ("j/k", "select"),
-        ("m", "mark"),
+        ("m", "marks"),
         ("c/o", "copy/open"),
         ("r/K", "remove/keep"),
         ("R", "refresh"),
@@ -1477,6 +1477,7 @@ mod tests {
                 kb.contains("c/o") && kb.contains("copy/open"),
                 "{width}x24: {kb}"
             );
+            assert!(kb.contains("m") && kb.contains("marks"), "{width}x24: {kb}");
             assert!(
                 kb.contains("r/K") && kb.contains("remove/keep"),
                 "{width}x24: {kb}"
@@ -1934,8 +1935,8 @@ mod tests {
     fn t9_a_click_on_a_key_label_runs_that_key() {
         let cases: [(Keys, &str, Key); 15] = [
             (SKILLS_KEYS, "?  help", Key::Help),
-            (SKILLS_KEYS, "m  mark", Key::Mark),
-            (SKILLS_KEYS, "mark", Key::Mark),
+            (SKILLS_KEYS, "m  marks", Key::Mark),
+            (SKILLS_KEYS, "marks", Key::Mark),
             (SKILLS_KEYS, "c/o", Key::Copy),
             (SKILLS_KEYS, "o  copy/open", Key::Open),
             (SKILLS_KEYS, "r/K  remove/keep", Key::Remove),

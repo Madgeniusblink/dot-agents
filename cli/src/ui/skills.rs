@@ -16,6 +16,13 @@ use std::path::{Path, PathBuf};
 /// The fewest lines the detail pane keeps when the terminal is short.
 const DETAIL_MIN: usize = 5;
 
+/// Below this many body rows the per-source counts collapse to one line.
+const BODY_ROWS_FOR_FULL_COUNTS: usize = 14;
+
+/// The list name column stays narrower than the global cap so the state
+/// badge and description keep room on an 80-column terminal.
+const LIST_NAME_CAP: usize = 18;
+
 pub struct View<'a> {
     skills: &'a [Skill],
     project: Vec<&'a Skill>,
@@ -137,7 +144,8 @@ impl<'a> View<'a> {
         let mut lines = vec![format!("tools can load {} skills.", self.skills.len())];
         let count_rows = self.counts();
         let counts = out::rows(&count_rows, width);
-        if height >= lines.len() + counts.len() + 3 + DETAIL_MIN {
+        let room_for_full = lines.len() + counts.len() + 3 + DETAIL_MIN;
+        if height >= BODY_ROWS_FOR_FULL_COUNTS && height >= room_for_full {
             lines.extend(counts);
             lines.push(String::new());
         } else if let Some(summary) = self.counts_summary(width, &count_rows) {
@@ -150,7 +158,7 @@ impl<'a> View<'a> {
         let detail_h = detail.len().min((height / 2).max(DETAIL_MIN)).min(room);
         let list_h = height.saturating_sub(lines.len() + detail_h);
 
-        let rows = out::rows(&self.list_rows(), width);
+        let rows = list_rows(&self.list_rows(), width);
         if list_h == 0 || self.selected < self.top {
             self.top = self.selected;
         } else if self.selected >= self.top + list_h {
@@ -210,21 +218,20 @@ impl<'a> View<'a> {
             .iter()
             .map(|&i| {
                 let s = &self.skills[i];
-                let mark = if s.broken() {
-                    format!(" {}", out::state(out::State::Broken))
-                } else {
-                    String::new()
-                };
+                let badge = list_state_badge(s, &self.project, self.root);
                 let desc = s
                     .description
                     .split_whitespace()
                     .collect::<Vec<_>>()
                     .join(" ");
                 let text = match copy_note(s, &self.project, self.root) {
-                    Some(n) if n.starts_with("copy of") => format!("{n}  {desc}"),
+                    Some(n) if n.starts_with("copy of") => {
+                        let lead = n.split('(').next().unwrap_or(&n).trim();
+                        format!("{lead}  {desc}")
+                    }
                     _ => desc,
                 };
-                out::Row::new(&s.name, format!("{:>4} lines{mark}", s.lines), text)
+                out::Row::new(&s.name, format!("{:>4} lines  {badge}", s.lines), text)
             })
             .collect()
     }
@@ -339,6 +346,64 @@ fn text(plan: &Plan, apply: bool) -> (Vec<String>, bool) {
         lines.push(format!("{e:#}"));
     }
     (lines, result.is_ok())
+}
+
+/// A fixed-width state column for the list: BROKEN, identical, different,
+/// or empty when the row is only yours.
+fn list_state_badge(s: &Skill, project: &[&Skill], root: Option<&Path>) -> String {
+    if s.broken() {
+        return format!("{:^10}", out::state(out::State::Broken));
+    }
+    let Some(note) = copy_note(s, project, root) else {
+        return " ".repeat(10);
+    };
+    if !note.starts_with("copy of") {
+        if note == "source missing" {
+            return format!("{:^10}", out::state(out::State::Broken));
+        }
+        return " ".repeat(10);
+    }
+    let state = if note.contains("different") {
+        out::State::Different
+    } else {
+        out::State::Identical
+    };
+    format!("{:^10}", out::state(state))
+}
+
+/// Like `out::rows` but with a tighter name cap for the skills list.
+fn list_rows(rows: &[out::Row], width: usize) -> Vec<String> {
+    let name_w = rows
+        .iter()
+        .map(|r| r.name.chars().count())
+        .max()
+        .unwrap_or(0)
+        .min(LIST_NAME_CAP);
+    let meta_w = rows
+        .iter()
+        .map(|r| out::visible(&r.meta))
+        .max()
+        .unwrap_or(0);
+    rows.iter()
+        .map(|r| {
+            let mut line = String::from("  ");
+            if name_w > 0 {
+                line.push_str(&format!("{:<name_w$}  ", out::fit(&r.name, name_w)));
+            }
+            if meta_w > 0 {
+                line.push_str(&r.meta);
+                line.push_str(&" ".repeat(meta_w.saturating_sub(out::visible(&r.meta)) + 2));
+            }
+            let room = width.saturating_sub(out::visible(&line));
+            line.push_str(&out::fit(&r.text, room));
+            let line = line.trim_end();
+            if out::visible(line) <= width {
+                line.to_string()
+            } else {
+                out::fit(line, width)
+            }
+        })
+        .collect()
 }
 
 /// Whether the list shows `s`: it is yours, it is BROKEN, or it is a copy of
@@ -459,7 +524,9 @@ mod tests {
         assert!(rows[1].starts_with("  deploy"), "{}", rows[1]);
         assert!(rows[2].starts_with("  pdf"), "{}", rows[2]);
         assert!(
-            rows[3].contains("lint") && rows[3].contains("copy of skills/lint (identical)"),
+            rows[3].contains("lint")
+                && rows[3].contains("identical")
+                && rows[3].contains("copy of skills/lint"),
             "{}",
             rows[3]
         );
@@ -563,6 +630,43 @@ mod tests {
         assert_eq!(lines[2], "yours, BROKEN, or a copy (5):");
         let lines = view.render(120, 40);
         assert!(has(&lines, "home, yours"), "{lines:#?}");
+    }
+
+    #[test]
+    fn t4_body_fewer_than_fourteen_rows_collapses_source_counts() {
+        let skills = fixture();
+        let root = PathBuf::from("/p");
+        let mut view = View::new(&skills, Some(&root));
+        let collapsed = view.render(100, 13);
+        assert!(
+            collapsed[1].contains(';') && collapsed[1].contains("home, yours"),
+            "one line: {}",
+            collapsed[1]
+        );
+        assert!(
+            !collapsed[2].contains("claude code, user skills"),
+            "no second count row: {:?}",
+            &collapsed[1..4]
+        );
+        let expanded = view.render(100, 14);
+        assert_eq!(expanded[1].trim(), "1  home, yours");
+        assert_eq!(expanded[2].trim(), "2  claude code, user skills, yours");
+    }
+
+    #[test]
+    fn t4_list_rows_put_state_badges_in_a_fixed_column() {
+        let skills = fixture();
+        let root = PathBuf::from("/p");
+        let mut view = View::new(&skills, Some(&root));
+        let lines = view.render(100, 30);
+        let rows = &lines[8..13];
+        assert!(rows[3].contains("identical"), "copy row badge: {}", rows[3]);
+        assert!(rows[4].contains("BROKEN"), "broken row badge: {}", rows[4]);
+        assert!(
+            !rows[0].contains("identical") && !rows[0].contains("BROKEN"),
+            "clean row: {}",
+            rows[0]
+        );
     }
 
     #[test]
