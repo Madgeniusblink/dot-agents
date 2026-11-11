@@ -611,12 +611,7 @@ mod unix {
     }
 
     impl View {
-        pub(super) const ALL: [View; 4] = [
-            View::Status,
-            View::Skills,
-            View::Scan,
-            View::Files,
-        ];
+        pub(super) const ALL: [View; 4] = [View::Status, View::Skills, View::Scan, View::Files];
 
         pub(super) fn name(self) -> &'static str {
             match self {

@@ -548,10 +548,7 @@ mod tests {
         };
         let b = BrowseView::load(t.path(), false, Some(&home));
         assert!(
-            !b.tree
-                .rows
-                .iter()
-                .any(|r| r.text.contains("SKILL.md")),
+            !b.tree.rows.iter().any(|r| r.text.contains("SKILL.md")),
             "depth 2 does not load SKILL.md under skills/demo"
         );
         assert!(
