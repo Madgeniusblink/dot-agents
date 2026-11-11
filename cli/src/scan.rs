@@ -8,7 +8,7 @@ use crate::home::{expand_home, git_in, tilde, user_home, Home};
 use crate::{out, skills, status};
 use serde_json::{json, Value};
 use std::collections::hash_map::DefaultHasher;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Component, Path, PathBuf};
@@ -78,6 +78,67 @@ pub fn report(roots: &[PathBuf], all: bool, home: Option<&Home>, cfg: &Config) -
     )
 }
 
+/// The git checkout that contains `path`, with a memo so sibling files do
+/// not stat `.git` on every ancestor again.
+struct RepoRoots {
+    cache: HashMap<PathBuf, Option<PathBuf>>,
+}
+
+impl RepoRoots {
+    fn root(&mut self, p: &Path) -> Option<PathBuf> {
+        let mut pending: Vec<&Path> = Vec::new();
+        for anc in p.ancestors() {
+            if let Some(cached) = self.cache.get(anc) {
+                let resolved = cached.clone();
+                for a in &pending {
+                    self.cache.insert(a.to_path_buf(), resolved.clone());
+                }
+                return resolved;
+            }
+            pending.push(anc);
+            if anc.join(".git").exists() {
+                let root = anc.to_path_buf();
+                let hit = Some(root.clone());
+                for a in &pending {
+                    self.cache.insert(a.to_path_buf(), hit.clone());
+                }
+                return Some(root);
+            }
+        }
+        for a in pending {
+            self.cache.insert(a.to_path_buf(), None);
+        }
+        None
+    }
+}
+
+type InstructionFields = (usize, u64, Option<PathBuf>, Option<String>, u64);
+
+fn read_instruction_hit(path: &Path) -> InstructionFields {
+    let text = fs::read_to_string(path).unwrap_or_default();
+    let mut hasher = DefaultHasher::new();
+    text.hash(&mut hasher);
+    let link = fs::symlink_metadata(path)
+        .ok()
+        .filter(|m| m.file_type().is_symlink())
+        .and_then(|_| fs::read_link(path).ok());
+    let generated = text
+        .lines()
+        .take(3)
+        .find(|l| {
+            let l = l.to_ascii_lowercase();
+            l.contains("generated") || l.contains("do not edit")
+        })
+        .map(|l| l.trim().to_string());
+    (
+        text.lines().count(),
+        text.len() as u64,
+        link,
+        generated,
+        hasher.finish(),
+    )
+}
+
 /// Every instruction file and tool settings file under the roots, each with
 /// its scope, files in path order.
 fn gather(
@@ -94,7 +155,10 @@ fn gather(
     ];
     let aside = user.join(".agents-reset");
 
-    let scope_of = |path: &Path| {
+    let mut repos = RepoRoots {
+        cache: HashMap::new(),
+    };
+    let scope_of = |path: &Path, repos: &mut RepoRoots| {
         if home.is_some_and(|h| path.starts_with(&h.dir)) {
             Scope::Home
         } else if path.starts_with(&aside) {
@@ -111,27 +175,34 @@ fn gather(
                 Scope::Global
             }
         } else {
-            match repo_root(path) {
+            match repos.root(path) {
                 Some(r) => Scope::Project(r),
                 None => Scope::Loose,
             }
         }
     };
-    let (found, mut setting_paths): (Vec<PathBuf>, Vec<PathBuf>) = roots
-        .iter()
-        .flat_map(|root| {
-            WalkDir::new(root)
-                .follow_links(false)
+    let (found, mut setting_paths): (Vec<PathBuf>, Vec<PathBuf>) = if roots.len() <= 1 {
+        roots
+            .first()
+            .map(|r| walk_instructions(r, all, cfg))
+            .unwrap_or_default()
+    } else {
+        std::thread::scope(|s| {
+            let walks: Vec<_> = roots
+                .iter()
+                .map(|r| s.spawn(|| walk_instructions(r, all, cfg)))
+                .map(|h| h.join().unwrap())
+                .collect();
+            walks
                 .into_iter()
-                .filter_entry(|e| (all || keep(e)) && !cfg.skipped(e.path()))
+                .reduce(|(mut a, mut b), (c, d)| {
+                    a.extend(c);
+                    b.extend(d);
+                    (a, b)
+                })
+                .unwrap_or_default()
         })
-        .flatten()
-        .filter(|e| {
-            !e.file_type().is_dir()
-                && (instruction_file(e.path()) || harness::settings_tool(e.path()).is_some())
-        })
-        .map(DirEntry::into_path)
-        .partition(|p| instruction_file(p));
+    };
     setting_paths.extend(
         harness::settings_globals()
             .into_iter()
@@ -141,31 +212,41 @@ fn gather(
     setting_paths.dedup();
     let settings: Vec<(Setting, Scope)> = setting_paths
         .iter()
-        .map(|p| (Setting::read(p), scope_of(p)))
+        .map(|p| (Setting::read(p), scope_of(p, &mut repos)))
         .collect();
-    let mut hits: Vec<Hit> = found
-        .into_iter()
-        .map(|path| {
-            let text = fs::read_to_string(&path).unwrap_or_default();
-            let mut hasher = DefaultHasher::new();
-            text.hash(&mut hasher);
-            let scope = scope_of(&path);
-            Hit {
-                lines: text.lines().count(),
-                bytes: text.len() as u64,
-                link: fs::read_link(&path).ok(),
-                generated: text
-                    .lines()
-                    .take(3)
-                    .find(|l| {
-                        let l = l.to_ascii_lowercase();
-                        l.contains("generated") || l.contains("do not edit")
-                    })
-                    .map(|l| l.trim().to_string()),
-                hash: hasher.finish(),
-                scope,
-                path,
+    let partial: Vec<(PathBuf, InstructionFields)> = if found.is_empty() {
+        Vec::new()
+    } else {
+        let workers = std::thread::available_parallelism()
+            .map_or(1, |n| n.get())
+            .min(found.len());
+        let chunk = found.len().div_ceil(workers);
+        std::thread::scope(|s| {
+            let mut handles = Vec::new();
+            for chunk_paths in found.chunks(chunk) {
+                handles.push(s.spawn(|| {
+                    chunk_paths
+                        .iter()
+                        .map(|path| (path.clone(), read_instruction_hit(path)))
+                        .collect::<Vec<_>>()
+                }));
             }
+            handles
+                .into_iter()
+                .flat_map(|h| h.join().unwrap())
+                .collect()
+        })
+    };
+    let mut hits: Vec<Hit> = partial
+        .into_iter()
+        .map(|(path, (lines, bytes, link, generated, hash))| Hit {
+            lines,
+            bytes,
+            link,
+            generated,
+            hash,
+            scope: scope_of(&path, &mut repos),
+            path,
         })
         .collect();
     hits.sort_by(|a, b| a.path.cmp(&b.path));
@@ -174,15 +255,50 @@ fn gather(
 }
 
 /// The checkout at each project root the files sit in.
-fn checkouts(hits: &[Hit]) -> BTreeMap<&Path, Checkout> {
-    let roots: std::collections::BTreeSet<&Path> = hits
+fn checkouts(hits: &[Hit]) -> BTreeMap<PathBuf, Checkout> {
+    let roots: Vec<PathBuf> = hits
         .iter()
         .filter_map(|h| match &h.scope {
-            Scope::Project(r) => Some(r.as_path()),
+            Scope::Project(r) => Some(r.clone()),
             _ => None,
         })
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
         .collect();
-    roots.into_iter().map(|r| (r, Checkout::read(r))).collect()
+    if roots.len() <= 1 {
+        return roots
+            .into_iter()
+            .map(|r| {
+                let c = Checkout::read(&r);
+                (r, c)
+            })
+            .collect();
+    }
+    let rows: Vec<(PathBuf, Checkout)> = std::thread::scope(|s| {
+        let mut handles = Vec::with_capacity(roots.len());
+        for r in roots {
+            handles.push(s.spawn(move || {
+                let c = Checkout::read(&r);
+                (r, c)
+            }));
+        }
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+    rows.into_iter().collect()
+}
+
+fn walk_instructions(root: &Path, all: bool, cfg: &Config) -> (Vec<PathBuf>, Vec<PathBuf>) {
+    WalkDir::new(root)
+        .follow_links(false)
+        .into_iter()
+        .filter_entry(|e| (all || keep(e)) && !cfg.skipped(e.path()))
+        .flatten()
+        .filter(|e| {
+            !e.file_type().is_dir()
+                && (instruction_file(e.path()) || harness::settings_tool(e.path()).is_some())
+        })
+        .map(DirEntry::into_path)
+        .partition(|p| instruction_file(p))
 }
 
 /// No `long`: one row per remote and counts. Once: every file. Twice: each
@@ -262,7 +378,7 @@ pub fn scan(
             Some(repo),
             files.iter().copied(),
         );
-        out::say(&checkouts[repo].line(), 2, width);
+        out::say(&checkouts[*repo].line(), 2, width);
         let counts = skills::project_counts(repo);
         if counts.iter().any(|(_, n)| *n > 0) {
             let parts: Vec<String> = counts.iter().map(|(p, n)| format!("{p} {n}")).collect();
@@ -393,7 +509,7 @@ pub fn scan(
     let orphans: Vec<&Path> = checkouts
         .iter()
         .filter(|(_, c)| matches!(c.kind, Kind::Orphan))
-        .map(|(r, _)| *r)
+        .map(|(r, _)| r.as_path())
         .collect();
     if !orphans.is_empty() {
         println!();
@@ -421,7 +537,7 @@ fn brief(
     started: Instant,
     home: Option<&Home>,
     hits: &[Hit],
-    checkouts: &BTreeMap<&Path, Checkout>,
+    checkouts: &BTreeMap<PathBuf, Checkout>,
     settings: &[(Setting, Scope)],
     width: usize,
 ) {
@@ -521,18 +637,18 @@ fn brief(
 
 /// Checkouts of one remote found in more than one place, each group newest
 /// last commit first.
-fn same_remote<'a>(checkouts: &'a BTreeMap<&Path, Checkout>) -> Vec<(&'a str, Vec<&'a Path>)> {
+fn same_remote(checkouts: &BTreeMap<PathBuf, Checkout>) -> Vec<(&str, Vec<&Path>)> {
     let mut remotes: BTreeMap<&str, Vec<&Path>> = BTreeMap::new();
     for (repo, c) in checkouts {
         if let Some(r) = &c.remote {
-            remotes.entry(r).or_default().push(repo);
+            remotes.entry(r).or_default().push(repo.as_path());
         }
     }
     remotes
         .into_iter()
         .filter(|(_, v)| v.len() > 1)
         .map(|(r, mut v)| {
-            v.sort_by(|a, b| checkouts[b].when.cmp(&checkouts[a].when));
+            v.sort_by(|a, b| checkouts[*b].when.cmp(&checkouts[*a].when));
             (r, v)
         })
         .collect()
@@ -542,7 +658,7 @@ fn same_remote<'a>(checkouts: &'a BTreeMap<&Path, Checkout>) -> Vec<(&'a str, Ve
 /// for remotes with more than one.
 fn per_remote<'a>(
     group: &[&Hit],
-    checkouts: &'a BTreeMap<&Path, Checkout>,
+    checkouts: &'a BTreeMap<PathBuf, Checkout>,
 ) -> Vec<(&'a str, usize)> {
     let mut per: BTreeMap<&str, std::collections::BTreeSet<&Path>> = BTreeMap::new();
     for h in group {
@@ -560,20 +676,23 @@ fn per_remote<'a>(
 
 /// The checkout under the root that still holds a record pointing back at
 /// this orphan worktree.
-fn orphan_source<'a>(repo: &Path, checkouts: &'a BTreeMap<&Path, Checkout>) -> Option<&'a Path> {
+fn orphan_source<'a>(repo: &Path, checkouts: &'a BTreeMap<PathBuf, Checkout>) -> Option<&'a Path> {
     let me = fs::canonicalize(repo.join(".git")).ok();
-    checkouts.keys().copied().find(|s| {
-        fs::read_dir(s.join(".git").join("worktrees"))
-            .into_iter()
-            .flatten()
-            .flatten()
-            .any(|w| {
-                fs::read_to_string(w.path().join("gitdir"))
-                    .ok()
-                    .and_then(|g| fs::canonicalize(g.trim()).ok())
-                    .is_some_and(|g| Some(g) == me)
-            })
-    })
+    checkouts
+        .keys()
+        .find(|s| {
+            fs::read_dir(s.join(".git").join("worktrees"))
+                .into_iter()
+                .flatten()
+                .flatten()
+                .any(|w| {
+                    fs::read_to_string(w.path().join("gitdir"))
+                        .ok()
+                        .and_then(|g| fs::canonicalize(g.trim()).ok())
+                        .is_some_and(|g| Some(g) == me)
+                })
+        })
+        .map(|s| s.as_path())
 }
 
 /// What a project root is, read from local files and refs only. Nothing
@@ -763,7 +882,7 @@ fn data(
     all: bool,
     seconds: f32,
     hits: &[Hit],
-    checkouts: &BTreeMap<&Path, Checkout>,
+    checkouts: &BTreeMap<PathBuf, Checkout>,
     settings: &[(Setting, Scope)],
 ) -> Value {
     let project_of = |s: &Scope| match s {
@@ -956,13 +1075,6 @@ fn instruction_file(p: &Path) -> bool {
     let under =
         |tool: &str| parent.is_some_and(|d| d == "rules") && grand.is_some_and(|d| d == tool);
     (name.ends_with(".md") && under(".claude")) || (name.ends_with(".mdc") && under(".cursor"))
-}
-
-fn repo_root(p: &Path) -> Option<PathBuf> {
-    p.ancestors()
-        .skip(1)
-        .find(|d| d.join(".git").exists())
-        .map(Path::to_path_buf)
 }
 
 enum State {
