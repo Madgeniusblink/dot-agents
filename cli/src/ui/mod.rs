@@ -56,7 +56,9 @@ mod unix {
     use std::panic::{self, AssertUnwindSafe};
     use std::path::PathBuf;
     use std::process::{Command, ExitCode};
+    use std::sync::mpsc::{self, Receiver};
     use std::sync::{Mutex, Once, PoisonError};
+    use std::thread;
     use std::time::Instant;
 
     /// The alternate screen, with the cursor hidden and SGR mouse reports
@@ -162,6 +164,38 @@ mod unix {
         }
     }
 
+    /// A scan on its own thread. The walk of a full home directory can take
+    /// most of a minute, and the loop must read keys while it runs.
+    pub(super) struct ScanJob {
+        done: Receiver<Value>,
+        started: Instant,
+    }
+
+    impl ScanJob {
+        pub(super) fn start(work: impl FnOnce() -> Value + Send + 'static) -> Self {
+            let (tx, done) = mpsc::channel();
+            thread::spawn(move || {
+                let _ = tx.send(work());
+            });
+            ScanJob {
+                done,
+                started: Instant::now(),
+            }
+        }
+
+        /// The report, once. `None` while the walk still runs.
+        pub(super) fn poll(&self) -> Option<Value> {
+            self.done.try_recv().ok()
+        }
+
+        pub(super) fn line(&self, root: &str) -> String {
+            format!(
+                "scanning {root} … {} s. The other tabs work.",
+                self.started.elapsed().as_secs()
+            )
+        }
+    }
+
     /// The loop: draw, wait for a key, apply it, until `q`. The outer loop
     /// reads the skills again after a plan ran, after `R`, and when a file
     /// time changed. A refresh keeps the scroll, the selection, and the marks.
@@ -182,6 +216,7 @@ mod unix {
         // A scan walks every root, so it runs when the tab opens, and again
         // only after `R` or a plan.
         let mut groups: Option<scan::View> = None;
+        let mut job: Option<ScanJob> = None;
         loop {
             let found = crate::skills::find(Some(home));
             let mut list = skills::View::new(&found, root.as_deref());
@@ -196,20 +231,27 @@ mod unix {
             let refresh = loop {
                 let (width, height) = size();
                 let rows = height.saturating_sub(2);
-                if frame.view == View::Scan && groups.is_none() {
-                    let wait = [format!("scanning {} …", tilde(&scan_roots[0]))];
-                    draw(&mut out, &screen_with(&frame, &wait, None, width, height))?;
-                    let report = crate::scan::report(&scan_roots, false, Some(home), cfg);
-                    groups = Some(scan::View::new(&report));
+                if groups.is_none() {
+                    if let Some(report) = job.as_ref().and_then(ScanJob::poll) {
+                        groups = Some(scan::View::new(&report));
+                        job = None;
+                    } else if job.is_none() && frame.view == View::Scan {
+                        let (roots, dir, cfg) = (scan_roots.clone(), home.dir.clone(), cfg.clone());
+                        job = Some(ScanJob::start(move || {
+                            crate::scan::report(&roots, false, Some(&Home { dir }), &cfg)
+                        }));
+                    }
                 }
                 let (shown, keys) = match (&pending, frame.view) {
                     (Some(p), _) if p.done => (p.lines.clone(), Some(DONE_KEYS)),
                     (Some(p), _) => (p.lines.clone(), Some(PLAN_KEYS)),
                     (None, View::Skills) => (list.render(width, rows), Some(SKILLS_KEYS)),
                     (None, View::Scan) => (
-                        groups
-                            .as_ref()
-                            .map_or_else(Vec::new, |g| g.render(width, rows)),
+                        match (&groups, &job) {
+                            (Some(g), _) => g.render(width, rows),
+                            (None, Some(j)) => vec![j.line(&tilde(&scan_roots[0]))],
+                            (None, None) => Vec::new(),
+                        },
                         Some(SCAN_KEYS),
                     ),
                     (None, View::Files) => (files.render(width, rows), Some(FILES_KEYS)),
@@ -371,6 +413,7 @@ mod unix {
                 files = FilesView::load(&home.dir, false, Some(home));
                 tree = TreeView::load(&home.dir, 4, false, Some(home));
                 groups = None;
+                job = None;
             }
         }
     }
@@ -1077,6 +1120,13 @@ mod unix {
                 s(doc, "home")
             ));
         }
+        let harnesses: Vec<&Value> = doc["harnesses"].as_array().into_iter().flatten().collect();
+        if !harnesses.is_empty() {
+            lines.push(harness_summary(&harnesses));
+        }
+        if let Some(action) = status_actions(doc, &harnesses) {
+            lines.push(action);
+        }
         lines.push(String::new());
 
         let always = &doc["always_on"];
@@ -1101,7 +1151,7 @@ mod unix {
         }
         lines.push(String::new());
 
-        for h in doc["harnesses"].as_array().into_iter().flatten() {
+        for h in &harnesses {
             lines.push(format!("{}: {}", s(h, "label"), harness_state(h)));
             let link = match h["link"].as_str() {
                 Some(t) => format!(", a link to {t}"),
@@ -1147,7 +1197,7 @@ mod unix {
             let state = if c["wired"].as_bool().unwrap_or(false) {
                 "current"
             } else {
-                "not wired. Run: agents wire --apply"
+                "not wired"
             };
             lines.push(format!("cursor, the sessionStart hook: {state}"));
             lines.push(format!(
@@ -1209,16 +1259,83 @@ mod unix {
 
     /// The state the brief prints for one harness file, from its object.
     fn harness_state(h: &Value) -> String {
-        let wire = "Run: agents wire --apply";
         if h["exists"].as_bool() != Some(true) {
-            format!("not wired. {wire}")
+            "not wired".to_string()
         } else if h["ours"].as_bool() == Some(false) {
             "the file there is not the home's".to_string()
         } else if h["stale"].as_bool() == Some(true) {
-            format!("{}. {wire}", out::state(State::Stale))
+            out::state(State::Stale)
         } else {
             out::state(State::Ok)
         }
+    }
+
+    /// One line: `N harnesses: ok / stale / not wired` from the status json array.
+    fn harness_summary(harnesses: &[&Value]) -> String {
+        let n = harnesses.len();
+        let mut ok = 0u64;
+        let mut stale = 0u64;
+        let mut not_wired = 0u64;
+        for h in harnesses {
+            if h["exists"].as_bool() != Some(true) {
+                not_wired += 1;
+            } else if h["stale"].as_bool() == Some(true) {
+                stale += 1;
+            } else {
+                ok += 1;
+            }
+        }
+        format!("{n} harnesses: {ok} ok / {stale} stale / {not_wired} not wired")
+    }
+
+    /// Compact actions after the home block when wire, stale, or cap needs attention.
+    fn status_actions(doc: &Value, harnesses: &[&Value]) -> Option<String> {
+        let stale = harnesses
+            .iter()
+            .filter(|h| h["stale"].as_bool() == Some(true))
+            .count();
+        let not_wired = harnesses
+            .iter()
+            .filter(|h| h["exists"].as_bool() != Some(true))
+            .count();
+        let harness_over = harnesses
+            .iter()
+            .filter(|h| h["over_cap"].as_object().is_some())
+            .count();
+        let always = &doc["always_on"];
+        let always_over = n(always, "bytes") > n(always, "cap");
+        let cursor_unwired = doc["cursor"]
+            .as_object()
+            .is_some_and(|c| !c["wired"].as_bool().unwrap_or(false));
+        let needs_wire = harnesses.iter().any(|h| harness_needs_wire(h)) || cursor_unwired;
+        if !needs_wire && !always_over && harness_over == 0 {
+            return None;
+        }
+        let mut parts = Vec::new();
+        if stale > 0 {
+            parts.push(format!("{stale} stale"));
+        }
+        if not_wired > 0 {
+            parts.push(format!("{not_wired} not wired"));
+        }
+        if harness_over > 0 {
+            parts.push(format!("{harness_over} over harness cap"));
+        }
+        if always_over {
+            parts.push("always-on OVER cap".to_string());
+        }
+        if cursor_unwired && stale == 0 && not_wired == 0 {
+            parts.push("cursor hook not wired".to_string());
+        }
+        let mut line = format!("actions: {}", parts.join(", "));
+        if needs_wire {
+            line.push_str(". Run: agents wire --apply");
+        }
+        Some(line)
+    }
+
+    fn harness_needs_wire(h: &Value) -> bool {
+        h["exists"].as_bool() != Some(true) || h["stale"].as_bool() == Some(true)
     }
 }
 
@@ -1294,6 +1411,23 @@ mod tests {
         assert_eq!(payload.downcast_ref::<&str>(), Some(&"a view bug"));
         assert!(!fake.raw, "raw mode must end when the view panics");
         assert_eq!((fake.entered, fake.left), (1, 1));
+    }
+
+    #[test]
+    fn t2_scan_job_leaves_the_loop_free_until_the_walk_ends() {
+        let (release, wait) = std::sync::mpsc::channel::<()>();
+        let job = ScanJob::start(move || {
+            wait.recv().unwrap();
+            serde_json::json!({"done": true})
+        });
+        assert_eq!(job.poll(), None, "the walk still runs");
+        assert!(job.line("~").starts_with("scanning ~ … 0 s."));
+        release.send(()).unwrap();
+        let report = (0..200).find_map(|_| {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            job.poll()
+        });
+        assert_eq!(report, Some(serde_json::json!({"done": true})));
     }
 
     #[test]
@@ -1827,17 +1961,19 @@ mod tests {
             "machine: box, config: ~/.config/agents/config.toml (no file, so defaults)",
             "home: ~/.agents, main at abc1234, 2 uncommitted, behind upstream by 3 commits",
             "merge.ours.driver is not set",
+            "3 harnesses: 1 ok / 1 stale / 1 not wired",
+            "actions: 1 stale, 1 not wired, 1 over harness cap, always-on OVER cap. Run: agents wire --apply",
             "always-on: 300 of 250 bytes (default cap), OVER the cap",
             "    100 bytes  AGENTS.md",
             "on demand: skills/ 4",
-            "claude code, the home's drop-in: STALE. Run: agents wire --apply",
+            "claude code, the home's drop-in: STALE",
             "  3 lines, 40 bytes, imports: 3 home, 0 elsewhere, 1 broken",
             "    BROKEN @~/gone.md",
             "  2 rule lines in the file itself",
-            "codex, the home's generated file: not wired. Run: agents wire --apply",
+            "codex, the home's generated file: not wired",
             "grok, the home's generated file: the file there is not the home's",
             "  90 bytes passes the cap of 50",
-            "cursor, the sessionStart hook: not wired. Run: agents wire --apply",
+            "cursor, the sessionStart hook: not wired",
             "  ~/.cursor/hooks.json runs sh ~/.agents/scripts/cursor-context.sh",
             "hooks: ~/.claude/settings.json, 1 name a missing path",
             "  BROKEN ~/bin/gone",
@@ -1846,13 +1982,73 @@ mod tests {
         ] {
             assert!(text.contains(want), "missing {want:?} in:\n{text}");
         }
+        assert_eq!(
+            text.matches("Run: agents wire --apply").count(),
+            1,
+            "{text}"
+        );
         let ok = json!({"git": null, "config": {}, "always_on": {}, "harnesses": [
             {"label": "codex", "path": "p", "exists": true, "imports": {}, "stale": false, "ours": true}
         ], "links": []});
         let text = words(&status_lines(&ok).join("\n"));
         assert!(text.contains("NOT a git checkout"), "{text}");
         assert!(text.contains("codex: ok"), "{text}");
+        assert!(
+            text.contains("1 harnesses: 1 ok / 0 stale / 0 not wired"),
+            "{text}"
+        );
+        assert!(!text.contains("actions:"), "{text}");
         assert!(text.contains("links: none"), "{text}");
+    }
+
+    #[test]
+    fn t2_status_actions_omitted_when_harnesses_are_current() {
+        let doc = json!({
+            "home": "~/.agents",
+            "machine": "box",
+            "config": {"path": "c.toml", "exists": true},
+            "always_on": {"bytes": 10, "cap": 250, "cap_source": "default"},
+            "harnesses": [
+                {"label": "codex", "path": "p", "exists": true, "stale": false, "ours": true}
+            ],
+            "links": []
+        });
+        let text = words(&status_lines(&doc).join("\n"));
+        assert!(
+            text.contains("1 harnesses: 1 ok / 0 stale / 0 not wired"),
+            "{text}"
+        );
+        assert!(!text.contains("actions:"), "{text}");
+        assert!(!text.contains("Run: agents wire --apply"), "{text}");
+    }
+
+    #[test]
+    fn t2_status_actions_single_wire_hint_for_cursor_only() {
+        let doc = json!({
+            "home": "~/.agents",
+            "machine": "box",
+            "config": {"path": "c.toml", "exists": true},
+            "always_on": {"bytes": 10, "cap": 250, "cap_source": "default"},
+            "harnesses": [
+                {"label": "codex", "path": "p", "exists": true, "stale": false, "ours": true}
+            ],
+            "cursor": {"hooks": "h.json", "command": "sh x", "wired": false},
+            "links": []
+        });
+        let text = words(&status_lines(&doc).join("\n"));
+        assert!(
+            text.contains("actions: cursor hook not wired. Run: agents wire --apply"),
+            "{text}"
+        );
+        assert_eq!(
+            text.matches("Run: agents wire --apply").count(),
+            1,
+            "{text}"
+        );
+        assert!(
+            text.contains("cursor, the sessionStart hook: not wired"),
+            "{text}"
+        );
     }
 
     #[test]
