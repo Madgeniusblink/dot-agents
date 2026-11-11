@@ -1,7 +1,9 @@
 //! The Files tab: a tree from the home at depth [`TREE_DEPTH`], and a flat
 //! listing when a person enters a directory. Columns for the name, size,
 //! lines, and date, a preview of the selected entry, and backspace to
-//! leave a drilled folder for the tree again. Nothing here writes.
+//! leave a drilled folder for the tree again. In flat mode, `t` shows a scoped
+//! tree at the selected directory; escape returns to the flat list. Nothing
+//! here writes.
 
 use crate::home::{tilde, Home};
 use crate::out::fit;
@@ -30,6 +32,14 @@ struct DrillFlat {
     files: FilesView,
     anchor: PathBuf,
     tree_selected: usize,
+    /// A scoped tree overlay; escape dismisses it and restores `flat_selected`.
+    scoped: Option<ScopedTree>,
+}
+
+/// A tree rooted at one directory, shown over a flat listing.
+struct ScopedTree {
+    tree: TreeView,
+    flat_selected: usize,
 }
 
 impl BrowseView {
@@ -42,6 +52,9 @@ impl BrowseView {
 
     pub fn down(&mut self) {
         match &mut self.flat {
+            Some(d) if d.scoped.is_some() => {
+                d.scoped.as_mut().unwrap().tree.down();
+            }
             Some(d) => d.files.down(),
             None => self.tree.down(),
         }
@@ -49,6 +62,9 @@ impl BrowseView {
 
     pub fn up(&mut self) {
         match &mut self.flat {
+            Some(d) if d.scoped.is_some() => {
+                d.scoped.as_mut().unwrap().tree.up();
+            }
             Some(d) => d.files.up(),
             None => self.tree.up(),
         }
@@ -56,6 +72,9 @@ impl BrowseView {
 
     pub fn pick(&mut self, line: usize, height: usize) {
         match &mut self.flat {
+            Some(d) if d.scoped.is_some() => {
+                d.scoped.as_mut().unwrap().tree.pick(line, height);
+            }
             Some(d) => d.files.pick(line, height),
             None => self.tree.pick(line, height),
         }
@@ -63,15 +82,53 @@ impl BrowseView {
 
     pub fn selected(&self) -> Option<&Node> {
         match &self.flat {
+            Some(d) if let Some(s) = &d.scoped => s.tree.selected(),
             Some(d) => d.files.selected(),
             None => self.tree.selected(),
         }
+    }
+
+    /// Flat mode only: show a scoped tree at the selected directory.
+    pub fn show_scoped_tree(&mut self, home: Option<&Home>) {
+        let Some(d) = &mut self.flat else {
+            return;
+        };
+        if d.scoped.is_some() {
+            return;
+        }
+        let Some(n) = d.files.selected().filter(|n| n.kind == Kind::Dir) else {
+            return;
+        };
+        let flat_selected = d.files.selected;
+        let tree = TreeView::load(&n.path, TREE_DEPTH, d.files.all, home);
+        d.scoped = Some(ScopedTree {
+            tree,
+            flat_selected,
+        });
+    }
+
+    /// Leave the scoped tree overlay and restore the flat selection.
+    pub fn dismiss_scoped_tree(&mut self) {
+        let Some(d) = &mut self.flat else {
+            return;
+        };
+        let Some(s) = d.scoped.take() else {
+            return;
+        };
+        d.files.selected = s.flat_selected.min(d.files.entries.len().saturating_sub(1));
+    }
+
+    pub fn in_scoped_tree(&self) -> bool {
+        self.flat.as_ref().is_some_and(|d| d.scoped.is_some())
     }
 
     /// In the tree, enter opens a flat list of the selected directory. In
     /// flat mode, enter follows a subdirectory as today.
     pub fn enter(&mut self, home: Option<&Home>) {
         if let Some(d) = &mut self.flat {
+            if d.scoped.is_some() {
+                return;
+            }
             d.files.enter();
             return;
         }
@@ -85,12 +142,16 @@ impl BrowseView {
             files,
             anchor,
             tree_selected,
+            scoped: None,
         });
     }
 
     /// In flat mode at the drill anchor, back returns to the tree with the
     /// prior row selected; otherwise flat mode goes up one directory.
     pub fn back(&mut self) {
+        if self.in_scoped_tree() {
+            return;
+        }
         let Some(d) = &mut self.flat else {
             return;
         };
@@ -104,6 +165,7 @@ impl BrowseView {
 
     pub fn render(&self, width: usize, height: usize) -> Vec<String> {
         match &self.flat {
+            Some(d) if let Some(s) = &d.scoped => s.tree.render(width, height),
             Some(d) => d.files.render(width, height),
             None => self.tree.render(width, height),
         }
@@ -126,6 +188,7 @@ impl BrowseView {
                 files,
                 anchor,
                 tree_selected: tree_sel,
+                scoped: None,
             }
         });
         if self.flat.is_none() {
@@ -537,6 +600,53 @@ mod tests {
             let lines = b.render(width, 24);
             assert_eq!(lines.len(), 24, "{width}x24");
             assert!(lines.iter().all(|l| visible(l) <= width), "{lines:#?}");
+        }
+    }
+
+    #[test]
+    fn browse_flat_scoped_tree_and_esc_returns() {
+        let t = fixture();
+        let home = Home {
+            dir: t.path().to_path_buf(),
+        };
+        let mut b = BrowseView::load(t.path(), false, Some(&home));
+        let skills = b
+            .tree
+            .rows
+            .iter()
+            .position(|r| r.node.name == "skills")
+            .unwrap();
+        b.tree.selected = skills;
+        b.enter(Some(&home));
+        assert!(!b.in_scoped_tree());
+        b.show_scoped_tree(Some(&home));
+        assert!(b.in_scoped_tree());
+        let tree_lines = b.render(80, 24);
+        assert_eq!(tree_lines.len(), 24);
+        assert!(tree_lines.iter().all(|l| visible(l) <= 80));
+        assert!(
+            tree_lines[0].contains("skills"),
+            "scoped root: {}",
+            tree_lines[0]
+        );
+        assert!(
+            tree_lines.iter().any(|l| l.contains("demo")),
+            "scoped tree shows subtree: {tree_lines:#?}"
+        );
+        b.dismiss_scoped_tree();
+        assert!(!b.in_scoped_tree());
+        let flat_lines = b.render(80, 24);
+        assert!(
+            flat_lines[0].contains("items"),
+            "flat again: {}",
+            flat_lines[0]
+        );
+        for width in [80, 120] {
+            b.show_scoped_tree(Some(&home));
+            let lines = b.render(width, 24);
+            assert_eq!(lines.len(), 24, "{width}x24");
+            assert!(lines.iter().all(|l| visible(l) <= width), "{lines:#?}");
+            b.dismiss_scoped_tree();
         }
     }
 

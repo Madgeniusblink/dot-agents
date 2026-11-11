@@ -342,14 +342,28 @@ mod unix {
                         (View::Files, Key::Row(line), _) => browse.pick(line, rows),
                         (View::Files, Key::Enter, _) => browse.enter(Some(home)),
                         (View::Files, Key::Back, _) => browse.back(),
+                        (View::Files, Key::Tree, _) => browse.show_scoped_tree(Some(home)),
                         _ => {}
+                    }
+                    if browse.in_scoped_tree()
+                        && frame.view == View::Files
+                        && !frame.help
+                        && key == Key::Esc
+                    {
+                        browse.dismiss_scoped_tree();
+                        continue;
                     }
                     if matches!(
                         (frame.view, key),
                         (View::Scan, Key::Down | Key::Up | Key::Row(_) | Key::Filter)
                             | (
                                 View::Files,
-                                Key::Down | Key::Up | Key::Row(_) | Key::Enter | Key::Back
+                                Key::Down
+                                    | Key::Up
+                                    | Key::Row(_)
+                                    | Key::Enter
+                                    | Key::Back
+                                    | Key::Tree
                             )
                     ) {
                         continue;
@@ -460,6 +474,8 @@ mod unix {
         Filter,
         Enter,
         Back,
+        /// The Files view in flat mode: scoped tree at the selected directory.
+        Tree,
         /// A left press at column `x`, row `y`, both from 0. `clicked` turns
         /// it into the key it stands for.
         Click {
@@ -504,6 +520,7 @@ mod unix {
             b"f" => Key::Filter,
             b"\r" | b"\n" => Key::Enter,
             b"\x7f" | b"\x08" => Key::Back,
+            b"t" => Key::Tree,
             _ => Key::Other,
         })
     }
@@ -787,6 +804,7 @@ mod unix {
                 | Key::Filter
                 | Key::Enter
                 | Key::Back
+                | Key::Tree
                 | Key::Click { .. }
                 | Key::Row(_)
                 | Key::Other => {}
@@ -954,9 +972,9 @@ mod unix {
     pub(super) const FILES_KEYS: Keys = &[
         ("?", "help"),
         ("j/k", "select"),
-        ("enter", "open dir"),
+        ("enter/t", "into/tree"),
         ("bksp", "back"),
-        ("c/o", "copy/open"),
+        ("c/o", "path"),
         ("tab", "view"),
         ("q", "quit"),
     ];
@@ -968,7 +986,7 @@ mod unix {
     ];
     pub(super) const DONE_KEYS: Keys = &[("esc", "back"), ("j/k", "scroll"), ("q", "quit")];
 
-    const HELP: [&str; 39] = [
+    const HELP: [&str; 41] = [
         "Keys",
         "",
         "  ?            this help; again to close",
@@ -1001,6 +1019,8 @@ mod unix {
         "Files",
         "  j, k         select an entry; its preview shows at the right",
         "  enter        into the selected directory: flat list, or down in flat",
+        "  t            flat: scoped tree at the selected directory",
+        "  esc          scoped tree: back to the flat list",
         "  bksp         flat: up one directory, or back to the tree at the anchor",
         "  c, o         copy or open the selected path",
         "",
@@ -1623,6 +1643,14 @@ mod tests {
                 "{width}x40"
             );
             assert!(
+                text.contains("  t            flat: scoped tree at the selected directory"),
+                "{width}x40"
+            );
+            assert!(
+                text.contains("  esc          scoped tree: back to the flat list"),
+                "{width}x40"
+            );
+            assert!(
                 text.contains("  bksp         flat: up one directory, or back to the tree"),
                 "{width}x40"
             );
@@ -1644,7 +1672,7 @@ mod tests {
             view: View::Files,
             ..Frame::default()
         };
-        let labels = ["c/o", "copy/open", "enter", "open dir", "bksp", "back"];
+        let labels = ["c/o", "path", "enter", "into", "t", "tree", "bksp", "back"];
         for width in [80, 120] {
             let kb = &screen_with(&f, &body, Some(FILES_KEYS), width, 24)[23];
             for label in labels {
@@ -1805,6 +1833,7 @@ mod tests {
     fn t6_c_and_o_are_keys_that_leave_the_frame_as_it_was() {
         assert_eq!(key(b"c"), Some(Key::Copy));
         assert_eq!(key(b"o"), Some(Key::Open));
+        assert_eq!(key(b"t"), Some(Key::Tree));
         let mut f = Frame {
             top: 2,
             ..Frame::default()
@@ -2082,7 +2111,7 @@ mod tests {
 
     #[test]
     fn t9_a_click_on_a_key_label_runs_that_key() {
-        let cases: [(Keys, &str, Key); 15] = [
+        let cases: [(Keys, &str, Key); 17] = [
             (SKILLS_KEYS, "?  help", Key::Help),
             (SKILLS_KEYS, "m  marks", Key::Mark),
             (SKILLS_KEYS, "marks", Key::Mark),
@@ -2096,7 +2125,9 @@ mod tests {
             (SKILLS_KEYS, "R  refresh", Key::Refresh),
             (SKILLS_KEYS, "q  quit", Key::Quit),
             (FILES_KEYS, "c/o", Key::Copy),
-            (FILES_KEYS, "o  copy/open", Key::Open),
+            (FILES_KEYS, "o  path", Key::Open),
+            (FILES_KEYS, "enter", Key::Enter),
+            (FILES_KEYS, "/t", Key::Tree),
             (FILES_KEYS, "bksp  back", Key::Back),
         ];
         for (keys, label, want) in cases {
