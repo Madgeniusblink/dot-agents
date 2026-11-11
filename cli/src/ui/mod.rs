@@ -56,7 +56,9 @@ mod unix {
     use std::panic::{self, AssertUnwindSafe};
     use std::path::PathBuf;
     use std::process::{Command, ExitCode};
+    use std::sync::mpsc::{self, Receiver};
     use std::sync::{Mutex, Once, PoisonError};
+    use std::thread;
     use std::time::Instant;
 
     /// The alternate screen, with the cursor hidden and SGR mouse reports
@@ -162,6 +164,38 @@ mod unix {
         }
     }
 
+    /// A scan on its own thread. The walk of a full home directory can take
+    /// most of a minute, and the loop must read keys while it runs.
+    pub(super) struct ScanJob {
+        done: Receiver<Value>,
+        started: Instant,
+    }
+
+    impl ScanJob {
+        pub(super) fn start(work: impl FnOnce() -> Value + Send + 'static) -> Self {
+            let (tx, done) = mpsc::channel();
+            thread::spawn(move || {
+                let _ = tx.send(work());
+            });
+            ScanJob {
+                done,
+                started: Instant::now(),
+            }
+        }
+
+        /// The report, once. `None` while the walk still runs.
+        pub(super) fn poll(&self) -> Option<Value> {
+            self.done.try_recv().ok()
+        }
+
+        pub(super) fn line(&self, root: &str) -> String {
+            format!(
+                "scanning {root} … {} s. The other tabs work.",
+                self.started.elapsed().as_secs()
+            )
+        }
+    }
+
     /// The loop: draw, wait for a key, apply it, until `q`. The outer loop
     /// reads the skills again after a plan ran, after `R`, and when a file
     /// time changed. A refresh keeps the scroll, the selection, and the marks.
@@ -182,6 +216,7 @@ mod unix {
         // A scan walks every root, so it runs when the tab opens, and again
         // only after `R` or a plan.
         let mut groups: Option<scan::View> = None;
+        let mut job: Option<ScanJob> = None;
         loop {
             let found = crate::skills::find(Some(home));
             let mut list = skills::View::new(&found, root.as_deref());
@@ -196,20 +231,27 @@ mod unix {
             let refresh = loop {
                 let (width, height) = size();
                 let rows = height.saturating_sub(2);
-                if frame.view == View::Scan && groups.is_none() {
-                    let wait = [format!("scanning {} …", tilde(&scan_roots[0]))];
-                    draw(&mut out, &screen_with(&frame, &wait, None, width, height))?;
-                    let report = crate::scan::report(&scan_roots, false, Some(home), cfg);
-                    groups = Some(scan::View::new(&report));
+                if groups.is_none() {
+                    if let Some(report) = job.as_ref().and_then(ScanJob::poll) {
+                        groups = Some(scan::View::new(&report));
+                        job = None;
+                    } else if job.is_none() && frame.view == View::Scan {
+                        let (roots, dir, cfg) = (scan_roots.clone(), home.dir.clone(), cfg.clone());
+                        job = Some(ScanJob::start(move || {
+                            crate::scan::report(&roots, false, Some(&Home { dir }), &cfg)
+                        }));
+                    }
                 }
                 let (shown, keys) = match (&pending, frame.view) {
                     (Some(p), _) if p.done => (p.lines.clone(), Some(DONE_KEYS)),
                     (Some(p), _) => (p.lines.clone(), Some(PLAN_KEYS)),
                     (None, View::Skills) => (list.render(width, rows), Some(SKILLS_KEYS)),
                     (None, View::Scan) => (
-                        groups
-                            .as_ref()
-                            .map_or_else(Vec::new, |g| g.render(width, rows)),
+                        match (&groups, &job) {
+                            (Some(g), _) => g.render(width, rows),
+                            (None, Some(j)) => vec![j.line(&tilde(&scan_roots[0]))],
+                            (None, None) => Vec::new(),
+                        },
                         Some(SCAN_KEYS),
                     ),
                     (None, View::Files) => (files.render(width, rows), Some(FILES_KEYS)),
@@ -371,6 +413,7 @@ mod unix {
                 files = FilesView::load(&home.dir, false, Some(home));
                 tree = TreeView::load(&home.dir, 4, false, Some(home));
                 groups = None;
+                job = None;
             }
         }
     }
@@ -1294,6 +1337,23 @@ mod tests {
         assert_eq!(payload.downcast_ref::<&str>(), Some(&"a view bug"));
         assert!(!fake.raw, "raw mode must end when the view panics");
         assert_eq!((fake.entered, fake.left), (1, 1));
+    }
+
+    #[test]
+    fn t2_scan_job_leaves_the_loop_free_until_the_walk_ends() {
+        let (release, wait) = std::sync::mpsc::channel::<()>();
+        let job = ScanJob::start(move || {
+            wait.recv().unwrap();
+            serde_json::json!({"done": true})
+        });
+        assert_eq!(job.poll(), None, "the walk still runs");
+        assert!(job.line("~").starts_with("scanning ~ … 0 s."));
+        release.send(()).unwrap();
+        let report = (0..200).find_map(|_| {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            job.poll()
+        });
+        assert_eq!(report, Some(serde_json::json!({"done": true})));
     }
 
     #[test]
