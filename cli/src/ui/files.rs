@@ -1,12 +1,16 @@
-//! The Files view: one directory as a file manager shows it. Columns for
-//! the name, size, lines, and date, a preview of the selected entry, and
-//! a way into a directory and back up. Nothing here writes.
+//! The Files tab: a tree from the home at depth [`TREE_DEPTH`], and a flat
+//! listing when a person enters a directory. Columns for the name, size,
+//! lines, and date, a preview of the selected entry, and backspace to
+//! leave a drilled folder for the tree again. Nothing here writes.
 
 use crate::home::{tilde, Home};
 use crate::out::fit;
-use crate::ui::tree::{children, date, pane_width, size, window, Kind, Node};
+use crate::ui::tree::{children, date, pane_width, size, window, Kind, Node, TreeView};
 use std::io::Read;
 use std::path::{Path, PathBuf};
+
+/// How many levels the default tree loads under the home.
+pub const TREE_DEPTH: usize = 2;
 
 /// The most of a file the preview reads.
 const PREVIEW_BYTES: u64 = 64 * 1024;
@@ -14,6 +18,133 @@ const PREVIEW_BYTES: u64 = 64 * 1024;
 /// The width the fixed columns take: the mark, size, lines, and date, with
 /// two spaces before each.
 const FIXED: usize = 2 + 2 + 5 + 2 + 5 + 2 + 10;
+
+/// Tree at the home, or a flat list after enter on a directory in the tree.
+pub struct BrowseView {
+    pub tree: TreeView,
+    flat: Option<DrillFlat>,
+}
+
+/// Flat listing opened from the tree; `anchor` is the folder enter opened.
+struct DrillFlat {
+    files: FilesView,
+    anchor: PathBuf,
+    tree_selected: usize,
+}
+
+impl BrowseView {
+    pub fn load(home_dir: &Path, all: bool, home: Option<&Home>) -> BrowseView {
+        BrowseView {
+            tree: TreeView::load(home_dir, TREE_DEPTH, all, home),
+            flat: None,
+        }
+    }
+
+    pub fn down(&mut self) {
+        match &mut self.flat {
+            Some(d) => d.files.down(),
+            None => self.tree.down(),
+        }
+    }
+
+    pub fn up(&mut self) {
+        match &mut self.flat {
+            Some(d) => d.files.up(),
+            None => self.tree.up(),
+        }
+    }
+
+    pub fn pick(&mut self, line: usize, height: usize) {
+        match &mut self.flat {
+            Some(d) => d.files.pick(line, height),
+            None => self.tree.pick(line, height),
+        }
+    }
+
+    pub fn selected(&self) -> Option<&Node> {
+        match &self.flat {
+            Some(d) => d.files.selected(),
+            None => self.tree.selected(),
+        }
+    }
+
+    /// In the tree, enter opens a flat list of the selected directory. In
+    /// flat mode, enter follows a subdirectory as today.
+    pub fn enter(&mut self, home: Option<&Home>) {
+        if let Some(d) = &mut self.flat {
+            d.files.enter();
+            return;
+        }
+        let Some(n) = self.tree.selected().filter(|n| n.kind == Kind::Dir) else {
+            return;
+        };
+        let tree_selected = self.tree.selected;
+        let anchor = n.path.clone();
+        let files = FilesView::load(&anchor, self.tree.all, home);
+        self.flat = Some(DrillFlat {
+            files,
+            anchor,
+            tree_selected,
+        });
+    }
+
+    /// In flat mode at the drill anchor, back returns to the tree with the
+    /// prior row selected; otherwise flat mode goes up one directory.
+    pub fn back(&mut self) {
+        let Some(d) = &mut self.flat else {
+            return;
+        };
+        if d.files.dir == d.anchor {
+            self.tree.selected = d.tree_selected;
+            self.flat = None;
+            return;
+        }
+        d.files.parent();
+    }
+
+    pub fn render(&self, width: usize, height: usize) -> Vec<String> {
+        match &self.flat {
+            Some(d) => d.files.render(width, height),
+            None => self.tree.render(width, height),
+        }
+    }
+
+    /// After a refresh, put the tree and any open flat list back.
+    pub fn restore(
+        &mut self,
+        home_dir: &Path,
+        all: bool,
+        home: Option<&Home>,
+        flat: Option<(PathBuf, PathBuf, usize, usize)>,
+        tree_selected: usize,
+    ) {
+        self.tree = TreeView::load(home_dir, TREE_DEPTH, all, home);
+        self.flat = flat.map(|(anchor, dir, file_sel, tree_sel)| {
+            let mut files = FilesView::load(&dir, all, home);
+            files.selected = file_sel.min(files.entries.len().saturating_sub(1));
+            DrillFlat {
+                files,
+                anchor,
+                tree_selected: tree_sel,
+            }
+        });
+        if self.flat.is_none() {
+            self.tree.selected = tree_selected.min(self.tree.rows.len().saturating_sub(1));
+        }
+    }
+
+    pub fn snapshot(&self) -> (Option<(PathBuf, PathBuf, usize, usize)>, usize) {
+        let flat = self.flat.as_ref().map(|d| {
+            (
+                d.anchor.clone(),
+                d.files.dir.clone(),
+                d.files.selected,
+                d.tree_selected,
+            )
+        });
+        (flat, self.tree.selected)
+    }
+}
 
 /// One directory, with one entry selected.
 pub struct FilesView {
@@ -368,6 +499,64 @@ mod tests {
         assert_eq!(
             split(&["abc".to_string()], &["r".to_string()], 30, 30, 1),
             ["abc"]
+        );
+    }
+
+    #[test]
+    fn browse_enters_a_directory_from_the_tree_and_bksp_returns() {
+        let t = fixture();
+        let home = Home {
+            dir: t.path().to_path_buf(),
+        };
+        let mut b = BrowseView::load(t.path(), false, Some(&home));
+        let skills = b
+            .tree
+            .rows
+            .iter()
+            .position(|r| r.node.name == "skills")
+            .unwrap();
+        b.tree.selected = skills;
+        b.enter(Some(&home));
+        assert_eq!(b.selected().unwrap().name, "demo");
+        let flat_header = b.render(80, 10)[0].clone();
+        assert!(flat_header.contains("items"), "flat listing: {flat_header}");
+        b.back();
+        assert_eq!(b.tree.selected, skills);
+        let tree_header = b.render(80, 10)[0].clone();
+        assert!(!tree_header.contains("items"), "tree again: {tree_header}");
+    }
+
+    #[test]
+    fn browse_tree_renders_within_width_at_80_and_120() {
+        let t = fixture();
+        let home = Home {
+            dir: t.path().to_path_buf(),
+        };
+        let b = BrowseView::load(t.path(), false, Some(&home));
+        for width in [80, 120] {
+            let lines = b.render(width, 24);
+            assert_eq!(lines.len(), 24, "{width}x24");
+            assert!(lines.iter().all(|l| visible(l) <= width), "{lines:#?}");
+        }
+    }
+
+    #[test]
+    fn browse_tree_at_home_uses_depth_two() {
+        let t = fixture();
+        let home = Home {
+            dir: t.path().to_path_buf(),
+        };
+        let b = BrowseView::load(t.path(), false, Some(&home));
+        assert!(
+            !b.tree
+                .rows
+                .iter()
+                .any(|r| r.text.contains("SKILL.md")),
+            "depth 2 does not load SKILL.md under skills/demo"
+        );
+        assert!(
+            b.tree.rows.iter().any(|r| r.text.contains("demo/")),
+            "depth 2 still shows demo/"
         );
     }
 
