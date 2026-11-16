@@ -609,3 +609,57 @@ fn scan_reports_each_checkout_without_the_network() {
         .iter()
         .any(|g| g[0]["remote"] == "team/app" && g[0]["checkouts"] == 4));
 }
+
+/// Every git checkout under a large tree gets a full `Checkout::read` (bounded pool).
+#[test]
+fn scan_json_lists_every_project_with_three_hundred() {
+    let root = tempfile::tempdir().unwrap();
+    let r = root.path();
+    for i in 0..300 {
+        let d = r.join(format!("repo{i}"));
+        fs::create_dir_all(&d).unwrap();
+        fs::write(d.join("AGENTS.md"), "# agents\n").unwrap();
+        git(&d, &["init", "-q"]);
+        git(
+            &d,
+            &[
+                "remote",
+                "add",
+                "origin",
+                &format!("https://example.com/team/repo{i}.git"),
+            ],
+        );
+        git(&d, &["add", "AGENTS.md"]);
+        git(&d, &["commit", "-qm", "init"]);
+    }
+    let out = Command::new(env!("CARGO_BIN_EXE_agents"))
+        .env("AGENTS_UPDATE_CHECK", "off")
+        .args(["scan", "--json", "--root"])
+        .arg(r)
+        .env("HOME", r)
+        .env_remove("AGENTS_HOME")
+        .env_remove("AGENTS_CONFIG")
+        .env_remove("CODEX_HOME")
+        .output()
+        .expect("agents");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let projects = doc["projects"].as_array().expect("projects array");
+    assert_eq!(projects.len(), 300, "one project row per repo");
+    for p in projects {
+        assert!(
+            !p["remote"].is_null(),
+            "project {:?} missing remote",
+            p["root"]
+        );
+        assert!(
+            !p["branch"].is_null(),
+            "project {:?} missing branch",
+            p["root"]
+        );
+    }
+}
