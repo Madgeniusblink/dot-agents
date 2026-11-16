@@ -87,7 +87,7 @@ struct RepoRoots {
 impl RepoRoots {
     fn root(&mut self, p: &Path) -> Option<PathBuf> {
         let mut pending: Vec<&Path> = Vec::new();
-        for anc in p.ancestors() {
+        for anc in p.ancestors().skip(1) {
             if let Some(cached) = self.cache.get(anc) {
                 let resolved = cached.clone();
                 for a in &pending {
@@ -188,11 +188,11 @@ fn gather(
             .unwrap_or_default()
     } else {
         std::thread::scope(|s| {
-            let walks: Vec<_> = roots
+            let handles: Vec<_> = roots
                 .iter()
                 .map(|r| s.spawn(|| walk_instructions(r, all, cfg)))
-                .map(|h| h.join().unwrap())
                 .collect();
+            let walks: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
             walks
                 .into_iter()
                 .reduce(|(mut a, mut b), (c, d)| {
@@ -275,14 +275,27 @@ fn checkouts(hits: &[Hit]) -> BTreeMap<PathBuf, Checkout> {
             .collect();
     }
     let rows: Vec<(PathBuf, Checkout)> = std::thread::scope(|s| {
-        let mut handles = Vec::with_capacity(roots.len());
-        for r in roots {
+        let workers = std::thread::available_parallelism()
+            .map_or(1, |n| n.get())
+            .min(roots.len());
+        let chunk = roots.len().div_ceil(workers);
+        let mut handles = Vec::new();
+        for chunk_roots in roots.chunks(chunk) {
+            let chunk_roots: Vec<PathBuf> = chunk_roots.to_vec();
             handles.push(s.spawn(move || {
-                let c = Checkout::read(&r);
-                (r, c)
+                chunk_roots
+                    .into_iter()
+                    .map(|r| {
+                        let c = Checkout::read(&r);
+                        (r, c)
+                    })
+                    .collect::<Vec<_>>()
             }));
         }
-        handles.into_iter().map(|h| h.join().unwrap()).collect()
+        handles
+            .into_iter()
+            .flat_map(|h| h.join().unwrap())
+            .collect()
     });
     rows.into_iter().collect()
 }
@@ -1366,5 +1379,25 @@ pub fn from(dir: &Path, json: bool, home: Option<&Home>, cfg: &Config) {
     if let Some(e) = edit {
         println!();
         println!("{e}");
+    }
+}
+
+#[cfg(test)]
+mod gather_tests {
+    use super::RepoRoots;
+    use std::fs;
+
+    #[test]
+    fn repo_roots_skips_path_itself() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = dir.path().join("repo");
+        fs::create_dir_all(repo.join(".git")).unwrap();
+        fs::write(repo.join("AGENTS.md"), "").unwrap();
+        let mut repos = RepoRoots {
+            cache: std::collections::HashMap::new(),
+        };
+        let file = repo.join("AGENTS.md");
+        assert_eq!(repos.root(&file), Some(repo.clone()));
+        assert_eq!(repos.root(repo.as_path()), None);
     }
 }
