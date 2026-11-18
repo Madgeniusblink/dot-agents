@@ -174,7 +174,12 @@ fn unlink(path: &Path) -> Result<()> {
 
 #[cfg(windows)]
 fn unlink(path: &Path) -> Result<()> {
-    if fs::symlink_metadata(path)?.is_dir() {
+    let meta = fs::symlink_metadata(path)?;
+    // Directory symlinks often report as non-directory via symlink_metadata on
+    // Windows; follow the link to choose remove_dir vs remove_file.
+    let is_dir_link = meta.is_dir()
+        || (meta.file_type().is_symlink() && fs::metadata(path).is_ok_and(|m| m.is_dir()));
+    if is_dir_link {
         Ok(fs::remove_dir(path)?)
     } else {
         Ok(fs::remove_file(path)?)
