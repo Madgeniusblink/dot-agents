@@ -351,7 +351,7 @@ mod tests {
     #[test]
     fn parses_schema_from_fixture() {
         let doc: Value = serde_json::from_str(include_str!(
-            "../../tests/fixtures/owner-decision/list_schema.json"
+            "../../tests/data/owner-decision/list_schema.json"
         ))
         .unwrap();
         let schema = ListSchema::from_response(&doc).unwrap();
@@ -361,7 +361,7 @@ mod tests {
     #[test]
     fn field_map_reads_cells() {
         let doc: Value = serde_json::from_str(include_str!(
-            "../../tests/fixtures/owner-decision/list_items.json"
+            "../../tests/data/owner-decision/list_items.json"
         ))
         .unwrap();
         let schema = ListSchema::from_response(&doc).unwrap();

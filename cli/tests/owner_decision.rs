@@ -10,8 +10,8 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-const SCHEMA: &str = include_str!("fixtures/owner-decision/list_schema.json");
-const ITEMS: &str = include_str!("fixtures/owner-decision/list_items.json");
+const SCHEMA: &str = include_str!("data/owner-decision/list_schema.json");
+const ITEMS: &str = include_str!("data/owner-decision/list_items.json");
 
 struct MockServer {
     base: String,
