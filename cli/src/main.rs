@@ -137,7 +137,7 @@ enum Cmd {
 
     /// Every rule standards/ writes, the always-on budget, and links
     Check {
-        /// Also hold the home to the template budget: at most 3 skills,
+        /// Also hold the home to the template budget: at most 4 skills,
         /// nothing in memory/ or decisions/ beyond a README
         #[arg(long)]
         template: bool,
