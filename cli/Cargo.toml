@@ -21,6 +21,7 @@ clap = { version = "4", features = ["derive"] }
 serde_json = "1"
 terminal_size = "0.4"
 walkdir = "2"
+attohttpc = { version = "=0.28.2", default-features = false, features = ["json", "tls-rustls"] }
 
 # Raw mode for `agents ui`. Already in the tree through terminal_size, so no
 # crate is added (decision 0011).
@@ -39,7 +40,7 @@ tempfile = "3"
 rustix = { version = "1", features = ["termios", "pty"] }
 
 [package.metadata.dist]
-# The formula carries the binary's name: brew install madgeniusblink/tap/agents
+# The formula carries the binary's name: brew install <github-user>/tap/agents
 formula = "agents"
 
 # The profile that 'dist' will build with

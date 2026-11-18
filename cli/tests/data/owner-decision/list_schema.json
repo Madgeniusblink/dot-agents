@@ -1,0 +1,17 @@
+{
+  "ok": true,
+  "schema": {
+    "columns": [
+      { "id": "ColDecision", "name": "Decision", "type": "text" },
+      { "id": "ColRecommended", "name": "Recommended", "type": "text" },
+      { "id": "ColChecked", "name": "Checked", "type": "text" },
+      { "id": "ColWhy", "name": "Why you", "type": "text" },
+      { "id": "ColProject", "name": "Project", "type": "text" },
+      { "id": "ColStatus", "name": "Status", "type": "select" },
+      { "id": "ColAsked", "name": "Asked", "type": "date" },
+      { "id": "ColAnswer", "name": "Answer", "type": "select" },
+      { "id": "ColSession", "name": "Session", "type": "text" }
+    ]
+  },
+  "items": []
+}
