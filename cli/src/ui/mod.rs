@@ -13,6 +13,8 @@
 pub mod act;
 #[cfg_attr(not(unix), allow(dead_code))]
 pub mod files;
+#[cfg_attr(not(unix), allow(dead_code))]
+pub mod layout;
 #[cfg(unix)]
 pub mod live;
 #[cfg_attr(not(unix), allow(dead_code))]

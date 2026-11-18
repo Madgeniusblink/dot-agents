@@ -10,11 +10,9 @@ use crate::home::{tilde, Home};
 use crate::out;
 use crate::plan::Plan;
 use crate::skills::{self, copy_note, Skill, Source, SOURCES};
+use crate::ui::layout::{self, DETAIL_MIN};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
-
-/// The fewest lines the detail pane keeps when the terminal is short.
-const DETAIL_MIN: usize = 5;
 
 /// Below this many body rows the per-source counts collapse to one line.
 const BODY_ROWS_FOR_FULL_COUNTS: usize = 14;
@@ -154,9 +152,7 @@ impl<'a> View<'a> {
         lines.push(format!("yours, BROKEN, or a copy ({}):", self.rows.len()));
 
         let detail = self.detail(width);
-        let room = height.saturating_sub(lines.len() + 1);
-        let detail_h = detail.len().min((height / 2).max(DETAIL_MIN)).min(room);
-        let list_h = height.saturating_sub(lines.len() + detail_h);
+        let (list_h, detail_h) = layout::heights(height, lines.len(), 0, detail.len());
 
         let rows = list_rows(&self.list_rows(), width);
         if list_h == 0 || self.selected < self.top {
@@ -240,7 +236,7 @@ impl<'a> View<'a> {
     /// description, its copy note, each copy of it with `identical` or
     /// `different`, and each lint finding.
     fn detail(&self, width: usize) -> Vec<String> {
-        let mut lines = vec!["─".repeat(width)];
+        let mut lines = vec![layout::rule(width)];
         let Some(s) = self.selected() else {
             lines.push("  nothing is yours, BROKEN, or a copy.".to_string());
             return lines;
