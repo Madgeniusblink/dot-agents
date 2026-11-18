@@ -197,6 +197,15 @@ impl BrowseView {
         }
     }
 
+    /// The directory the Files view lists, for the live poll.
+    pub fn watch_paths(&self) -> Vec<PathBuf> {
+        match &self.flat {
+            Some(d) if let Some(s) = &d.scoped => vec![s.tree.root.clone()],
+            Some(d) => vec![d.files.dir.clone()],
+            None => vec![self.tree.root.clone()],
+        }
+    }
+
     pub fn snapshot(&self) -> (Option<(PathBuf, PathBuf, usize, usize)>, usize) {
         let flat = self.flat.as_ref().map(|d| {
             (

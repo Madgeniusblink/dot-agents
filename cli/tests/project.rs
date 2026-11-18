@@ -230,6 +230,25 @@ fn t10_the_open_view_shows_a_new_skill_with_no_key() {
     ui.quit();
 }
 
+/// Issue 105: a file added under the directory the Files tab shows appears
+/// within the 2 s poll, with no key pressed.
+#[cfg(unix)]
+#[test]
+fn t105_the_files_tab_shows_a_new_file_with_no_key() {
+    let (home, repo) = fixture();
+    let (h, r) = (home.path(), repo.path());
+    fs::create_dir_all(h.join(".agents")).unwrap();
+    fs::write(h.join(".agents/AGENTS.md"), "# home\n").unwrap();
+    let mut ui = view::Ui::open(h, r);
+    ui.press("4", "AGENTS.md");
+    assert!(ui.frame().contains("AGENTS.md"));
+
+    fs::write(h.join(".agents/live-poll.txt"), "watch\n").unwrap();
+    let f = ui.wait("the new file", |f| f.contains("live-poll.txt"));
+    assert!(f.contains("AGENTS.md"), "{f}");
+    ui.quit();
+}
+
 /// `agents ui` on a pseudo-terminal, driven one key at a time as a person
 /// drives it. The screen redraws every 100 ms, so each wait reads the last
 /// whole frame.
