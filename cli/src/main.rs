@@ -12,6 +12,7 @@ mod harness;
 mod home;
 mod memory;
 mod out;
+mod owner_decision;
 mod plan;
 mod reset;
 mod scan;
@@ -99,6 +100,12 @@ enum Cmd {
         action: Option<MemoryAction>,
     },
 
+    /// Owner Decision Queue backed by a Slack List (`ask`, `read`, `close`)
+    OwnerDecision {
+        #[command(subcommand)]
+        action: OwnerDecisionAction,
+    },
+
     /// Every skill each tool can load, with duplicates, and what to remove
     Skills {
         /// Print every skill. Twice: each skill in full, with lint and files
@@ -184,6 +191,57 @@ enum Cmd {
 }
 
 #[derive(Subcommand)]
+enum OwnerDecisionAction {
+    /// Add a row to the Owner Decision Queue list
+    Ask {
+        /// Short title of what needs a decision
+        #[arg(long)]
+        decision: String,
+        /// Agent recommendation
+        #[arg(long, default_value = "")]
+        recommended: String,
+        /// Evidence link(s); must include an http(s) URL
+        #[arg(long)]
+        checked: String,
+        /// Why the owner must decide
+        #[arg(long = "why-you")]
+        why_you: String,
+        /// Project or tracker key
+        #[arg(long, default_value = "")]
+        project: String,
+        /// Session correlation id (default: $OWNER_DECISION_SESSION or generated)
+        #[arg(long)]
+        session: Option<String>,
+        /// Print one JSON document instead of the text
+        #[arg(long)]
+        json: bool,
+    },
+    /// Read the Answer plus row column fields (no list-item comment thread; Lists API has no read method for thread text)
+    Read {
+        /// Session correlation id
+        #[arg(long)]
+        session: Option<String>,
+        /// Slack List record id (skips session lookup)
+        #[arg(long = "record-id")]
+        record_id: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Mark a row Done and append a proof link to Checked
+    Close {
+        #[arg(long)]
+        session: Option<String>,
+        #[arg(long = "record-id")]
+        record_id: Option<String>,
+        /// Proof link (http(s)); merged into Checked
+        #[arg(long = "proof-link")]
+        proof_link: String,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
 enum MemoryAction {
     /// Move the named notes aside and drop their index lines
     Prune {
@@ -235,6 +293,53 @@ fn main() -> ExitCode {
     code
 }
 
+fn owner_decision_cmd(action: OwnerDecisionAction) -> Result<ExitCode> {
+    let resolve_session =
+        |opt: &Option<String>| opt.clone().unwrap_or_else(owner_decision::session_id);
+    match action {
+        OwnerDecisionAction::Ask {
+            decision,
+            recommended,
+            checked,
+            why_you,
+            project,
+            session,
+            json,
+        } => {
+            owner_decision::ask(
+                &decision,
+                &recommended,
+                &checked,
+                &why_you,
+                &project,
+                &resolve_session(&session),
+                json,
+            )?;
+        }
+        OwnerDecisionAction::Read {
+            session,
+            record_id,
+            json,
+        } => {
+            owner_decision::read(&resolve_session(&session), record_id.as_deref(), json)?;
+        }
+        OwnerDecisionAction::Close {
+            session,
+            record_id,
+            proof_link,
+            json,
+        } => {
+            owner_decision::close(
+                &resolve_session(&session),
+                record_id.as_deref(),
+                &proof_link,
+                json,
+            )?;
+        }
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
 fn run() -> Result<ExitCode> {
     let cli = Cli::parse();
     let cfg = config::Config::load()?;
@@ -275,6 +380,7 @@ fn run() -> Result<ExitCode> {
             scan::scan(roots, all, long, json, home.as_ref(), &cfg);
             Ok(ok)
         }
+        Cmd::OwnerDecision { action } => owner_decision_cmd(action),
         Cmd::Memory { long, json, action } => {
             let home = Home::locate(cli.home).ok();
             match action {
