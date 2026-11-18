@@ -3,6 +3,7 @@
 //! one remote, as `agents scan` prints it.
 
 use crate::out;
+use crate::ui::layout;
 use serde_json::Value;
 use std::collections::BTreeMap;
 
@@ -210,12 +211,20 @@ impl View {
             .collect()
     }
 
+    fn detail_len(&self) -> usize {
+        let shown = self.shown();
+        let kept = shown
+            .get(self.selected.min(shown.len().saturating_sub(1)))
+            .map(|(_, k)| k.len())
+            .unwrap_or(0);
+        2 + kept
+    }
+
     /// The first row on screen and the room for rows, for `n` rows in
-    /// `height` lines. The filter line, a blank, and the detail header take
-    /// three lines. The rows get up to half of the rest.
-    fn list(&self, n: usize, height: usize) -> (usize, usize) {
-        let room = height.saturating_sub(3);
-        let row_room = n.min(room.div_ceil(2)).max(1);
+    /// `height` lines.
+    fn list(&self, n: usize, height: usize, detail_len: usize) -> (usize, usize) {
+        let (list_h, _) = layout::heights(height, 1, 0, detail_len);
+        let row_room = n.min(list_h).max(1);
         (self.selected.saturating_sub(row_room - 1), row_room)
     }
 
@@ -223,7 +232,8 @@ impl View {
     /// outside the rows, or on the `… N more` line, selects nothing.
     pub fn pick(&mut self, line: usize, height: usize) {
         let n = self.shown().len();
-        let (first, row_room) = self.list(n, height);
+        let detail_len = self.detail_len();
+        let (first, row_room) = self.list(n, height, detail_len);
         let mut drawn = row_room.min(n - first.min(n));
         if drawn < n - first.min(n) && drawn >= 2 {
             drawn -= 1;
@@ -254,7 +264,9 @@ impl View {
         }
         let rows: Vec<out::Row> = shown.iter().map(|(g, kept)| g.row(kept)).collect();
         let rows = out::rows(&rows, width.saturating_sub(2));
-        let (first, row_room) = self.list(rows.len(), height);
+        let (group, kept) = &shown[self.selected.min(shown.len() - 1)];
+        let detail_len = 2 + kept.len();
+        let (first, row_room) = self.list(rows.len(), height, detail_len);
         let marked = rows
             .iter()
             .enumerate()
@@ -265,7 +277,6 @@ impl View {
                 out::fit(&format!("{mark} {}", r.trim_start()), width)
             });
         lines.extend(cut(marked.collect(), rows.len() - first, width));
-        let (group, kept) = &shown[self.selected.min(shown.len() - 1)];
         lines.push(String::new());
         let n = kept.len();
         let unit = if n == 1 { "checkout" } else { "checkouts" };
@@ -507,12 +518,12 @@ mod tests {
             lines[4].contains(&format!("{}  clone,", tilde(&root.join("a")))),
             "{lines:#?}"
         );
-        // Seven lines: both rows, then two of four items and the count.
+        // Seven lines: the selected row, a blank, the header, two items, the count.
         let lines = v.render(160, 7);
         assert_eq!(lines.len(), 7, "{lines:#?}");
-        assert!(lines[1].starts_with("  no remote"), "{lines:#?}");
-        assert!(lines[2].starts_with("> team/app"), "{lines:#?}");
-        assert_eq!(lines[6], "  … 3 more", "{lines:#?}");
+        assert!(lines[1].starts_with("> team/app"), "{lines:#?}");
+        assert_eq!(lines[3], "team/app, 4 checkouts");
+        assert_eq!(lines[6], "  … 2 more", "{lines:#?}");
         v.up();
         let lines = v.render(40, 7);
         assert!(lines[1].starts_with("> no remote"), "{lines:#?}");
@@ -523,15 +534,15 @@ mod tests {
     fn t9_a_click_on_a_row_selects_that_group() {
         let (_tmp, root) = fixture();
         let mut v = view(&root);
-        let lines = v.render(160, 7);
+        let lines = v.render(160, 40);
         assert!(lines[2].starts_with("  team/app"), "{lines:#?}");
-        v.pick(2, 7);
+        v.pick(2, 40);
         assert_eq!(v.selected, 1);
-        for outside in [0, 3, 6] {
-            v.pick(outside, 7);
+        for outside in [0, 5, 39] {
+            v.pick(outside, 40);
             assert_eq!(v.selected, 1, "line {outside}");
         }
-        v.pick(1, 7);
-        assert!(v.render(160, 7)[1].starts_with("> no remote"));
+        v.pick(1, 40);
+        assert!(v.render(160, 40)[1].starts_with("> no remote"));
     }
 }
