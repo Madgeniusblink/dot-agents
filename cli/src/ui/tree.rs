@@ -4,7 +4,9 @@
 //! lines of one file. Nothing here writes.
 
 use crate::home::{tilde, Home};
-use crate::ui::files::{preview, split};
+use crate::out::fit;
+use crate::ui::files::preview;
+use crate::ui::layout;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
@@ -183,11 +185,11 @@ impl TreeView {
     /// Select the row on `line` of a `render` of `height` lines. A line
     /// outside the list selects nothing.
     pub fn pick(&mut self, line: usize, height: usize) {
-        let body_h = height.saturating_sub(2);
-        let start = window(self.selected, body_h);
+        let (list_h, _) = layout::heights(height, 1, 1, self.detail_len());
+        let start = window(self.selected, list_h);
         if let Some(i) = line
             .checked_sub(1)
-            .filter(|r| *r < body_h)
+            .filter(|r| *r < list_h)
             .map(|r| start + r)
             .filter(|i| *i < self.rows.len())
         {
@@ -195,44 +197,56 @@ impl TreeView {
         }
     }
 
+    fn detail_len(&self) -> usize {
+        let mut n = 1;
+        if let Some(node) = self.selected() {
+            n += 1;
+            n += preview(node, self.all, usize::MAX, usize::MAX).len();
+        }
+        n
+    }
+
+    fn detail_lines(&self, width: usize, preview_h: usize) -> Vec<String> {
+        let mut lines = vec![layout::rule(width)];
+        if let Some(n) = self.selected() {
+            lines.push(fit(&n.label(), width));
+            lines.extend(preview(n, self.all, width, preview_h));
+        }
+        lines
+    }
+
     /// `height` lines of at most `width` characters: the root, the rows
-    /// around the selection beside a preview of it, then the counts.
+    /// around the selection, a rule, a preview below, then the counts.
     pub fn render(&self, width: usize, height: usize) -> Vec<String> {
-        let mut out = vec![crate::out::fit(&tilde(&self.root), width)];
-        let body_h = height.saturating_sub(2);
-        let left_w = pane_width(width);
-        let start = window(self.selected, body_h);
-        let name_w = left_w.saturating_sub(2 + 2 + 5 + 2 + 5);
-        let left: Vec<String> = self
-            .rows
-            .iter()
-            .enumerate()
-            .skip(start)
-            .take(body_h)
-            .map(|(i, r)| {
-                let mark = if i == self.selected { "> " } else { "  " };
-                let n = &r.node;
-                let (bytes, lines) = match n.kind {
-                    Kind::Link(_) => ("-".to_string(), "-".to_string()),
-                    _ => (size(n.bytes), n.lines.to_string()),
-                };
-                let mut text = r.text.clone();
-                if n.always_on {
-                    text.push_str("  always-on");
-                }
-                format!(
-                    "{mark}{:<name_w$}  {bytes:>5}  {lines:>5}",
-                    crate::out::fit(&text, name_w)
-                )
-            })
-            .collect();
-        let right = match self.selected() {
-            Some(n) if left_w < width => {
-                preview(n, self.all, width.saturating_sub(left_w + 3), body_h)
-            }
-            _ => Vec::new(),
-        };
-        out.extend(split(&left, &right, left_w, width, body_h));
+        let (list_h, detail_h) = layout::heights(height, 1, 1, self.detail_len());
+        let detail = self.detail_lines(width, detail_h);
+        let start = window(self.selected, list_h);
+        let name_w = width.saturating_sub(2 + 2 + 5 + 2 + 5);
+        let mut out = vec![fit(&tilde(&self.root), width)];
+        out.extend(
+            self.rows
+                .iter()
+                .enumerate()
+                .skip(start)
+                .take(list_h)
+                .map(|(i, r)| {
+                    let mark = if i == self.selected { "> " } else { "  " };
+                    let n = &r.node;
+                    let (bytes, lines) = match n.kind {
+                        Kind::Link(_) => ("-".to_string(), "-".to_string()),
+                        _ => (size(n.bytes), n.lines.to_string()),
+                    };
+                    let mut text = r.text.clone();
+                    if n.always_on {
+                        text.push_str("  always-on");
+                    }
+                    format!(
+                        "{mark}{:<name_w$}  {bytes:>5}  {lines:>5}",
+                        fit(&text, name_w)
+                    )
+                }),
+        );
+        out.extend(detail.into_iter().take(detail_h));
         let dirs = self
             .rows
             .iter()
@@ -251,17 +265,15 @@ impl TreeView {
             .filter(|r| r.node.kind != Kind::Dir)
             .map(|r| r.node.bytes)
             .sum();
-        if height > 1 {
-            out.push(crate::out::fit(
-                &format!(
-                    "{dirs} directories, {files} files, {lines} lines, {}",
-                    size(bytes)
-                ),
-                width,
-            ));
-        }
-        out.truncate(height);
-        out
+        out.resize(height.saturating_sub(1), String::new());
+        out.push(fit(
+            &format!(
+                "{dirs} directories, {files} files, {lines} lines, {}",
+                size(bytes)
+            ),
+            width,
+        ));
+        out.into_iter().map(|l| fit(&l, width)).collect()
     }
 }
 
@@ -278,16 +290,6 @@ fn flatten(node: &Node, prefix: &str, out: &mut Vec<TreeRow>) {
             let next = format!("{prefix}{}", if last { "    " } else { "│   " });
             flatten(c, &next, out);
         }
-    }
-}
-
-/// The list pane's width: the whole width when there is no room for a
-/// preview, else three fifths of it.
-pub fn pane_width(width: usize) -> usize {
-    if width < 50 {
-        width
-    } else {
-        width * 3 / 5
     }
 }
 
@@ -368,35 +370,41 @@ pub(crate) mod tests {
         assert!(lines.iter().all(|l| visible(l) <= 80), "{lines:#?}");
         assert!(lines[0].ends_with(t.path().file_name().unwrap().to_str().unwrap()));
         assert!(lines[1].starts_with("> ├── rules/"), "{}", lines[1]);
-        let rule = &lines[2];
-        assert!(rule.contains("boundaries.md  always-on"), "{rule}");
-        assert!(rule.contains("     35      2 │"), "{rule}");
-        assert!(
-            lines[7].contains("blob.bin") && lines[7].contains("2.0K"),
-            "{}",
-            lines[7]
-        );
+        assert!(lines
+            .iter()
+            .any(|l| l.contains("blob.bin") && l.contains("2.0K")));
         assert_eq!(lines[11], "3 directories, 5 files, 9 lines, 2.1K");
-        // The selected directory previews its entries.
-        assert!(lines[1].ends_with("│ boundaries.md"), "{}", lines[1]);
+        let rule = lines.iter().position(|l| l.starts_with('─')).unwrap();
+        assert!(
+            lines[rule + 2..]
+                .iter()
+                .any(|l| l.contains("boundaries.md")),
+            "{lines:#?}"
+        );
         for _ in 0..7 {
             v.down();
         }
         assert_eq!(v.selected().unwrap().name, "principles.md");
         let lines = v.render(80, 12);
-        assert!(lines[8].starts_with("> └── principles.md"), "{}", lines[8]);
-        assert!(lines[1].ends_with("│ # principles"), "{}", lines[1]);
         assert!(
-            lines[2].ends_with("│ 1. One idea per file."),
-            "{}",
-            lines[2]
+            lines.iter().any(|l| l.starts_with("> └── principles.md")),
+            "{lines:#?}"
+        );
+        let rule = lines.iter().position(|l| l.starts_with('─')).unwrap();
+        assert!(
+            lines[rule + 1..].iter().any(|l| l.contains("# principles")),
+            "{lines:#?}"
         );
         v.down();
         assert_eq!(v.selected, 7, "down stops at the last row");
         v.up();
         assert_eq!(v.selected().unwrap().name, "blob.bin");
         let lines = v.render(80, 12);
-        assert!(lines[1].ends_with("│ binary, 2.0K"), "{}", lines[1]);
+        let rule = lines.iter().position(|l| l.starts_with('─')).unwrap();
+        assert!(
+            lines[rule + 1..].iter().any(|l| l.contains("binary, 2.0K")),
+            "{lines:#?}"
+        );
     }
 
     #[test]
@@ -409,7 +417,7 @@ pub(crate) mod tests {
         assert_eq!(lines.len(), 5);
         assert!(lines.iter().all(|l| visible(l) <= 40), "{lines:#?}");
         assert!(lines.iter().any(|l| l.starts_with("> ")), "{lines:#?}");
-        assert!(lines.iter().all(|l| !l.contains(" │ ")), "{lines:#?}");
+        assert!(lines.iter().any(|l| l.starts_with('─')));
         assert_eq!(window(0, 10), 0);
         assert_eq!(window(9, 10), 0);
         assert_eq!(window(10, 10), 1);
