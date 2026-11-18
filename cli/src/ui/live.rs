@@ -13,33 +13,72 @@ use std::time::Duration;
 /// The time between two reads of the file times.
 pub const EVERY: Duration = Duration::from_secs(2);
 
-/// The home, and each directory that holds a found skill, so a new skill
-/// beside the others is seen too.
-pub fn roots(home: &Path, skills: &[Skill]) -> Vec<PathBuf> {
-    let mut roots = vec![home.to_path_buf()];
+/// How deep the poll reads under a scan root before the scan report is back.
+pub const SCAN_DEPTH: usize = 2;
+
+/// One directory the poll reads, and how many levels under it to walk.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Root {
+    pub path: PathBuf,
+    /// `None` walks the whole tree; `Some(0)` is this path alone.
+    pub depth: Option<usize>,
+}
+
+/// The home, each directory that holds a found skill, and paths the open
+/// view shows. Scan roots are shallow until checkout paths are known.
+pub fn roots(
+    home: &Path,
+    skills: &[Skill],
+    files: &[PathBuf],
+    scan_roots: &[PathBuf],
+    scan_checkouts: &[PathBuf],
+) -> Vec<Root> {
+    let mut roots = vec![Root {
+        path: home.to_path_buf(),
+        depth: None,
+    }];
     for p in skills.iter().filter_map(|s| s.dir.parent()) {
-        if !roots.iter().any(|r| r == p) {
-            roots.push(p.to_path_buf());
+        push(&mut roots, p, None);
+    }
+    for p in files {
+        push(&mut roots, p, None);
+    }
+    for p in scan_checkouts {
+        push(&mut roots, p, None);
+    }
+    if scan_checkouts.is_empty() {
+        for p in scan_roots {
+            push(&mut roots, p, Some(SCAN_DEPTH));
         }
     }
     roots
+}
+
+fn push(roots: &mut Vec<Root>, path: &Path, depth: Option<usize>) {
+    if roots.iter().any(|r| r.path == path) {
+        return;
+    }
+    roots.push(Root {
+        path: path.to_path_buf(),
+        depth,
+    });
 }
 
 /// One number from the path, size, and modified time of every file and
 /// directory under `roots`. It changes when a file is added, removed, or
 /// written. Hidden entries are skipped: `.git` and the worktrees under
 /// `.claude` hold no file a view reads.
-pub fn stamp(roots: &[PathBuf]) -> u64 {
+pub fn stamp(roots: &[Root]) -> u64 {
     let mut sum = 0;
     for root in roots {
-        walk(root, true, &mut sum);
+        walk(&root.path, true, root.depth, &mut sum);
     }
     sum
 }
 
 /// A root is followed when it is a link; a link below it is read but not
 /// followed into, so a loop of links ends.
-fn walk(path: &Path, root: bool, sum: &mut u64) {
+fn walk(path: &Path, root: bool, max_depth: Option<usize>, sum: &mut u64) {
     let Ok(meta) = fs::metadata(path) else {
         return;
     };
@@ -54,9 +93,14 @@ fn walk(path: &Path, root: bool, sum: &mut u64) {
     if !dir {
         return;
     }
+    let child_depth = match max_depth {
+        None => None,
+        Some(0) => return,
+        Some(d) => Some(d - 1),
+    };
     for entry in fs::read_dir(path).into_iter().flatten().flatten() {
         if !entry.file_name().to_string_lossy().starts_with('.') {
-            walk(&entry.path(), false, sum);
+            walk(&entry.path(), false, child_depth, sum);
         }
     }
 }
@@ -68,7 +112,10 @@ mod tests {
     #[test]
     fn t10_stamp_changes_when_a_file_is_added_written_or_removed() {
         let t = tempfile::tempdir().unwrap();
-        let roots = vec![t.path().to_path_buf()];
+        let roots = vec![Root {
+            path: t.path().to_path_buf(),
+            depth: None,
+        }];
         fs::create_dir(t.path().join("rules")).unwrap();
         fs::write(t.path().join("rules/a.md"), "a\n").unwrap();
         let first = stamp(&roots);
@@ -92,5 +139,26 @@ mod tests {
         fs::write(t.path().join(".git/HEAD"), "y and more\n").unwrap();
         assert_eq!(stamp(&roots), hidden, "a hidden file is not read");
         assert_ne!(hidden, before, "a directory's time is read");
+    }
+
+    #[test]
+    fn t105_roots_watch_the_files_tree_and_scan_shallow_roots() {
+        let t = tempfile::tempdir().unwrap();
+        let home = t.path().join("home");
+        let files = home.join("shown");
+        fs::create_dir_all(&files).unwrap();
+        let scan = t.path().join("scan");
+        fs::create_dir_all(scan.join("a")).unwrap();
+        let r = roots(
+            &home,
+            &[],
+            std::slice::from_ref(&files),
+            std::slice::from_ref(&scan),
+            &[],
+        );
+        assert!(r.iter().any(|x| x.path == home && x.depth.is_none()));
+        assert!(r.iter().any(|x| x.path == files && x.depth.is_none()));
+        let shallow = r.iter().find(|x| x.path == scan).unwrap();
+        assert_eq!(shallow.depth, Some(SCAN_DEPTH));
     }
 }

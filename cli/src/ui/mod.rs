@@ -53,7 +53,7 @@ mod unix {
     use serde_json::Value;
     use std::io::{self, Read, Write};
     use std::panic::{self, AssertUnwindSafe};
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::process::{Command, ExitCode};
     use std::sync::mpsc::{self, Receiver};
     use std::sync::{Mutex, Once, PoisonError};
@@ -195,6 +195,30 @@ mod unix {
         }
     }
 
+    fn watch_roots(
+        home_dir: &Path,
+        skills: &[crate::skills::Skill],
+        view: View,
+        browse: &BrowseView,
+        groups: Option<&scan::View>,
+        scan_roots: &[PathBuf],
+    ) -> Vec<live::Root> {
+        let (files, scan_checkouts) = match view {
+            View::Files => (browse.watch_paths(), Vec::new()),
+            View::Scan => (
+                Vec::new(),
+                groups.map(scan::View::watch_paths).unwrap_or_default(),
+            ),
+            _ => (Vec::new(), Vec::new()),
+        };
+        let shallow = if view == View::Scan && scan_checkouts.is_empty() {
+            scan_roots
+        } else {
+            &[][..]
+        };
+        live::roots(home_dir, skills, &files, shallow, &scan_checkouts)
+    }
+
     /// The loop: draw, wait for a key, apply it, until `q`. The outer loop
     /// reads the skills again after a plan ran, after `R`, and when a file
     /// time changed. A refresh keeps the scroll, the selection, and the marks.
@@ -221,8 +245,15 @@ mod unix {
             if let Some(state) = kept.take() {
                 list.restore(state);
             }
-            let roots = live::roots(&home.dir, &found);
-            let seen = live::stamp(&roots);
+            let mut watched = watch_roots(
+                &home.dir,
+                &found,
+                frame.view,
+                &browse,
+                groups.as_ref(),
+                &scan_roots,
+            );
+            let mut seen = live::stamp(&watched);
             let mut checked = Instant::now();
             let mut body = frame.view.lines(home, cfg);
             let mut pending: Option<skills::Pending> = None;
@@ -272,7 +303,19 @@ mod unix {
                     // A plan on screen is not read again under the person.
                     if pending.is_none() && checked.elapsed() >= live::EVERY {
                         checked = Instant::now();
-                        if live::stamp(&roots) != seen {
+                        let fresh = watch_roots(
+                            &home.dir,
+                            &found,
+                            frame.view,
+                            &browse,
+                            groups.as_ref(),
+                            &scan_roots,
+                        );
+                        let stamp = live::stamp(&fresh);
+                        if fresh != watched {
+                            watched = fresh;
+                            seen = stamp;
+                        } else if stamp != seen {
                             break true;
                         }
                     }
@@ -1000,7 +1043,7 @@ mod unix {
         "  s            send the top visible line (see the key bar) to a tmux pane, after y",
         "  c            copy the view's path, through the terminal and pbcopy or xclip",
         "  o            open the view's path in $EDITOR",
-        "  R            read every view again now; a changed file does it in 2 s",
+        "  R            read every view again now; a change under the open view does it in 2 s",
         "  click        a tab opens it, a row selects it, a key below runs it",
         "",
         "Skills",
@@ -1009,12 +1052,12 @@ mod unix {
         "  K            keep-only plan for the marked, else the selected (uppercase K)",
         "  A            apply the plan shown, as --apply does; esc cancels it",
         "  c, o         copy or open the selected skill's directory",
-        "  R            read skills again now",
+        "  R            read skills again now; a change under them does it in 2 s",
         "",
         "Scan",
         "  j, k         select a checkout group; its checkouts show below",
         "  f            filter by the next kind: clone, worktree, submodule",
-        "  R            read checkouts again now",
+        "  R            read checkouts again now; a change under them does it in 2 s",
         "",
         "Files",
         "  j, k         select an entry; its preview shows at the right",

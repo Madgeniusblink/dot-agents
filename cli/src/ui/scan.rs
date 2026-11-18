@@ -2,9 +2,11 @@
 //! group in a detail pane, and a filter by kind. A group is every checkout of
 //! one remote, as `agents scan` prints it.
 
+use crate::home::expand_home;
 use crate::out;
 use serde_json::Value;
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 
 /// The kinds `scan` reports, with `All` first so the filter starts open.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -181,6 +183,15 @@ impl View {
 
     pub fn filter(&self) -> Filter {
         self.filter
+    }
+
+    /// Each checkout path the view can show, for the live poll.
+    pub fn watch_paths(&self) -> Vec<PathBuf> {
+        self.groups
+            .iter()
+            .flat_map(|g| &g.checkouts)
+            .map(|c| expand_home(&c.root))
+            .collect()
     }
 
     /// The next kind in the cycle, back to every kind after orphans. The
