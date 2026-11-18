@@ -31,5 +31,5 @@ A clean run prints one line with the always-on bytes, the cap, and where the cap
 | `link.relative` | link target `<path>` does not exist | point the link at a file that exists | [sources-policy.md](../context/sources-policy.md) |
 | `link.merge-no-edit` | a documented merge command lacks `--no-edit` | add `--no-edit` to the command | [adopt.md](../standards/adopt.md) |
 | `budget.always-on` | principles and rules hold `<n>` bytes, the cap is 12 KiB | move text out of the always-on files, or raise `budget.always_on_bytes` in `context/upstream.json` | [rules.md](../standards/rules.md) |
-| `budget.skills` | the template ships more than 3 skills (`--template` only) | move the skill out of the template | [decision 0008](https://github.com/Madgeniusblink/dot-agents/blob/main/docs/decisions/0008-ship-no-fill-in-files.md) |
+| `budget.skills` | the template ships more than 4 skills (`--template` only) | move the skill out of the template | [decision 0008](https://github.com/Madgeniusblink/dot-agents/blob/main/docs/decisions/0008-ship-no-fill-in-files.md) |
 | `budget.template-files` | the template ships a file in `memory/` or `decisions/` (`--template` only) | move the file out of the template | [decision 0008](https://github.com/Madgeniusblink/dot-agents/blob/main/docs/decisions/0008-ship-no-fill-in-files.md) |

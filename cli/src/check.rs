@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 /// `context/upstream.json` sets no `budget.always_on_bytes`.
 const ALWAYS_ON_CAP: u64 = 12 * 1024;
 /// Skills the template ships, at most.
-const TEMPLATE_SKILLS: usize = 3;
+const TEMPLATE_SKILLS: usize = 4;
 
 struct Fault {
     path: String,
@@ -469,7 +469,7 @@ fn always_on(home: &Home, out: &mut Vec<Fault>) -> Cap {
     }
 }
 
-/// The template ships at most three skills, and nothing in `memory/` or
+/// The template ships at most four skills, and nothing in `memory/` or
 /// `decisions/` beyond a README.
 fn template_budget(root: &Path, out: &mut Vec<Fault>) {
     for dir in skill_dirs(root).iter().skip(TEMPLATE_SKILLS) {
