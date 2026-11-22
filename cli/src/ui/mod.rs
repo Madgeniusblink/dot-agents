@@ -1157,10 +1157,18 @@ mod unix {
             ));
         }
         let harnesses: Vec<&Value> = doc["harnesses"].as_array().into_iter().flatten().collect();
-        if !harnesses.is_empty() {
-            lines.push(harness_summary(&harnesses));
+        // An absent file that wire does not write needs no wire.
+        let counted: Vec<&Value> = harnesses
+            .iter()
+            .copied()
+            .filter(|h| {
+                h["exists"].as_bool() == Some(true) || h["wire_writes"].as_bool() != Some(false)
+            })
+            .collect();
+        if !counted.is_empty() {
+            lines.push(harness_summary(&counted));
         }
-        if let Some(action) = status_actions(doc, &harnesses) {
+        if let Some(action) = status_actions(doc, &counted) {
             lines.push(action);
         }
         lines.push(String::new());
@@ -1295,7 +1303,9 @@ mod unix {
 
     /// The state the brief prints for one harness file, from its object.
     fn harness_state(h: &Value) -> String {
-        if h["exists"].as_bool() != Some(true) {
+        if h["exists"].as_bool() != Some(true) && h["wire_writes"].as_bool() == Some(false) {
+            "no file".to_string()
+        } else if h["exists"].as_bool() != Some(true) {
             "not wired".to_string()
         } else if h["ours"].as_bool() == Some(false) {
             "the file there is not the home's".to_string()
@@ -2076,6 +2086,57 @@ mod tests {
             text.contains("cursor, the sessionStart hook: not wired"),
             "{text}"
         );
+    }
+
+    #[test]
+    fn t2_status_absent_own_file_is_not_counted_as_not_wired() {
+        let file = |label: &str, exists: bool, stale: bool, wire_writes: bool| {
+            json!({"label": label, "path": "p", "exists": exists, "imports": {},
+                   "stale": stale, "ours": true, "wire_writes": wire_writes})
+        };
+        let own = file("claude code, the harness's own file", false, false, false);
+        let doc = json!({
+            "config": {"path": "c.toml", "exists": true},
+            "always_on": {"bytes": 10, "cap": 250, "cap_source": "default"},
+            "harnesses": [
+                file("claude code, the home's drop-in", true, false, true),
+                own,
+                file("codex, the home's generated file", true, false, true)
+            ],
+            "links": []
+        });
+        let text = words(&status_lines(&doc).join("\n"));
+        assert!(
+            text.contains("2 harnesses: 2 ok / 0 stale / 0 not wired"),
+            "{text}"
+        );
+        assert!(
+            text.contains("claude code, the harness's own file: no file"),
+            "{text}"
+        );
+        assert!(!text.contains("actions:"), "{text}");
+        assert!(!text.contains("agents wire --apply"), "{text}");
+
+        let doc = json!({
+            "config": {"path": "c.toml", "exists": true},
+            "always_on": {"bytes": 10, "cap": 250, "cap_source": "default"},
+            "harnesses": [
+                file("claude code, the home's drop-in", false, false, true),
+                own,
+                file("codex, the home's generated file", true, true, true),
+                file("grok, the home's generated file", false, false, true)
+            ],
+            "links": []
+        });
+        let text = words(&status_lines(&doc).join("\n"));
+        for want in [
+            "3 harnesses: 0 ok / 1 stale / 2 not wired",
+            "actions: 1 stale, 2 not wired. Run: agents wire --apply",
+            "claude code, the home's drop-in: not wired",
+            "grok, the home's generated file: not wired",
+        ] {
+            assert!(text.contains(want), "missing {want:?} in:\n{text}");
+        }
     }
 
     #[test]
