@@ -400,6 +400,7 @@ pub fn data(home: &Home, cfg: &Config) -> Value {
                 "over_cap": r.over_cap.map(|(bytes, cap)| json!({"bytes": bytes, "cap": cap})),
                 "stale": r.stale,
                 "ours": !r.not_ours,
+                "wire_writes": r.wire_writes,
                 "own_rule_lines": r.own_rules,
                 "generator_lines": r.generator,
             })
@@ -559,6 +560,7 @@ struct Report {
     /// The bytes of the file, and the cap they pass.
     over_cap: Option<(u64, u64)>,
     stale: bool,
+    wire_writes: bool,
     /// True when the file there is not the home's, in a place wire writes.
     not_ours: bool,
     /// Lines of rules in the file itself, when that makes two sources.
@@ -632,6 +634,7 @@ fn read_file(
         broken,
         over_cap,
         stale: ours && expected.is_some_and(|want| want != text),
+        wire_writes: expected.is_some(),
         not_ours: exists && expected.is_some() && !ours && !into_home,
         own_rules: (body > 10 && !into_home && !ours).then_some(body),
         generator,
