@@ -16,16 +16,12 @@
    fires when a human types its name, it is not a skill.
 4. **Link, do not copy.** Point at the owning source. Keep no local copy of
    vendor documentation.
-5. **Find the owner before you add.** Replace or consolidate the existing rule
-   instead of appending another version. Reject a duplicate even when its
-   wording or its file differs.
+5. **Edit the owner; do not append.** Change the section that owns the topic. Add no second line, section, or file for it. Each budget is a limit. At the limit, an addition removes as many words. Only the budget owner raises a limit.
 6. **State the outcome, not the procedure.** A better model finds a better
    route. A written route caps it at today's best idea.
 7. **One idea per file.** Keep a skill under 120 lines. Longer detail goes in
    that skill's `references/`.
-8. **Add beside the base; do not edit it.** Install updates every shipped
-   file you have not touched. Your own rules, facts, and skills go in new
-   files. Change a shipped file upstream.
+8. **Change a shipped file upstream.** Install updates every shipped file you have not touched.
 9. **Write plainly; match the repo.** Prose follows
    [ASD-STE100](context/writing-standard.md). Code matches the owning repo.
    With no repo style, keep the diff small and match nearby code.
@@ -33,5 +29,4 @@
    Log a lesson as `YYYY-MM-DD — mistake — fix`. Promote a repeat into
    `rules/corrections.md`.
 11. **More intelligence needs less text, not more.** Corrections expire;
-   boundaries do not. If the set grows while models improve, something is in
-   the wrong file.
+   boundaries do not.
