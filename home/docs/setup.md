@@ -34,8 +34,9 @@ Until the first tagged release, `cargo install` builds the binary from this
 repository. The release adds `brew install madgeniusblink/tap/agents`. The
 binary embeds no content: the home stays a git checkout. Every command that
 writes prints its plan and writes nothing without `--apply`, with two exceptions.
-`agents owner-decision` writes to the shared list that its config names. The
-daily update check writes a stamp under `~/.cache/agents`.
+`agents owner-decision ask` and `close` write to the shared list that the config
+or an environment variable names. The daily update check writes a stamp under
+`~/.cache/agents`.
 
 | Command | Does |
 |---|---|

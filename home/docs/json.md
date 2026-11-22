@@ -10,7 +10,9 @@ A path under your home directory starts with `~`. A key with no value is
 
 ## Every document
 
-The envelope comes first, except in an `owner-decision` document. The command's own keys follow it.
+Every document except an `owner-decision` document holds the envelope keys
+below. An `owner-decision` document has no envelope. Key order is not part of
+the contract.
 
 | Key | Value |
 |---|---|
