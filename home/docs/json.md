@@ -1,15 +1,16 @@
 # JSON output
 
-`agents status`, `scan`, `skills`, `memory`, and `check` take `--json`. With it, stdout
-holds one JSON document and nothing else. The exit code does not change. Save
-the document to a file and hand it to another session for analysis.
+`agents status`, `scan`, `skills`, `memory`, `check`, and `owner-decision` take
+`--json`. With it, stdout holds one JSON document and nothing else. The exit
+code does not change. Save the document to a file and hand it to another
+session for analysis.
 
 A path under your home directory starts with `~`. A key with no value is
 `null`. The `agents` version is the only schema version.
 
 ## Every document
 
-The envelope comes first. The command's own keys follow it.
+The envelope comes first, except in an `owner-decision` document. The command's own keys follow it.
 
 | Key | Value |
 |---|---|
@@ -198,7 +199,7 @@ Each object in `notes`:
 
 ## owner-decision
 
-`agents owner-decision ask`, `read`, and `close` also take `--json`. These documents do not open with the envelope. Each holds only the keys below.
+Each document of `agents owner-decision ask`, `read`, and `close` holds only the keys below.
 
 `ask`:
 
