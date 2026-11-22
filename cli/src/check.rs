@@ -1,11 +1,14 @@
 //! Every rule `standards/` writes, as a check with a stable name. A fault
 //! prints as `path:line rule: message. fix: <what to change>`. The rule
-//! names and messages are documented in `docs/check.md`.
+//! names and messages are documented in `docs/check.md`. With a base ref,
+//! it also compares the home at that ref with the work tree.
 
-use crate::home::Home;
+use crate::home::{tilde, Home};
 use crate::out;
 use crate::skills;
+use anyhow::{bail, Result};
 use serde_json::json;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -40,9 +43,52 @@ struct Cap {
     source: &'static str,
 }
 
+/// The home at a git ref. Files are read from git, so the work tree is
+/// never touched.
+struct Base {
+    name: String,
+    sha: String,
+}
+
+impl Base {
+    fn resolve(home: &Home, name: &str) -> Result<Base> {
+        let commit = format!("{name}^{{commit}}");
+        match home.git(&["rev-parse", "--verify", "-q", "--end-of-options", &commit]) {
+            Some(sha) => Ok(Base {
+                name: name.to_string(),
+                sha,
+            }),
+            None => bail!("--base {name} is not a commit in {}", tilde(&home.dir)),
+        }
+    }
+
+    /// A file by its path in the home. `./` makes git read the path from
+    /// the home, which may sit below the root of its repository.
+    fn read(&self, home: &Home, path: &str) -> Option<String> {
+        home.git(&["cat-file", "blob", &format!("{}:./{path}", self.sha)])
+    }
+
+    /// The `*.md` files directly in `rules/`, by name. Without
+    /// `--full-tree`, git lists only the entries under the home's own path
+    /// inside the tree, which in a home below the repository root is none.
+    fn rule_files(&self, home: &Home) -> Vec<String> {
+        let tree = format!("{}:./rules", self.sha);
+        let listing = home
+            .git(&["ls-tree", "--full-tree", "-z", &tree])
+            .unwrap_or_default();
+        listing
+            .split('\0')
+            .filter_map(|l| l.split_once('\t'))
+            .filter(|(meta, name)| meta.contains(" blob ") && name.ends_with(".md"))
+            .map(|(_, name)| name.to_string())
+            .collect()
+    }
+}
+
 /// Print each fault, or one line with the cap on a clean run.
-pub fn check(home: &Home, template: bool, as_json: bool) -> bool {
-    let (faults, cap) = run(home, template);
+pub fn check(home: &Home, template: bool, base: Option<&str>, as_json: bool) -> Result<bool> {
+    let base = base.map(|name| Base::resolve(home, name)).transpose()?;
+    let (faults, cap) = run(home, template, base.as_ref());
     if as_json {
         let faults: Vec<_> = faults
             .iter()
@@ -65,14 +111,17 @@ pub fn check(home: &Home, template: bool, as_json: bool) -> bool {
                 "faults": faults,
             }),
         );
-        return faults.is_empty();
+        return Ok(faults.is_empty());
     }
     for f in &faults {
         println!("{f}");
     }
     if faults.is_empty() {
+        let against = base.map_or(String::new(), |b| {
+            format!(", base {} ({})", b.name, &b.sha[..7.min(b.sha.len())])
+        });
         println!(
-            "check {}: {} {} of {} bytes ({})",
+            "check {}: {} {} of {} bytes ({}){against}",
             out::state(out::State::Ok),
             out::state(out::State::AlwaysOn),
             cap.used,
@@ -80,10 +129,10 @@ pub fn check(home: &Home, template: bool, as_json: bool) -> bool {
             cap.source
         );
     }
-    faults.is_empty()
+    Ok(faults.is_empty())
 }
 
-fn run(home: &Home, template: bool) -> (Vec<Fault>, Cap) {
+fn run(home: &Home, template: bool, base: Option<&Base>) -> (Vec<Fault>, Cap) {
     let root = &home.dir;
     let mut out = Vec::new();
     router(root, &mut out);
@@ -95,6 +144,10 @@ fn run(home: &Home, template: bool) -> (Vec<Fault>, Cap) {
     let cap = always_on(home, &mut out);
     if template {
         template_budget(root, &mut out);
+    }
+    if let Some(base) = base {
+        budget_raised(home, base, &mut out);
+        proof_dropped(home, base, &mut out);
     }
     out.sort_by(|a, b| (&a.path, a.line, &a.rule).cmp(&(&b.path, b.line, &b.rule)));
     (out, cap)
@@ -192,20 +245,27 @@ fn rules(root: &Path, out: &mut Vec<Fault>) {
 
 /// Ends with `` `YYYY-MM · text` ``.
 fn dated(line: &str) -> bool {
-    let Some(body) = line.strip_suffix('`') else {
-        return false;
-    };
-    let Some(start) = body.rfind('`') else {
-        return false;
-    };
-    let tag = &body[start + 1..];
+    proof(line).is_some()
+}
+
+/// The `YYYY-MM · text` a line ends with, between its last two backticks.
+fn proof(line: &str) -> Option<&str> {
+    let body = line.strip_suffix('`')?;
+    let tag = &body[body.rfind('`')? + 1..];
+    task(tag).map(|_| tag)
+}
+
+/// The task in `YYYY-MM · task`.
+fn task(tag: &str) -> Option<&str> {
     let b = tag.as_bytes();
-    b.len() > 10
+    let month = b.len() > 10
         && b[..4].iter().all(u8::is_ascii_digit)
         && b[4] == b'-'
-        && b[5..7].iter().all(u8::is_ascii_digit)
-        && tag[7..].starts_with(" · ")
-        && tag[7..].len() > " · ".len()
+        && b[5..7].iter().all(u8::is_ascii_digit);
+    if !month {
+        return None;
+    }
+    tag[7..].strip_prefix(" · ").filter(|t| !t.is_empty())
 }
 
 /// Each directory under `skills/` holds a `SKILL.md` whose frontmatter meets
@@ -458,7 +518,7 @@ fn always_on(home: &Home, out: &mut Vec<Fault>) -> Cap {
                 1,
                 "budget.always-on",
                 format!("principles and rules hold {used} bytes, {source} is {bytes}"),
-                "move text out of the always-on files, or raise budget.always_on_bytes in context/upstream.json",
+                "remove words from the file that owns the topic",
             );
         }
     }
@@ -467,6 +527,95 @@ fn always_on(home: &Home, out: &mut Vec<Fault>) -> Cap {
         used,
         source,
     }
+}
+
+/// Each budget value `context/upstream.json` sets, with the default for a
+/// value it does not set.
+fn budgets(text: &str) -> BTreeMap<String, u64> {
+    let json: serde_json::Value = serde_json::from_str(text).unwrap_or_default();
+    let mut set: BTreeMap<String, u64> = json["budget"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter_map(|(k, v)| Some((k.clone(), v.as_u64()?)))
+        .collect();
+    set.entry("always_on_bytes".into()).or_insert(ALWAYS_ON_CAP);
+    set
+}
+
+/// No budget value is higher than at the base. A value counts at its
+/// default where the file does not set it, so removing a lower cap raises it.
+fn budget_raised(home: &Home, base: &Base, out: &mut Vec<Fault>) {
+    let path = "context/upstream.json";
+    let text = fs::read_to_string(home.dir.join(path)).unwrap_or_default();
+    let then = budgets(&base.read(home, path).unwrap_or_default());
+    for (key, now) in budgets(&text) {
+        let Some(&was) = then.get(&key) else {
+            continue;
+        };
+        if now > was {
+            let quoted = format!("\"{key}\"");
+            let line = text.lines().position(|l| l.contains(&quoted));
+            fault(
+                out,
+                path.into(),
+                line.map_or(1, |i| i + 1),
+                "budget.raised",
+                format!("budget.{key} is {now}, and {was} at {}", base.name),
+                "put back the base value, and remove words from the file that owns the topic",
+            );
+        }
+    }
+}
+
+/// Each dated test a rule line ends with at the base is still in a rule
+/// file, or a commit since the base retires it with a `Retired: <task>`
+/// trailer.
+fn proof_dropped(home: &Home, base: &Base, out: &mut Vec<Fault>) {
+    let mut kept = BTreeSet::new();
+    for f in md_files(&home.dir.join("rules"), false) {
+        let text = fs::read_to_string(&f).unwrap_or_default();
+        kept.extend(text.lines().filter_map(rule_proof).map(str::to_string));
+    }
+    let range = format!("{}..HEAD", base.sha);
+    let trailers = home
+        .git(&[
+            "log",
+            "--format=%(trailers:key=Retired,valueonly,unfold)",
+            &range,
+        ])
+        .unwrap_or_default();
+    let retired: BTreeSet<&str> = trailers
+        .lines()
+        .map(|l| l.trim().trim_matches('`'))
+        .map(|v| task(v).unwrap_or(v))
+        .filter(|v| !v.is_empty())
+        .collect();
+    for name in base.rule_files(home) {
+        let path = format!("rules/{name}");
+        let text = base.read(home, &path).unwrap_or_default();
+        for (i, line) in text.lines().enumerate() {
+            let Some(tag) = rule_proof(line) else {
+                continue;
+            };
+            if kept.contains(tag) || task(tag).is_some_and(|t| retired.contains(t)) {
+                continue;
+            }
+            fault(
+                out,
+                path.clone(),
+                i + 1,
+                "proof.dropped",
+                format!("`{tag}` is at {} and gone from rules/", base.name),
+                "keep the test on the line that replaces it, or add a `Retired: <task>` trailer to the commit that removes it",
+            );
+        }
+    }
+}
+
+/// The dated test a rule line ends with.
+fn rule_proof(line: &str) -> Option<&str> {
+    line.starts_with("- ").then(|| proof(line)).flatten()
 }
 
 /// The template ships at most three skills, and nothing in `memory/` or

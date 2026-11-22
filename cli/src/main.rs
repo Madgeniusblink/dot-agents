@@ -141,6 +141,11 @@ enum Cmd {
         /// nothing in memory/ or decisions/ beyond a README
         #[arg(long)]
         template: bool,
+        /// Also compare the home with this git ref: fail on a budget in
+        /// context/upstream.json that is higher, or a rule's dated test
+        /// that is gone and not retired
+        #[arg(long, value_name = "REF")]
+        base: Option<String>,
         /// Print one JSON document instead of the text
         #[arg(long)]
         json: bool,
@@ -423,8 +428,12 @@ fn run() -> Result<ExitCode> {
             wire::unwire(&home).run(apply)?;
             Ok(ok)
         }
-        Cmd::Check { template, json } => {
-            let passed = check::check(&Home::locate(cli.home)?, template, json);
+        Cmd::Check {
+            template,
+            base,
+            json,
+        } => {
+            let passed = check::check(&Home::locate(cli.home)?, template, base.as_deref(), json)?;
             Ok(if passed { ok } else { ExitCode::FAILURE })
         }
         Cmd::Init { url, apply } => {

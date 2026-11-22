@@ -8,6 +8,8 @@ path:line rule: message. fix: <what to change>
 
 A clean run prints one line with the always-on bytes, the cap, and where the cap came from, then exits 0. `--json` prints the same faults as one document ([json.md](json.md)). `--template` adds the two template rules at the end of the table. CI runs `agents check --template` on this repository.
 
+`--base <ref>` compares the home at a git ref with the work tree and adds the two base rules. A budget value counts at its default where `context/upstream.json` does not set it. A dated test counts in any `rules/*.md` file, so a line can move or change if its test stays. To delete a line, give the commit that removes it a `Retired: <task>` trailer. Any commit after the ref can carry it. The clean line then also names the ref.
+
 | Rule | Message | Fix | Source |
 |---|---|---|---|
 | `router.lines` | `<n> lines, max 50` | move detail to a linked file | [check-budget.sh](../scripts/check-budget.sh) |
@@ -30,6 +32,8 @@ A clean run prints one line with the always-on bytes, the cap, and where the cap
 | `template.frontmatter` | template has frontmatter, and `standards/` names none | remove the frontmatter block | [standards/](../standards/) |
 | `link.relative` | link target `<path>` does not exist | point the link at a file that exists | [sources-policy.md](../context/sources-policy.md) |
 | `link.merge-no-edit` | a documented merge command lacks `--no-edit` | add `--no-edit` to the command | [adopt.md](../standards/adopt.md) |
-| `budget.always-on` | principles and rules hold `<n>` bytes, the cap is 12 KiB | move text out of the always-on files, or raise `budget.always_on_bytes` in `context/upstream.json` | [rules.md](../standards/rules.md) |
+| `budget.always-on` | principles and rules hold `<n>` bytes, the cap is 12 KiB | remove words from the file that owns the topic | [rules.md](../standards/rules.md) |
+| `budget.raised` | `budget.<key>` is `<n>`, and `<m>` at `<ref>` (`--base` only) | put back the base value, and remove words from the file that owns the topic | [rules.md](../standards/rules.md) |
+| `proof.dropped` | `` `YYYY-MM · task` `` is at `<ref>` and gone from `rules/` (`--base` only) | keep the test on the line that replaces it, or add a `Retired: <task>` trailer to the commit that removes it | [rules.md](../standards/rules.md#corrections-expire) |
 | `budget.skills` | the template ships more than 3 skills (`--template` only) | move the skill out of the template | [decision 0008](https://github.com/Madgeniusblink/dot-agents/blob/main/docs/decisions/0008-ship-no-fill-in-files.md) |
 | `budget.template-files` | the template ships a file in `memory/` or `decisions/` (`--template` only) | move the file out of the template | [decision 0008](https://github.com/Madgeniusblink/dot-agents/blob/main/docs/decisions/0008-ship-no-fill-in-files.md) |
