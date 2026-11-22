@@ -6,9 +6,7 @@
 path:line rule: message. fix: <what to change>
 ```
 
-A clean run prints one line with the always-on bytes, the cap, and where the cap came from, then exits 0. `--json` prints the same faults as one document ([json.md](json.md)). `--template` adds the two template rules at the end of the table. CI runs `agents check --template` on this repository.
-
-`--base <ref>` compares the home at a git ref with the work tree and adds the two base rules. A budget value counts at its default where `context/upstream.json` does not set it. A dated test counts in any `rules/*.md` file, so a line can move or change if its test stays. To delete a line, give the commit that removes it a `Retired: <task>` trailer. Any commit after the ref can carry it. The clean line then also names the ref.
+A clean run exits 0 and prints one line: the always-on bytes, the cap, its source, and any base ref. `--json` prints the same faults as one document ([json.md](json.md)). `--template` adds the two template rules at the end of the table. `--base <ref>` compares the home at that ref with the work tree and adds the two base rules. Unset budgets count at their default; a dated test counts in any `rules/*.md` file or `Retired:` trailer since the ref. CI runs `agents check --template` on this repository.
 
 | Rule | Message | Fix | Source |
 |---|---|---|---|
