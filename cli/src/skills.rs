@@ -641,7 +641,7 @@ pub fn lint(front: Option<&Frontmatter>, dir_name: &str) -> Vec<Finding> {
             }
             if name
                 .chars()
-                .any(|c| c != '-' && !(c.is_alphanumeric() && !c.is_uppercase()))
+                .any(|c| c != '-' && (!c.is_alphanumeric() || c.is_uppercase()))
             {
                 add(
                     "name-chars",
@@ -859,7 +859,7 @@ pub fn list(home: Option<&Home>, long: u8, json: bool) {
     println!("tools can load {} skills.", skills.len());
     for source in SOURCES {
         let group: Vec<&Skill> = skills.iter().filter(|s| s.source == source).collect();
-        if group.is_empty() && !(source == Source::User && !links.is_empty()) {
+        if group.is_empty() && (source != Source::User || links.is_empty()) {
             continue;
         }
         let title = match (source, &root) {
