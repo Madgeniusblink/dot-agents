@@ -79,7 +79,7 @@ impl State {
 /// Whether tokens get glyphs and colour: stdout is a terminal and `NO_COLOR`
 /// is unset or empty.
 pub fn styled() -> bool {
-    !std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty()) && std::io::stdout().is_terminal()
+    std::env::var_os("NO_COLOR").is_none_or(|v| v.is_empty()) && std::io::stdout().is_terminal()
 }
 
 /// The token for `s`: the word alone, or the glyph and the word in colour.
