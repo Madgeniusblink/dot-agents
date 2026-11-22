@@ -57,6 +57,7 @@ Each object in `harnesses`:
 | `over_cap` | `null`, or `bytes`, the size of the file, and the `cap` they pass |
 | `stale` | `true` when the home changed after `wire` wrote the file |
 | `ours` | `false` when a file in a place `wire` writes is not the home's |
+| `wire_writes` | `true` when the path is a place `wire` writes; `false` for the harness's own file, which the home never writes |
 | `own_rule_lines` | `null`, or the count of rule lines kept in the file instead of the home |
 | `generator_lines` | Each `line:text` that says a generator owns the file |
 
