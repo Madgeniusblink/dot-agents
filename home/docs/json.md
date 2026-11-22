@@ -194,3 +194,36 @@ Each object in `notes`:
 | `ok` | `true` when the home has no fault |
 | `always_on` | `bytes`, the size of principles plus every rule file, the `cap` it must fit, and `cap_source`, `default cap` or `cap from context/upstream.json` |
 | `faults` | One object per fault: `path`, `line`, `rule`, `message`, and `fix`, the same fields as the text line. [check.md](check.md) lists every rule |
+
+## owner-decision
+
+`agents owner-decision ask`, `read`, and `close` also take `--json`. These documents do not open with the envelope. Each holds only the keys below.
+
+`ask`:
+
+| Key | Value |
+|---|---|
+| `record_id` | The id of the new row in the list |
+| `session` | The session id that the row carries |
+| `status` | `Open` |
+| `decision` | The `--decision` text |
+
+`read`:
+
+| Key | Value |
+|---|---|
+| `record_id` | The id of the row |
+| `session` | The session id of the row, or `""` when the row has none |
+| `status` | The status of the row, such as `Open` or `Done`, or `""` when the row has none |
+| `answer` | The owner's answer, or `null` while it is empty |
+| `pending` | `true` while the answer is empty |
+| `decision`, `recommended`, `checked`, `why_you`, `project`, `asked` | Each field of the row as text, or `null` when the row has none. `asked` is the UTC date of the ask |
+
+`close`:
+
+| Key | Value |
+|---|---|
+| `record_id` | The id of the row |
+| `status` | `Done` |
+| `checked` | The evidence of the row after the close: the earlier evidence, then `proof: <link>` on a new line. It is the link alone when the evidence was empty, and the earlier evidence when it already held the link |
+| `proof_link` | The `--proof-link` value |
