@@ -24,7 +24,7 @@ A better model finds a better route to the same outcome. A written route caps it
 
 Each correction ends with the month added and the task that proves it: `` `2026-11 · paste a stack trace and ask for a fix` ``. On a model upgrade, run each task without its line. If the output holds, delete the line. CI rejects a correction without a test.
 
-Install updates shipped files you have not touched. Put your own rules in a new file, such as `rules/preferences.md`.
+Install updates shipped files you have not touched. Put your own rules in a file you own, such as `rules/preferences.md`.
 
 Some tools support path-scoped front matter (for example `globs:`). If yours does, see its current docs. Otherwise write plain markdown rules.
 
