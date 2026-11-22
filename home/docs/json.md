@@ -6,8 +6,7 @@ code does not change. Save the document to a file and hand it to another
 session for analysis.
 
 A path under your home directory starts with `~`. A key with no value is
-`null`, unless its table says `""`. The `agents` version is the only schema
-version.
+`null` or `""`. The `agents` version is the only schema version.
 
 ## Every document
 
