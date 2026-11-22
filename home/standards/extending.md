@@ -5,7 +5,7 @@
 | Term | Meaning |
 |------|---------|
 | **Upstream** | This template repo ([upstream.json](../context/upstream.json)) |
-| **Overlay** | Your files beside upstream: new rules, memory, skills |
+| **Overlay** | Your own files, such as `rules/preferences.md` |
 | **Extend** | Add artifacts using [standards/](.) |
 
 ## Admission test (before you add a file)
@@ -26,8 +26,6 @@ Apply this in order. If any step fails, do not add the file.
 
 ## Coexistence
 
-Your home is a checkout, so `git status` shows exactly what you changed and a merge shows you any line that moved under it ([adopt.md](adopt.md)).
-
-So add beside the base where you can. A file you leave alone merges cleanly; a file you rewrote conflicts, which is the signal you want.
+Your home is a checkout. `git status` shows what you changed. A merge shows each line that upstream changed under your edit ([adopt.md](adopt.md)). A file you leave alone merges cleanly. A conflict in a file you rewrote is the signal you want.
 
 Do not name vendors. Say "your tool."

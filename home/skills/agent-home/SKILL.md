@@ -35,4 +35,4 @@ This clones to `~/.agents`, makes the root the home when the clone keeps it unde
 
 ## Edit
 
-Add a file in `rules/`, `memory/`, or `skills/`. Do not edit `AGENTS.md`. Then `agents check`, commit, push, and `agents wire --apply` so tools that follow no import get the new text.
+Edit the file that owns the topic. Do not edit `AGENTS.md`. Then `agents check`, commit, push, and `agents wire --apply` so tools that follow no import get the new text.
