@@ -31,7 +31,7 @@ cd ~/.agents
 git fetch upstream && git merge --no-edit -X subtree=home upstream/main
 ```
 
-`agents sync --apply` runs that merge, adds `--allow-unrelated-histories` for a copy made with **Use this template**, and rewires. The binary embeds no content and reads the same tree. Every command prints its plan and writes nothing without `--apply`. `agents --version` names the commit it was built from, and once a day a command says on stderr how many commits main is ahead of that build; `AGENTS_UPDATE_CHECK=off` silences it. The first tagged release adds `brew install`; the scripts in `home/scripts/` do the same with no binary ([docs/setup.md](home/docs/setup.md)).
+`agents sync --apply` runs that merge, adds `--allow-unrelated-histories` for a copy made with **Use this template**, and rewires. The binary embeds no content and reads the same tree. Every command prints its plan and writes nothing without `--apply`, with two exceptions. `agents owner-decision ask` and `close` write to the shared list that the config or an environment variable names. The daily update check writes a stamp under `~/.cache/agents`. `agents --version` names the commit it was built from, and once a day a command says on stderr how many commits main is ahead of that build; `AGENTS_UPDATE_CHECK=off` silences it. The first tagged release adds `brew install`; the scripts in `home/scripts/` do the same with no binary ([docs/setup.md](home/docs/setup.md)).
 
 A conflict is the point: it shows the line that moved under a rule you rewrote. There is no installer, no copy, and no manifest, because `git status` and `git diff` already answer every question one would need to reinvent ([adopt.md](home/standards/adopt.md)).
 
@@ -90,7 +90,7 @@ Most tools do not read `~/.agents` on their own. [docs/setup.md](home/docs/setup
 The root of this repository, which a home does not carry:
 
 ```
-cli/                 the `agents` binary: status, tree, scan, skills, memory, wire, check, sync, reset
+cli/                 the `agents` binary: status, ui, tree, scan, skills, memory, wire, check (--base), sync, reset, owner-decision
 docs/decisions/      template decisions
 .github/, scripts/   CI, merge tiers, neutrality, release
 CHANGELOG.md, CONTRIBUTING.md, SECURITY.md, LICENSE, dist-workspace.toml

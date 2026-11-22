@@ -33,21 +33,26 @@ agents init <your-repo> --apply    # clone to ~/.agents, make the root the home,
 Until the first tagged release, `cargo install` builds the binary from this
 repository. The release adds `brew install madgeniusblink/tap/agents`. The
 binary embeds no content: the home stays a git checkout. Every command that
-writes prints its plan and writes nothing without `--apply`.
+writes prints its plan and writes nothing without `--apply`, with two exceptions.
+`agents owner-decision ask` and `close` write to the shared list that the config
+or an environment variable names. The daily update check writes a stamp under
+`~/.cache/agents`.
 
 | Command | Does |
 |---|---|
 | `agents status` | What each tool loads, from where, and what is broken |
+| `agents ui` | A full-screen view with four tabs: Status, Skills, Scan, and Files. The bottom bar shows the keys of each tab, and `?` shows the help. Unix only |
 | `agents tree` | The home, or any directory, as a tree: structure and sizes, not content |
 | `agents scan` | Every instruction file on this machine, by scope, with identical copies, and each checkout's remote, kind, branch, and state, read from local refs only |
 | `agents scan --from <dir>` | For each tool, the settings files that apply in a session started in that directory, lowest precedence first, with hooks, denies, `env` keys, model and effort, `dead` paths, and `conflict` |
 | `agents skills` | Every skill each tool can load, from the home, Claude Code, Codex, claude.ai sync, and plugins, with duplicates and `BROKEN` on a skill that fails the standard; `remove` and `keep` move skills aside |
 | `agents memory` | The tool's own notes per repository, scored against the home so a note the home already states shows as covered; `prune` moves notes aside and drops their index lines |
 | `agents wire` | Point this machine's tools at the home; `unwire` takes out exactly that |
-| `agents check` | Every rule in `standards/`, the always-on budget, and links; one line per fault. [check.md](check.md) lists the rules |
+| `agents check` | Every rule in `standards/`, the always-on budget, and links; one line per fault. `--base <ref>` also compares with that git ref. It fails on a higher budget, or on a dated test that is gone and not retired. [check.md](check.md) lists the rules |
 | `agents update` | Merge the template's main into the home, with `-X subtree=home` since the template keeps the home under `home/`; `sync` does update, wire, and status |
 | `agents reset` | Move each tool's own instruction files aside, then wire; `--memory` includes the tool's auto memory; `--restore` puts them back |
-| `--json` | On `status`, `scan`, `skills`, `memory`, and `check`: one JSON document instead of the text. [json.md](json.md) lists the keys |
+| `agents owner-decision` | `ask` adds a row to a shared list of decisions that only the owner can make. `read` prints the owner's answer. `close` marks the row `Done` with a proof link. `ask` and `close` write to the list at once, with no `--apply`. The `[owner_decision]` table in the config file, or an environment variable, names the list. An environment variable holds the credential |
+| `--json` | On `status`, `scan`, `skills`, `memory`, `check`, and `owner-decision`: one JSON document instead of the text. [json.md](json.md) lists the keys |
 | `--long` | On `status`, `scan`, `skills`, and `memory`: the full listing. Without it, each prints one screen. Twice on `scan`, `skills`, and `memory`: each item in full |
 
 Nothing deletes. `reset`, `skills remove`, and `skills keep` move files to
