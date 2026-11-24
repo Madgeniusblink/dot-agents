@@ -86,8 +86,20 @@ list_id = "{list_id}"
 }
 
 fn agents(home: &Path, api_base: &str, args: &[&str]) -> std::process::Output {
+    agents_env(home, api_base, args, &[])
+}
+
+fn agents_env(
+    home: &Path,
+    api_base: &str,
+    args: &[&str],
+    envs: &[(&str, &str)],
+) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_agents"))
         .args(args)
+        .env_remove("OWNER_DECISION_SESSION")
+        .env_remove("AGENTS_OWNER_DECISION_SESSION")
+        .envs(envs.iter().copied())
         .env("HOME", home)
         .env("AGENTS_CONFIG", home.join(".config/agents/config.toml"))
         .env(
@@ -119,6 +131,26 @@ fn ten_open_items() -> String {
         "items": items
     })
     .to_string()
+}
+
+fn session_items(rows: &[(&str, &str, &str)]) -> String {
+    let items: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|(id, status, session)| {
+            serde_json::json!({
+                "id": id,
+                "fields": [
+                    { "column_id": "ColDecision", "text": format!("Decision {id}") },
+                    { "column_id": "ColStatus", "select": [{ "label": status }] },
+                    { "column_id": "ColSession", "text": session },
+                    { "column_id": "ColAnswer", "select": [{ "label": "Approve" }] },
+                    { "column_id": "ColChecked", "text": "https://example.com/evidence" }
+                ]
+            })
+        })
+        .collect();
+    let schema: serde_json::Value = serde_json::from_str(SCHEMA).unwrap();
+    serde_json::json!({ "ok": true, "schema": schema["schema"], "items": items }).to_string()
 }
 
 fn mock_map(open_items: &str) -> HashMap<String, String> {
@@ -241,4 +273,110 @@ fn ask_read_close_happy_path() {
         String::from_utf8_lossy(&close.stderr)
     );
     assert!(String::from_utf8_lossy(&close.stdout).contains("Done"));
+}
+
+#[test]
+fn read_and_close_refuse_a_session_shared_by_two_open_rows() {
+    let items = session_items(&[
+        ("RecDone001", "Done", "sess-shared"),
+        ("RecOpenA", "Open", "sess-shared"),
+        ("RecOpenB", "Open", "sess-shared"),
+    ]);
+    let server = MockServer::start(mock_map(&items));
+    let home = tempfile::tempdir().unwrap();
+    write_config(home.path(), "F000EXAMPLE");
+    for args in [
+        &["owner-decision", "read", "--session", "sess-shared"][..],
+        &[
+            "owner-decision",
+            "close",
+            "--session",
+            "sess-shared",
+            "--proof-link",
+            "https://example.com/proof",
+        ][..],
+    ] {
+        let out = agents(home.path(), &server.base, args);
+        assert!(
+            !out.status.success(),
+            "{args:?} picked a row: {}",
+            String::from_utf8_lossy(&out.stdout)
+        );
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            err.contains("RecOpenA") && err.contains("RecOpenB"),
+            "{err}"
+        );
+    }
+}
+
+#[test]
+fn read_and_close_by_session_skip_done_rows() {
+    let items = session_items(&[
+        ("RecDone001", "Done", "sess-shared"),
+        ("RecOpenA", "Open", "sess-shared"),
+    ]);
+    let server = MockServer::start(mock_map(&items));
+    let home = tempfile::tempdir().unwrap();
+    write_config(home.path(), "F000EXAMPLE");
+    let read = agents(
+        home.path(),
+        &server.base,
+        &[
+            "owner-decision",
+            "read",
+            "--session",
+            "sess-shared",
+            "--json",
+        ],
+    );
+    assert!(
+        read.status.success(),
+        "{}",
+        String::from_utf8_lossy(&read.stderr)
+    );
+    let doc: serde_json::Value =
+        serde_json::from_str(&String::from_utf8_lossy(&read.stdout)).unwrap();
+    assert_eq!(doc["record_id"], "RecOpenA");
+
+    let close = agents(
+        home.path(),
+        &server.base,
+        &[
+            "owner-decision",
+            "close",
+            "--session",
+            "sess-shared",
+            "--proof-link",
+            "https://example.com/proof",
+        ],
+    );
+    assert!(
+        close.status.success(),
+        "{}",
+        String::from_utf8_lossy(&close.stderr)
+    );
+    assert!(String::from_utf8_lossy(&close.stdout).contains("record_id: RecOpenA"));
+}
+
+#[test]
+fn empty_session_flag_is_treated_as_absent() {
+    let items = session_items(&[("RecEmpty", "Open", ""), ("RecEnv", "Open", "sess-env")]);
+    let server = MockServer::start(mock_map(&items));
+    let home = tempfile::tempdir().unwrap();
+    write_config(home.path(), "F000EXAMPLE");
+    let read = agents_env(
+        home.path(),
+        &server.base,
+        &["owner-decision", "read", "--session", "", "--json"],
+        &[("OWNER_DECISION_SESSION", "sess-env")],
+    );
+    assert!(
+        read.status.success(),
+        "{}",
+        String::from_utf8_lossy(&read.stderr)
+    );
+    let doc: serde_json::Value =
+        serde_json::from_str(&String::from_utf8_lossy(&read.stdout)).unwrap();
+    assert_eq!(doc["record_id"], "RecEnv");
 }

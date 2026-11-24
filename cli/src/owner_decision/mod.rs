@@ -151,11 +151,26 @@ fn find_item(
             .item_info(list_id, id)
             .with_context(|| format!("record_id {id}"));
     }
-    let items = client.list_items(list_id)?;
-    items
+    let mut open: Vec<ListItem> = client
+        .list_items(list_id)?
         .into_iter()
-        .find(|i| i.field_map(schema).get("session").map(String::as_str) == Some(session))
-        .with_context(|| format!("no row with Session {session}"))
+        .filter(|i| {
+            !i.is_done(schema)
+                && i.field_map(schema).get("session").map(String::as_str) == Some(session)
+        })
+        .collect();
+    match open.len() {
+        0 => bail!("no open row with Session {session}; pass --record-id"),
+        1 => Ok(open.remove(0)),
+        _ => {
+            let ids: Vec<&str> = open.iter().map(|i| i.id.as_str()).collect();
+            bail!(
+                "{} open rows share Session {session} ({}); pass --record-id",
+                ids.len(),
+                ids.join(", ")
+            )
+        }
+    }
 }
 
 fn print_fields(fields: &std::collections::HashMap<String, String>) {
@@ -229,9 +244,11 @@ fn today_iso() -> String {
 
 /// Session correlation for this agent run.
 pub fn session_id() -> String {
-    std::env::var("OWNER_DECISION_SESSION")
-        .or_else(|_| std::env::var("AGENTS_OWNER_DECISION_SESSION"))
-        .unwrap_or_else(|_| format!("local-{}", config::machine_hash()))
+    ["OWNER_DECISION_SESSION", "AGENTS_OWNER_DECISION_SESSION"]
+        .iter()
+        .filter_map(|k| std::env::var(k).ok())
+        .find(|v| !v.trim().is_empty())
+        .unwrap_or_else(|| format!("local-{}", config::machine_hash()))
 }
 
 #[cfg(test)]
