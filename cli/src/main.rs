@@ -299,8 +299,11 @@ fn main() -> ExitCode {
 }
 
 fn owner_decision_cmd(action: OwnerDecisionAction) -> Result<ExitCode> {
-    let resolve_session =
-        |opt: &Option<String>| opt.clone().unwrap_or_else(owner_decision::session_id);
+    let resolve_session = |opt: &Option<String>| {
+        opt.clone()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(owner_decision::session_id)
+    };
     match action {
         OwnerDecisionAction::Ask {
             decision,
