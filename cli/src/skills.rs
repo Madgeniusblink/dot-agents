@@ -1095,11 +1095,12 @@ fn duplicates(skills: &[Skill]) -> (Groups<'_>, Groups<'_>) {
 /// text shows on a copy of a project skill.
 fn record(s: &Skill, project: &[&Skill], root: Option<&Path>) -> Value {
     let front = s.front.as_ref().map(|f| {
+        let text = |v: &Option<String>| v.clone().filter(|v| !v.is_empty());
         json!({
-            "name": f.name,
-            "description": f.description,
-            "license": f.license,
-            "compatibility": f.compatibility,
+            "name": text(&f.name),
+            "description": text(&f.description),
+            "license": text(&f.license),
+            "compatibility": text(&f.compatibility),
             "metadata": f.metadata,
             "allowed_tools": f.allowed_tools,
             "unknown_keys": f.unknown_keys,

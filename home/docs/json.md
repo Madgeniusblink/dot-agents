@@ -6,7 +6,7 @@ code does not change. Save the document to a file and hand it to another
 session for analysis.
 
 A path under your home directory starts with `~`. A key with no value is
-`null` or `""`. The `agents` version is the only schema version.
+`null`, never `""`. The `agents` version is the only schema version.
 
 ## Every document
 
@@ -28,7 +28,7 @@ the contract.
 |---|---|
 | `machine` | The name this machine gives itself, or `unknown` |
 | `config` | The config file for this machine, below |
-| `git` | `null` when the home is not a git checkout; else `branch`, `sha`, `uncommitted` (a count), and `behind_upstream` (a count, or `null` with no `upstream/main`) |
+| `git` | `null` when the home is not a git checkout; else `branch` and `sha`, each `null` before the first commit, `uncommitted` (a count), and `behind_upstream` (a count, or `null` with no `upstream/main`) |
 | `merge_ours_unset` | `true` when `.gitattributes` marks files `merge=ours` and `merge.ours.driver` is not set |
 | `always_on` | `files`, each with `name` and `bytes`; `bytes`, the total; the `cap` it must fit; and `cap_source`, as in `check` |
 | `on_demand` | One object per directory: `dir` and `files`, a count |
@@ -159,7 +159,7 @@ Each record:
 | `source` | `home`, `claude-user`, `codex-user`, `claude-synced`, `claude-plugin`, or `project` |
 | `project` | The checkout root for scope `project`, else `null` |
 | `owner` | `metadata.owner`, or `null` |
-| `frontmatter` | `null` when `SKILL.md` has none; else `name`, `description`, `license`, `compatibility`, `metadata`, `allowed_tools`, and `unknown_keys` |
+| `frontmatter` | `null` when `SKILL.md` has none; else `name`, `description`, `license`, `compatibility`, `metadata`, `allowed_tools`, and `unknown_keys`. A key with no value is `null` |
 | `lint` | Each finding: `rule`, `level` (`error` or `warn`), and `text` |
 | `body` | `lines` of the whole file, `bytes` and `hash` of the body after the frontmatter |
 | `files` | Counts of `scripts`, `references`, `assets`, and `other`, and their total `bytes` |
@@ -184,9 +184,9 @@ Each object in `notes`:
 | `name` | The frontmatter name, or the file stem |
 | `repository` | The memory directory that holds the note |
 | `file` | The note |
-| `type` | The frontmatter type |
+| `type` | The frontmatter type, or `null` |
 | `lines` | The size of the note |
-| `description` | The frontmatter description |
+| `description` | The frontmatter description, or `null` |
 | `verdict` | `covered`, `similar`, or `none` |
 | `match` | The place in the home that matches best, or `null` |
 | `score` | The overlap score of that match, or `null` |
@@ -217,8 +217,8 @@ Each document of `agents owner-decision ask`, `read`, and `close` holds only the
 | Key | Value |
 |---|---|
 | `record_id` | The id of the row |
-| `session` | The session id of the row, or `""` when the row has none |
-| `status` | The status of the row, such as `Open` or `Done`, or `""` when the row has none |
+| `session` | The session id of the row, or `null` when the row has none |
+| `status` | The status of the row, such as `Open` or `Done`, or `null` when the row has none |
 | `answer` | The owner's answer, or `null` while it is empty |
 | `pending` | `true` while the answer is empty |
 | `decision`, `recommended`, `checked`, `why_you`, `project`, `asked` | Each field of the row as text, or `null` when the row has none. `asked` is the UTC date of the ask |

@@ -189,3 +189,58 @@ fn memory_json_matches_the_text() {
     assert_eq!(doc["covered"], 1);
     assert_eq!(doc["notes"][0]["verdict"], "covered");
 }
+
+#[test]
+fn memory_json_gives_null_for_a_missing_type_and_description() {
+    let t = fixture();
+    let dir = t.path().join(".claude/projects/p1/memory");
+    fs::write(dir.join("bare.md"), "---\nname: bare\n---\nA note.\n").unwrap();
+    let doc = document(t.path(), "memory", &[]);
+    let note = doc["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["name"] == "bare")
+        .unwrap_or_else(|| panic!("{doc}"));
+    assert!(note["type"].is_null(), "{note}");
+    assert!(note["description"].is_null(), "{note}");
+}
+
+#[test]
+fn status_json_gives_null_for_branch_and_sha_before_the_first_commit() {
+    let t = fixture();
+    let init = Command::new("git")
+        .arg("-C")
+        .arg(t.path().join(".agents"))
+        .args(["init", "-q"])
+        .status()
+        .unwrap();
+    assert!(init.success());
+    let doc = document(t.path(), "status", &[]);
+    assert!(doc["git"].is_object(), "{doc}");
+    assert!(doc["git"]["branch"].is_null(), "{}", doc["git"]);
+    assert!(doc["git"]["sha"].is_null(), "{}", doc["git"]);
+}
+
+#[test]
+fn skills_json_gives_null_for_a_key_with_no_value() {
+    let t = fixture();
+    let dir = t.path().join(".agents/skills/empty");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(
+        dir.join("SKILL.md"),
+        "---\nname:\ndescription:\nlicense:\ncompatibility:\n---\nBody.\n",
+    )
+    .unwrap();
+    let doc = document(t.path(), "skills", &[]);
+    let skill = doc["skills"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["dir"].as_str().is_some_and(|d| d.ends_with("/empty")))
+        .unwrap_or_else(|| panic!("{doc}"));
+    let front = &skill["frontmatter"];
+    for key in ["name", "description", "license", "compatibility"] {
+        assert!(front[key].is_null(), "{key}: {front}");
+    }
+}
