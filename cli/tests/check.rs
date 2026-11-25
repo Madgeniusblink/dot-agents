@@ -299,3 +299,19 @@ fn json_lists_the_faults_with_the_same_fields() {
     assert_eq!(f["rule"], "correction.dated");
     assert!(f["message"].is_string() && f["fix"].is_string());
 }
+
+/// `docs/optional-skills/README.md` tells a user to copy a skill into a
+/// home. The copy must pass `check`.
+#[test]
+fn a_copied_optional_skill_passes_check() {
+    let t = template_copy();
+    let skill = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("docs/optional-skills/owner-decision/SKILL.md");
+    let to = t.path().join("skills/owner-decision");
+    fs::create_dir_all(&to).unwrap();
+    fs::copy(&skill, to.join("SKILL.md")).unwrap();
+    let out = check(t.path(), &[]);
+    assert_eq!(out.status.code(), Some(0), "{}", stdout(&out));
+}

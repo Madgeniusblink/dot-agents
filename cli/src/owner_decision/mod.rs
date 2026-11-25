@@ -232,14 +232,12 @@ fn merge_checked(prior: &str, proof: &str) -> String {
 }
 
 fn today_iso() -> String {
-    std::process::Command::new("date")
-        .args(["-u", "+%F"])
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "1970-01-01".to_string())
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let (y, m, d) = crate::reset::civil_from_days((secs / 86_400) as i64);
+    format!("{y:04}-{m:02}-{d:02}")
 }
 
 /// Session correlation for this agent run.

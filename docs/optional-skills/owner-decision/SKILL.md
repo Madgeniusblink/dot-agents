@@ -9,7 +9,7 @@ Human answers live in the list **Answer** field (Approve, Deny, Discuss), not in
 
 ## Before you run
 
-1. Confirm `[owner_decision]` in `$AGENTS_CONFIG` or `~/.config/agents/config.toml`, or the env vars in [cli/examples/owner-decision.op.env.example](../../../cli/examples/owner-decision.op.env.example) (credential needs `lists:read` and `lists:write`).
+1. Confirm `[owner_decision]` in `$AGENTS_CONFIG` or `~/.config/agents/config.toml`, or the env vars in [cli/examples/owner-decision.op.env.example](https://github.com/Madgeniusblink/dot-agents/blob/main/cli/examples/owner-decision.op.env.example) (credential needs `lists:read` and `lists:write`).
 2. Set `OWNER_DECISION_SESSION` when correlating this run to a row (optional; the CLI generates one if unset).
 
 ## Workflow
