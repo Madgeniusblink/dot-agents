@@ -14,9 +14,6 @@ use crate::ui::layout::{self, DETAIL_MIN};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-/// Below this many body rows the per-source counts collapse to one line.
-const BODY_ROWS_FOR_FULL_COUNTS: usize = 14;
-
 /// The list name column stays narrower than the global cap so the state
 /// badge and description keep room on an 80-column terminal.
 const LIST_NAME_CAP: usize = 18;
@@ -143,7 +140,7 @@ impl<'a> View<'a> {
         let count_rows = self.counts();
         let counts = out::rows(&count_rows, width);
         let room_for_full = lines.len() + counts.len() + 3 + DETAIL_MIN;
-        if height >= BODY_ROWS_FOR_FULL_COUNTS && height >= room_for_full {
+        if height >= room_for_full {
             lines.extend(counts);
             lines.push(String::new());
         } else if let Some(summary) = self.counts_summary(width, &count_rows) {
@@ -629,7 +626,7 @@ mod tests {
     }
 
     #[test]
-    fn t4_body_fewer_than_fourteen_rows_collapses_source_counts() {
+    fn t4_counts_collapse_when_the_block_leaves_no_room_for_the_detail() {
         let skills = fixture();
         let root = PathBuf::from("/p");
         let mut view = View::new(&skills, Some(&root));
@@ -647,6 +644,14 @@ mod tests {
         let expanded = view.render(100, 14);
         assert_eq!(expanded[1].trim(), "1  home, yours");
         assert_eq!(expanded[2].trim(), "2  claude code, user skills, yours");
+    }
+
+    #[test]
+    fn t156_one_source_keeps_its_full_count_row_where_it_fits() {
+        let skills = vec![skill("notes", Source::Home, "/h/.agents/skills/notes", 2, false)];
+        let mut view = View::new(&skills, None);
+        let lines = view.render(80, 12);
+        assert_eq!(lines[1].trim(), "1  home, yours", "{lines:#?}");
     }
 
     #[test]

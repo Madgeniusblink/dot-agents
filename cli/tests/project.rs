@@ -249,6 +249,58 @@ fn t105_the_files_tab_shows_a_new_file_with_no_key() {
     ui.quit();
 }
 
+/// Issue 156: at 80x24 the Skills key bar keeps `R refresh`, and the Status
+/// key bar names the line `s` sends as the person scrolls.
+#[cfg(unix)]
+#[test]
+fn t156_the_key_bars_at_80x24_show_refresh_and_the_send_line() {
+    let (home, repo) = fixture();
+    let (h, r) = (home.path(), repo.path());
+    fs::create_dir_all(h.join(".agents")).unwrap();
+    fs::write(h.join(".agents/AGENTS.md"), "# home\n").unwrap();
+    let mut ui = view::Ui::open_sized(h, r, 80, 24);
+    let f = ui.wait("the send line", |f| f.contains("s sends line 1/"));
+    assert!(f.lines().all(|l| l.chars().count() <= 80), "{f}");
+    let f = ui.press("?", "this help");
+    assert!(!f.contains("s sends line"), "help has no send line:\n{f}");
+    ui.press("?", "s sends line 1/");
+    let f = ui.press("2", "yours, BROKEN, or a copy");
+    assert!(!f.contains("s sends line"), "only Status sends a line:\n{f}");
+    let bar = f.split("\r\n").last().unwrap_or_default();
+    assert!(bar.contains("R  refresh"), "{bar}");
+    ui.quit();
+}
+
+/// Issue 156: `R` and a live poll change keep an open scoped tree open.
+#[cfg(unix)]
+#[test]
+fn t156_a_refresh_keeps_the_scoped_tree_open() {
+    let (home, repo) = fixture();
+    let (h, r) = (home.path(), repo.path());
+    fs::create_dir_all(h.join(".agents")).unwrap();
+    fs::write(h.join(".agents/AGENTS.md"), "# home\n").unwrap();
+    skill(&h.join(".agents/skills"), "demo", "", "Demo body.");
+    let mut ui = view::Ui::open_sized(h, r, 80, 24);
+    ui.press("4", "AGENTS.md");
+    ui.select_row("skills");
+    ui.press("\r", "items");
+    // The scoped tree heads its rows with its root; the flat list with a count.
+    let scoped = |f: &str| {
+        let head = f.split("\r\n").nth(1).unwrap_or_default();
+        head.starts_with("~/.agents/skills/demo") && !head.contains("items")
+    };
+    ui.master_write("t");
+    ui.wait("the scoped tree", scoped);
+    ui.master_write("R");
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    assert!(scoped(&ui.frame()), "after R:\n{}", ui.frame());
+    fs::write(h.join(".agents/skills/demo/live.txt"), "x\n").unwrap();
+    let f = ui.wait("the new file", |f| f.contains("live.txt"));
+    assert!(scoped(&f), "after the poll:\n{f}");
+    ui.press("\x1b", "items");
+    ui.quit();
+}
+
 /// `agents ui` on a pseudo-terminal, driven one key at a time as a person
 /// drives it. The screen redraws every 100 ms, so each wait reads the last
 /// whole frame.
@@ -271,6 +323,11 @@ mod view {
 
     impl Ui {
         pub fn open(home: &Path, cwd: &Path) -> Ui {
+            Ui::open_sized(home, cwd, 400, 40)
+        }
+
+        /// `open` on a terminal `cols` wide and `rows` high.
+        pub fn open_sized(home: &Path, cwd: &Path, cols: u16, rows: u16) -> Ui {
             let master = openpt(OpenptFlags::RDWR | OpenptFlags::NOCTTY).unwrap();
             grantpt(&master).unwrap();
             unlockpt(&master).unwrap();
@@ -281,8 +338,8 @@ mod view {
                 .open(name.to_str().unwrap())
                 .unwrap();
             let size = Winsize {
-                ws_row: 40,
-                ws_col: 400,
+                ws_row: rows,
+                ws_col: cols,
                 ws_xpixel: 0,
                 ws_ypixel: 0,
             };
@@ -337,6 +394,11 @@ mod view {
             }
         }
 
+        /// Press `key` and wait for nothing.
+        pub fn master_write(&mut self, key: &str) {
+            self.master.write_all(key.as_bytes()).unwrap();
+        }
+
         /// Press `key`, then wait for a frame that shows `text`.
         pub fn press(&mut self, key: &str, text: &str) -> String {
             self.master.write_all(key.as_bytes()).unwrap();
@@ -355,6 +417,25 @@ mod view {
                 self.wait("the next row", |f| selected(f).is_some_and(|s| s != now));
             }
             panic!("no row {name}:\n{}", self.frame());
+        }
+
+        /// Move down until the selected row, the one that starts with `>`,
+        /// contains `text`.
+        pub fn select_row(&mut self, text: &str) {
+            for _ in 0..20 {
+                let f = self.wait("a selected row", |f| selected(f).is_some());
+                let row = |f: &str| {
+                    let r = f.split("\r\n").find(|l| l.starts_with('>'));
+                    r.unwrap_or_default().to_string()
+                };
+                let now = row(&f);
+                if now.contains(text) {
+                    return;
+                }
+                self.master.write_all(b"j").unwrap();
+                self.wait("the next row", |f| row(f) != now);
+            }
+            panic!("no row with {text}:\n{}", self.frame());
         }
 
         pub fn quit(mut self) {
