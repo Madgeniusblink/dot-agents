@@ -217,9 +217,10 @@ mod unix {
     /// walks the checkout.
     pub(super) fn settle(base: &mut live::Stamps, found: live::Stamps) {
         for (r, s) in found {
-            match base.iter_mut().find(|(b, _)| *b == r) {
-                Some(entry) => entry.1 = s,
-                None => base.push((r, s)),
+            // A known root keeps its stamp: a scan reads git before it
+            // stamps, so a change during the scan must still count.
+            if !base.iter().any(|(b, _)| *b == r) {
+                base.push((r, s));
             }
         }
     }
@@ -489,7 +490,7 @@ mod unix {
                 }
             };
             if refresh {
-                rescan = groups.is_some() && frame.view == View::Scan;
+                rescan |= groups.is_some() && frame.view == View::Scan;
                 kept = Some(list.state());
                 let kept = browse.snapshot();
                 browse.restore(&home.dir, false, Some(home), kept);
@@ -1550,12 +1551,23 @@ mod tests {
             base,
             vec![
                 (root(a, None), 1),
-                (root(b, None), 5),
+                (root(b, None), 2),
                 (root(a, Some(2)), 3)
             ]
         );
-        // A file written after the scan, before the first walk of `b`.
-        let walk = vec![(root(a, None), 1), (root(b, None), 6)];
+        // `b` changed during the scan, after the scan read its git state.
+        let walk = vec![
+            (root(a, None), 1),
+            (root(b, None), 5),
+            (root(a, Some(2)), 3),
+        ];
+        assert!(changed(&mut base, walk, true));
+        // A file written under a new checkout after the scan.
+        let walk = vec![
+            (root(a, None), 1),
+            (root(b, None), 5),
+            (root(a, Some(2)), 4),
+        ];
         assert!(changed(&mut base, walk, true));
     }
 

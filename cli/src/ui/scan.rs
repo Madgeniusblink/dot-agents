@@ -186,13 +186,13 @@ impl View {
         self.filter
     }
 
-    /// Each checkout path the view can show, for the live poll.
     /// Keep the filter and the selected row of the view a rescan replaces.
     pub fn keep(&mut self, old: &View) {
         self.filter = old.filter;
         self.selected = old.selected.min(self.shown().len().saturating_sub(1));
     }
 
+    /// Each checkout path the view can show, for the live poll.
     pub fn watch_paths(&self) -> Vec<PathBuf> {
         self.groups
             .iter()
