@@ -190,4 +190,10 @@ fi
 [ "$found" -eq 1 ] || echo "  no known tool directory in \$HOME. see docs/setup.md."
 
 echo
-echo "verify: sh $HOME_DIR/scripts/check.sh"
+# check.sh runs agents check, so without the binary it can only fail.
+if command -v agents >/dev/null 2>&1; then
+  echo "verify: sh $HOME_DIR/scripts/check.sh"
+else
+  echo "verify: sh $HOME_DIR/scripts/context.sh"
+  echo "check.sh needs the agents binary: cargo install --git https://github.com/Madgeniusblink/dot-agents dot-agents"
+fi
