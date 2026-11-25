@@ -4,6 +4,9 @@
   "template_version": "0.18.0",
   "repository": "https://github.com/Madgeniusblink/dot-agents",
   "default_branch": "main",
+  "budget": {
+    "always_on_bytes": 16384
+  },
   "release_tag": "v0.18.0",
   "extends_doc": "standards/extending.md",
   "paths": {
