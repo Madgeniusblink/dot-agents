@@ -612,3 +612,33 @@ fn close_sends_done_and_merged_checked_to_update() {
         "https://example.com/evidence\nproof: https://example.com/proof"
     );
 }
+
+#[test]
+fn read_json_gives_null_for_an_empty_session_and_status() {
+    let info = r#"{"ok":true,"record":{"id":"RecExample001","fields":[{"column_id":"ColDecision","text":"Example decision"},{"column_id":"ColSession","text":""}]}}"#;
+    let mut map = mock_map(ITEMS);
+    map.insert("slackLists.items.info".into(), info.to_string());
+    let server = MockServer::start(map);
+    let home = tempfile::tempdir().unwrap();
+    write_config(home.path(), "F000EXAMPLE");
+    let out = agents(
+        home.path(),
+        &server.base,
+        &[
+            "owner-decision",
+            "read",
+            "--record-id",
+            "RecExample001",
+            "--json",
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert!(doc["session"].is_null(), "{doc}");
+    assert!(doc["status"].is_null(), "{doc}");
+    assert_eq!(doc["decision"], "Example decision");
+}

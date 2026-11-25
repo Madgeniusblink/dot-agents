@@ -73,18 +73,19 @@ pub fn read(session: &str, record_id: Option<&str>, json: bool) -> Result<()> {
     let fields = item.field_map(&schema);
     let answer = fields.get("answer").cloned().unwrap_or_default();
     let pending = answer.trim().is_empty();
+    let text = |key| fields.get(key).filter(|v| !v.is_empty());
     let doc = json!({
         "record_id": item.id,
-        "session": fields.get("session").cloned().unwrap_or_default(),
-        "status": fields.get("status").cloned().unwrap_or_default(),
+        "session": text("session"),
+        "status": text("status"),
         "answer": if pending { Value::Null } else { json!(answer) },
         "pending": pending,
-        "decision": fields.get("decision"),
-        "recommended": fields.get("recommended"),
-        "checked": fields.get("checked"),
-        "why_you": fields.get("why_you"),
-        "project": fields.get("project"),
-        "asked": fields.get("asked"),
+        "decision": text("decision"),
+        "recommended": text("recommended"),
+        "checked": text("checked"),
+        "why_you": text("why_you"),
+        "project": text("project"),
+        "asked": text("asked"),
     });
     if json {
         println!("{}", serde_json::to_string_pretty(&doc)?);

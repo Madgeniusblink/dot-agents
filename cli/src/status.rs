@@ -352,8 +352,8 @@ pub fn data(home: &Home, cfg: &Config) -> Value {
             .and_then(|_| home.git(&["rev-list", "--count", "HEAD..upstream/main"]))
             .and_then(|n| n.parse::<u64>().ok());
         json!({
-            "branch": home.git(&["rev-parse", "--abbrev-ref", "HEAD"]).unwrap_or_default(),
-            "sha": home.git(&["rev-parse", "--short", "HEAD"]).unwrap_or_default(),
+            "branch": home.git(&["rev-parse", "--abbrev-ref", "HEAD"]),
+            "sha": home.git(&["rev-parse", "--short", "HEAD"]),
             "uncommitted": home
                 .git(&["--no-optional-locks", "status", "--porcelain"])
                 .map(|o| o.lines().count())
