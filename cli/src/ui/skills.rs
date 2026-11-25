@@ -648,7 +648,13 @@ mod tests {
 
     #[test]
     fn t156_one_source_keeps_its_full_count_row_where_it_fits() {
-        let skills = vec![skill("notes", Source::Home, "/h/.agents/skills/notes", 2, false)];
+        let skills = vec![skill(
+            "notes",
+            Source::Home,
+            "/h/.agents/skills/notes",
+            2,
+            false,
+        )];
         let mut view = View::new(&skills, None);
         let lines = view.render(80, 12);
         assert_eq!(lines[1].trim(), "1  home, yours", "{lines:#?}");

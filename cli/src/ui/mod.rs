@@ -1640,8 +1640,14 @@ mod tests {
         };
         for width in [80, 120] {
             let kb = &screen_with(&f, &body, Some(SKILLS_KEYS), width, 24)[23];
-            assert!(kb.contains("R") && kb.contains("refresh"), "Skills {width}x24: {kb}");
-            assert!(kb.contains("c/o") && kb.contains("path"), "Skills {width}x24: {kb}");
+            assert!(
+                kb.contains("R") && kb.contains("refresh"),
+                "Skills {width}x24: {kb}"
+            );
+            assert!(
+                kb.contains("c/o") && kb.contains("path"),
+                "Skills {width}x24: {kb}"
+            );
             assert!(crate::out::visible(kb) <= width, "{kb}");
         }
     }
@@ -1655,7 +1661,10 @@ mod tests {
         let body = vec!["skill".to_string()];
         for width in [80, 120] {
             let kb = &screen_with(&f, &body, Some(SKILLS_KEYS), width, 24)[23];
-            assert!(kb.contains("c/o") && kb.contains("path"), "{width}x24: {kb}");
+            assert!(
+                kb.contains("c/o") && kb.contains("path"),
+                "{width}x24: {kb}"
+            );
             assert!(kb.contains("m") && kb.contains("marks"), "{width}x24: {kb}");
             assert!(
                 kb.contains("r/K") && kb.contains("remove/keep"),
@@ -2030,7 +2039,9 @@ mod tests {
         );
         let shown = screen(&Frame::default(), &status_lines(&doc), 80, 24);
         assert!(
-            shown.iter().any(|r| words(r) == "  Run: agents wire --apply"),
+            shown
+                .iter()
+                .any(|r| words(r) == "  Run: agents wire --apply"),
             "80x24: {shown:#?}"
         );
         let ok = json!({"git": null, "config": {}, "always_on": {}, "harnesses": [

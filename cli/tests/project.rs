@@ -265,7 +265,10 @@ fn t156_the_key_bars_at_80x24_show_refresh_and_the_send_line() {
     assert!(!f.contains("s sends line"), "help has no send line:\n{f}");
     ui.press("?", "s sends line 1/");
     let f = ui.press("2", "yours, BROKEN, or a copy");
-    assert!(!f.contains("s sends line"), "only Status sends a line:\n{f}");
+    assert!(
+        !f.contains("s sends line"),
+        "only Status sends a line:\n{f}"
+    );
     let bar = f.split("\r\n").last().unwrap_or_default();
     assert!(bar.contains("R  refresh"), "{bar}");
     ui.quit();

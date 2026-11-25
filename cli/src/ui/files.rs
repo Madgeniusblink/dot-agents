@@ -195,7 +195,9 @@ impl BrowseView {
             }
         });
         if self.flat.is_none() {
-            self.tree.selected = kept.tree_selected.min(self.tree.rows.len().saturating_sub(1));
+            self.tree.selected = kept
+                .tree_selected
+                .min(self.tree.rows.len().saturating_sub(1));
         }
     }
 
@@ -215,9 +217,15 @@ impl BrowseView {
                 anchor: d.anchor.clone(),
                 dir: d.files.dir.clone(),
                 // Escape from a scoped tree goes back to this row.
-                selected: d.scoped.as_ref().map_or(d.files.selected, |s| s.flat_selected),
+                selected: d
+                    .scoped
+                    .as_ref()
+                    .map_or(d.files.selected, |s| s.flat_selected),
                 tree_selected: d.tree_selected,
-                scoped: d.scoped.as_ref().map(|s| (s.tree.root.clone(), s.tree.selected)),
+                scoped: d
+                    .scoped
+                    .as_ref()
+                    .map(|s| (s.tree.root.clone(), s.tree.selected)),
             }),
             tree_selected: self.tree.selected,
         }
@@ -659,10 +667,7 @@ mod tests {
         b.enter(Some(&home));
         b.show_scoped_tree(Some(&home));
         b.down();
-        let (root, row) = (
-            b.watch_paths(),
-            b.selected().map(|n| n.path.clone()),
-        );
+        let (root, row) = (b.watch_paths(), b.selected().map(|n| n.path.clone()));
         b.restore(t.path(), false, Some(&home), b.snapshot());
         assert!(b.in_scoped_tree(), "{:#?}", b.render(80, 24));
         assert_eq!(b.watch_paths(), root);
