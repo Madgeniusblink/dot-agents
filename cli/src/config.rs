@@ -26,6 +26,14 @@ skip = []
 [tools]
 # The tools that status and wire touch: claude, codex, grok, cursor. Empty means every tool found.
 present = []
+
+[owner_decision]
+# The Slack List that holds owner decisions, as its F… ID. Empty means read it from list_id_env.
+list_id = ""
+# The environment variable that holds the list ID when list_id is empty.
+list_id_env = "OWNER_DECISION_LIST_ID"
+# The environment variable that holds the Slack token. The file never holds the token.
+token_env = "OWNER_DECISION_SLACK_TOKEN"
 "#;
 
 #[derive(Clone, Default)]
@@ -179,6 +187,15 @@ mod tests {
         assert_eq!(doc["scan"]["skip"], json!([]));
         assert_eq!(doc["tools"]["present"], json!([]));
         assert_eq!(doc["editor"], "");
+        assert_eq!(doc["owner_decision"]["list_id"], "");
+        assert_eq!(
+            doc["owner_decision"]["list_id_env"],
+            "OWNER_DECISION_LIST_ID"
+        );
+        assert_eq!(
+            doc["owner_decision"]["token_env"],
+            "OWNER_DECISION_SLACK_TOKEN"
+        );
         let comments = TEMPLATE.lines().filter(|l| l.starts_with("# ")).count();
         let keys = TEMPLATE.lines().filter(|l| l.contains(" = ")).count();
         assert_eq!(comments, keys + 2, "one comment per key, plus the header");

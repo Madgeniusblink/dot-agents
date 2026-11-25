@@ -77,6 +77,9 @@ as `config`, beside `machine`.
 | `[scan] roots` | The directories `scan` walks. Empty means your home directory |
 | `[scan] skip` | Globs of paths `scan` skips, such as the task copies a tool makes. `*` stays inside one directory; `**` crosses directories |
 | `[tools] present` | The tools that `status` and `wire` touch: `claude`, `codex`, `grok`, `cursor`. Empty means every tool found |
+| `[owner_decision] list_id` | The Slack List that `owner-decision` reads and writes, as its `F…` ID. Empty means the variable that `list_id_env` names |
+| `[owner_decision] list_id_env` | The environment variable that holds the list ID. Default `OWNER_DECISION_LIST_ID` |
+| `[owner_decision] token_env` | The environment variable that holds the Slack token. Default `OWNER_DECISION_SLACK_TOKEN`. The file never holds the token |
 
 Put a fact in this file when it is true on one machine only: a path, a
 tool you installed, a directory of copies. Put a fact in the home when every

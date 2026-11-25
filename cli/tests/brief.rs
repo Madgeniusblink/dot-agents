@@ -456,7 +456,16 @@ fn init_writes_the_config_file() {
         String::from_utf8_lossy(&out.stderr)
     );
     let text = fs::read_to_string(h.join(".config/agents/config.toml")).unwrap();
-    for key in ["editor = ", "roots = ", "skip = ", "present = "] {
+    for key in [
+        "editor = ",
+        "roots = ",
+        "skip = ",
+        "present = ",
+        "[owner_decision]",
+        "list_id = ",
+        "list_id_env = ",
+        "token_env = ",
+    ] {
         assert!(text.contains(key), "{text}");
     }
 }
