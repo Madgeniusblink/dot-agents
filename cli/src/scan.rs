@@ -17,7 +17,7 @@ use walkdir::{DirEntry, WalkDir};
 
 /// Directories that hold copies, caches, or vendored trees, never a file a
 /// session of yours loads. `--all` walks them anyway.
-const SKIP: &[&str] = &[
+pub(crate) const SKIP: &[&str] = &[
     ".git",
     "node_modules",
     "Library",

@@ -165,15 +165,16 @@ mod unix {
         }
     }
 
-    /// A scan on its own thread. The walk of a full home directory can take
-    /// most of a minute, and the loop must read keys while it runs.
-    pub(super) struct ScanJob {
-        done: Receiver<Value>,
+    /// Work on its own thread: a scan, or the poll's walk of the file times.
+    /// The walk of a full home directory can take most of a minute, and the
+    /// loop must read keys while it runs.
+    pub(super) struct ScanJob<T = Value> {
+        done: Receiver<T>,
         started: Instant,
     }
 
-    impl ScanJob {
-        pub(super) fn start(work: impl FnOnce() -> Value + Send + 'static) -> Self {
+    impl<T: Send + 'static> ScanJob<T> {
+        pub(super) fn start(work: impl FnOnce() -> T + Send + 'static) -> Self {
             let (tx, done) = mpsc::channel();
             thread::spawn(move || {
                 let _ = tx.send(work());
@@ -185,7 +186,7 @@ mod unix {
         }
 
         /// The report, once. `None` while the walk still runs.
-        pub(super) fn poll(&self) -> Option<Value> {
+        pub(super) fn poll(&self) -> Option<T> {
             self.done.try_recv().ok()
         }
 
@@ -197,7 +198,33 @@ mod unix {
         }
     }
 
-    fn watch_roots(
+    /// One walk of the poll against the baseline. A root new to the walk
+    /// joins the baseline and a root gone from it leaves. Only a new stamp
+    /// of a root in both is a change. A change that is not `taken` stays,
+    /// so a later walk reports it again.
+    pub(super) fn changed(base: &mut live::Stamps, walk: live::Stamps, taken: bool) -> bool {
+        let moved = walk
+            .iter()
+            .any(|(r, s)| base.iter().any(|(b, t)| b == r && t != s));
+        if !moved || taken {
+            *base = walk;
+        }
+        moved
+    }
+
+    /// The baseline of each checkout a scan found, read when the scan ends.
+    /// A file written after that is a change, even before the poll first
+    /// walks the checkout.
+    pub(super) fn settle(base: &mut live::Stamps, found: live::Stamps) {
+        for (r, s) in found {
+            match base.iter_mut().find(|(b, _)| *b == r) {
+                Some(entry) => entry.1 = s,
+                None => base.push((r, s)),
+            }
+        }
+    }
+
+    pub(super) fn watch_roots(
         home_dir: &Path,
         skills: &[crate::skills::Skill],
         view: View,
@@ -240,38 +267,47 @@ mod unix {
         // A scan walks every root, so it runs when the tab opens, and again
         // only after `R` or a plan.
         let mut groups: Option<scan::View> = None;
-        let mut job: Option<ScanJob> = None;
+        let mut job: Option<ScanJob<(Value, live::Stamps)>> = None;
+        // The file times of the last walk, one per root (#155).
+        let mut base: live::Stamps = Vec::new();
+        // A live change on Scan scans again behind the rows on screen.
+        let mut rescan = false;
         loop {
             let found = crate::skills::find(Some(home));
             let mut list = skills::View::new(&found, root.as_deref());
             if let Some(state) = kept.take() {
                 list.restore(state);
             }
-            let mut watched = watch_roots(
-                &home.dir,
-                &found,
-                frame.view,
-                &browse,
-                groups.as_ref(),
-                &scan_roots,
-            );
-            let mut seen = live::stamp(&watched);
-            let mut checked = Instant::now();
+            // The poll walks on its own thread, so a large tree does not
+            // hold keys.
+            let mut poll: Option<ScanJob<live::Stamps>> = None;
+            let mut checked: Option<Instant> = None;
             let mut body = frame.view.lines(home, cfg);
             let mut pending: Option<skills::Pending> = None;
             let refresh = loop {
                 let (width, height) = size();
                 let rows = height.saturating_sub(2);
-                if groups.is_none() {
-                    if let Some(report) = job.as_ref().and_then(ScanJob::poll) {
-                        groups = Some(scan::View::new(&report));
-                        job = None;
-                    } else if job.is_none() && frame.view == View::Scan {
-                        let (roots, dir, cfg) = (scan_roots.clone(), home.dir.clone(), cfg.clone());
-                        job = Some(ScanJob::start(move || {
-                            crate::scan::report(&roots, false, Some(&Home { dir }), &cfg)
-                        }));
+                if let Some((report, found)) = job.as_ref().and_then(ScanJob::poll) {
+                    settle(&mut base, found);
+                    let mut fresh = scan::View::new(&report);
+                    if let Some(old) = &groups {
+                        fresh.keep(old);
                     }
+                    groups = Some(fresh);
+                    job = None;
+                } else if job.is_none() && (groups.is_none() || rescan) && frame.view == View::Scan
+                {
+                    rescan = false;
+                    let (roots, dir, cfg) = (scan_roots.clone(), home.dir.clone(), cfg.clone());
+                    job = Some(ScanJob::start(move || {
+                        let report = crate::scan::report(&roots, false, Some(&Home { dir }), &cfg);
+                        let found = scan::View::new(&report)
+                            .watch_paths()
+                            .into_iter()
+                            .map(|path| live::Root { path, depth: None })
+                            .collect();
+                        (report, live::stamps(found))
+                    }));
                 }
                 let (shown, keys) = match (&pending, frame.view) {
                     (Some(p), _) if p.done => (p.lines.clone(), Some(DONE_KEYS)),
@@ -303,9 +339,16 @@ mod unix {
                 let n = stdin.read(&mut buf)?;
                 let Some(key) = key(&buf[..n]) else {
                     // A plan on screen is not read again under the person.
-                    if pending.is_none() && checked.elapsed() >= live::EVERY {
-                        checked = Instant::now();
-                        let fresh = watch_roots(
+                    if let Some(walk) = poll.as_ref().and_then(ScanJob::poll) {
+                        poll = None;
+                        let take = pending.is_none();
+                        if changed(&mut base, walk, take) && take {
+                            break true;
+                        }
+                    }
+                    if poll.is_none() && checked.is_none_or(|c| c.elapsed() >= live::EVERY) {
+                        checked = Some(Instant::now());
+                        let roots = watch_roots(
                             &home.dir,
                             &found,
                             frame.view,
@@ -313,13 +356,7 @@ mod unix {
                             groups.as_ref(),
                             &scan_roots,
                         );
-                        let stamp = live::stamp(&fresh);
-                        if fresh != watched {
-                            watched = fresh;
-                            seen = stamp;
-                        } else if stamp != seen {
-                            break true;
-                        }
+                        poll = Some(ScanJob::start(move || live::stamps(roots)));
                     }
                     continue;
                 };
@@ -452,6 +489,7 @@ mod unix {
                 }
             };
             if refresh {
+                rescan = groups.is_some() && frame.view == View::Scan;
                 kept = Some(list.state());
                 let kept = browse.snapshot();
                 browse.restore(&home.dir, false, Some(home), kept);
@@ -1060,7 +1098,7 @@ mod unix {
         "Scan",
         "  j, k         select a checkout group; its checkouts show below",
         "  f            filter by the next kind: clone, worktree, submodule",
-        "  R            read checkouts again now; a change under them does it in 2 s",
+        "  R            scan again now; a change under a checkout starts a scan in 2 s",
         "",
         "Files",
         "  j, k         select an entry; its preview shows at the right",
@@ -1397,6 +1435,9 @@ mod unix {
 #[cfg(all(test, unix))]
 mod tests {
     use super::unix::*;
+    use super::{live, scan};
+    use crate::home::Home;
+    use crate::ui::files::BrowseView;
     use serde_json::json;
     use std::io;
 
@@ -1466,6 +1507,96 @@ mod tests {
         assert_eq!(payload.downcast_ref::<&str>(), Some(&"a view bug"));
         assert!(!fake.raw, "raw mode must end when the view panics");
         assert_eq!((fake.entered, fake.left), (1, 1));
+    }
+
+    fn root(path: &std::path::Path, depth: Option<usize>) -> live::Root {
+        live::Root {
+            path: path.to_path_buf(),
+            depth,
+        }
+    }
+
+    #[test]
+    fn t155_the_poll_rebaselines_a_new_root_set_and_reports_a_new_stamp() {
+        let (a, b) = (std::path::Path::new("/a"), std::path::Path::new("/b"));
+        let mut base = Vec::new();
+        assert!(!changed(&mut base, vec![(root(a, None), 1)], true));
+        assert_eq!(
+            base,
+            vec![(root(a, None), 1)],
+            "the first walk is the baseline"
+        );
+        // The scan came back with a checkout: a new root is no change.
+        let grown = vec![(root(a, None), 1), (root(b, None), 7)];
+        assert!(!changed(&mut base, grown.clone(), true));
+        assert_eq!(base, grown);
+        let moved = vec![(root(a, None), 1), (root(b, None), 8)];
+        assert!(changed(&mut base, moved.clone(), false));
+        assert_eq!(base, grown, "a plan on screen keeps the change for later");
+        assert!(changed(&mut base, moved.clone(), true));
+        assert_eq!(base, moved, "the refresh takes the change");
+        assert!(
+            !changed(&mut base, vec![(root(a, None), 1)], true),
+            "a root left"
+        );
+    }
+
+    #[test]
+    fn t155_a_scan_sets_the_baseline_of_its_checkouts() {
+        let (a, b) = (std::path::Path::new("/a"), std::path::Path::new("/b"));
+        let mut base = vec![(root(a, None), 1), (root(b, None), 2)];
+        settle(&mut base, vec![(root(b, None), 5), (root(a, Some(2)), 3)]);
+        assert_eq!(
+            base,
+            vec![
+                (root(a, None), 1),
+                (root(b, None), 5),
+                (root(a, Some(2)), 3)
+            ]
+        );
+        // A file written after the scan, before the first walk of `b`.
+        let walk = vec![(root(a, None), 1), (root(b, None), 6)];
+        assert!(changed(&mut base, walk, true));
+    }
+
+    #[test]
+    fn t155_watch_roots_follow_the_open_view() {
+        let t = tempfile::tempdir().unwrap();
+        let home = Home {
+            dir: t.path().join("home"),
+        };
+        std::fs::create_dir_all(home.dir.join("rules")).unwrap();
+        let browse = BrowseView::load(&home.dir, false, Some(&home));
+        let scan_roots = vec![t.path().join("code")];
+        let checkout = t.path().join("code/one");
+        let report = serde_json::json!({"projects": [{
+            "remote": "o/one",
+            "checkouts": [{"root": checkout.to_string_lossy(), "kind": "clone"}],
+        }]});
+        let groups = scan::View::new(&report);
+        let at = |view, groups| watch_roots(&home.dir, &[], view, &browse, groups, &scan_roots);
+
+        assert_eq!(at(View::Status, None), vec![root(&home.dir, None)]);
+        assert_eq!(at(View::Skills, Some(&groups)), vec![root(&home.dir, None)]);
+        assert_eq!(
+            at(View::Scan, None),
+            vec![
+                root(&home.dir, None),
+                root(&scan_roots[0], Some(live::SCAN_DEPTH))
+            ],
+            "before the scan, the roots shallow"
+        );
+        let shown = groups.watch_paths();
+        assert!(!shown.is_empty(), "{report}");
+        let mut want = vec![root(&home.dir, None)];
+        want.extend(shown.iter().map(|p| root(p, None)));
+        assert_eq!(
+            at(View::Scan, Some(&groups)),
+            want,
+            "after it, each checkout"
+        );
+        // The home tree is the home root itself, so Files adds no root.
+        assert_eq!(at(View::Files, None), vec![root(&home.dir, None)]);
     }
 
     #[test]
