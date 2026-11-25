@@ -186,6 +186,12 @@ impl View {
         self.filter
     }
 
+    /// Keep the filter and the selected row of the view a rescan replaces.
+    pub fn keep(&mut self, old: &View) {
+        self.filter = old.filter;
+        self.selected = old.selected.min(self.shown().len().saturating_sub(1));
+    }
+
     /// Each checkout path the view can show, for the live poll.
     pub fn watch_paths(&self) -> Vec<PathBuf> {
         self.groups
@@ -426,6 +432,33 @@ mod tests {
         let lines = view(&root).render(80, 22);
         assert_eq!(lines[3], layout::rule(80), "{lines:#?}");
         assert!(!lines.iter().any(String::is_empty), "{lines:#?}");
+    }
+
+    #[test]
+    fn t155_watch_paths_list_every_checkout_whatever_the_filter() {
+        let (_tmp, root) = fixture();
+        let mut v = view(&root);
+        let all = v.watch_paths();
+        for name in ["a", "b", "wt", "orphan"] {
+            assert!(all.contains(&root.join(name)), "{name}: {all:#?}");
+        }
+        v.next_filter();
+        assert_eq!(v.watch_paths(), all, "the filter hides rows, not watches");
+    }
+
+    #[test]
+    fn t155_a_rescan_keeps_the_filter_and_the_selected_row() {
+        let (_tmp, root) = fixture();
+        let mut old = view(&root);
+        old.down();
+        let row = old.render(160, 40)[2].clone();
+        let mut fresh = view(&root);
+        fresh.keep(&old);
+        assert_eq!(fresh.render(160, 40)[2], row);
+        old.next_filter();
+        fresh.keep(&old);
+        assert_eq!(fresh.filter(), old.filter());
+        assert_eq!(fresh.render(160, 40), old.render(160, 40));
     }
 
     #[test]

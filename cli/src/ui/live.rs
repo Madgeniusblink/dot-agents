@@ -66,14 +66,30 @@ fn push(roots: &mut Vec<Root>, path: &Path, depth: Option<usize>) {
 
 /// One number from the path, size, and modified time of every file and
 /// directory under `roots`. It changes when a file is added, removed, or
-/// written. Hidden entries are skipped: `.git` and the worktrees under
-/// `.claude` hold no file a view reads.
+/// written. Hidden entries and the build and vendor trees that `agents scan`
+/// skips, such as `target` and `node_modules`, are not read: they hold no
+/// file a view reads, and a walk of them can outlast the poll period.
 pub fn stamp(roots: &[Root]) -> u64 {
     let mut sum = 0;
     for root in roots {
         walk(&root.path, true, root.depth, &mut sum);
     }
     sum
+}
+
+/// One stamp per root.
+pub type Stamps = Vec<(Root, u64)>;
+
+/// The stamp of each root alone, so a root keeps its baseline while others
+/// join or leave the watched set.
+pub fn stamps(roots: Vec<Root>) -> Stamps {
+    roots
+        .into_iter()
+        .map(|r| {
+            let s = stamp(std::slice::from_ref(&r));
+            (r, s)
+        })
+        .collect()
 }
 
 /// A root is followed when it is a link; a link below it is read but not
@@ -99,7 +115,9 @@ fn walk(path: &Path, root: bool, max_depth: Option<usize>, sum: &mut u64) {
         Some(d) => Some(d - 1),
     };
     for entry in fs::read_dir(path).into_iter().flatten().flatten() {
-        if !entry.file_name().to_string_lossy().starts_with('.') {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if !name.starts_with('.') && !crate::scan::SKIP.contains(&name.as_ref()) {
             walk(&entry.path(), false, child_depth, sum);
         }
     }
@@ -139,6 +157,46 @@ mod tests {
         fs::write(t.path().join(".git/HEAD"), "y and more\n").unwrap();
         assert_eq!(stamp(&roots), hidden, "a hidden file is not read");
         assert_ne!(hidden, before, "a directory's time is read");
+    }
+
+    #[test]
+    fn t155_stamp_skips_build_and_vendor_trees() {
+        let t = tempfile::tempdir().unwrap();
+        let roots = vec![Root {
+            path: t.path().to_path_buf(),
+            depth: None,
+        }];
+        for dir in ["target/debug", "node_modules/x", "src"] {
+            fs::create_dir_all(t.path().join(dir)).unwrap();
+        }
+        fs::write(t.path().join("target/debug/out"), "a\n").unwrap();
+        fs::write(t.path().join("node_modules/x/i.js"), "a\n").unwrap();
+        let first = stamp(&roots);
+        fs::write(t.path().join("target/debug/out"), "a build\n").unwrap();
+        fs::write(t.path().join("target/debug/new"), "b\n").unwrap();
+        fs::write(t.path().join("node_modules/x/i.js"), "an install\n").unwrap();
+        assert_eq!(stamp(&roots), first, "build output is not read");
+        fs::write(t.path().join("src/main.rs"), "fn main() {}\n").unwrap();
+        assert_ne!(stamp(&roots), first, "a source file is read");
+    }
+
+    #[test]
+    fn t155_roots_watch_each_checkout_in_full_and_drop_the_shallow_roots() {
+        let t = tempfile::tempdir().unwrap();
+        let (home, scan) = (t.path().join("home"), t.path().join("code"));
+        let (one, two) = (scan.join("one"), scan.join("two"));
+        let r = roots(
+            &home,
+            &[],
+            &[],
+            std::slice::from_ref(&scan),
+            &[one.clone(), two.clone(), one.clone()],
+        );
+        let full = |p: &Path| Root {
+            path: p.to_path_buf(),
+            depth: None,
+        };
+        assert_eq!(r, vec![full(&home), full(&one), full(&two)]);
     }
 
     #[test]

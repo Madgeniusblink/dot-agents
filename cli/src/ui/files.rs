@@ -652,6 +652,31 @@ mod tests {
     }
 
     #[test]
+    fn t155_watch_paths_follow_the_open_listing() {
+        let t = fixture();
+        let home = Home {
+            dir: t.path().to_path_buf(),
+        };
+        let mut b = BrowseView::load(t.path(), false, Some(&home));
+        assert_eq!(b.watch_paths(), vec![t.path().to_path_buf()]);
+        b.tree.selected = b
+            .tree
+            .rows
+            .iter()
+            .position(|r| r.node.name == "skills")
+            .unwrap();
+        b.enter(Some(&home));
+        let skills = t.path().join("skills");
+        assert_eq!(b.watch_paths(), vec![skills.clone()]);
+        b.show_scoped_tree(Some(&home));
+        let at = b.watch_paths();
+        assert_eq!(at.len(), 1);
+        assert!(at[0].starts_with(&skills) && at[0] != skills, "{at:?}");
+        b.dismiss_scoped_tree();
+        assert_eq!(b.watch_paths(), vec![skills]);
+    }
+
+    #[test]
     fn t156_a_refresh_keeps_an_open_scoped_tree_and_its_rows() {
         let t = fixture();
         let home = Home {

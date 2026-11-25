@@ -304,6 +304,47 @@ fn t156_a_refresh_keeps_the_scoped_tree_open() {
     ui.quit();
 }
 
+/// Issue 155: a file change under a Scan checkout scans again within the
+/// poll, with no key. Before #134 the poll did not watch the checkouts, and
+/// after it the poll saw the change but kept the old scan.
+#[cfg(unix)]
+#[test]
+fn t155_the_scan_tab_rescans_a_changed_checkout_with_no_key() {
+    let (home, repo) = fixture();
+    let (h, r) = (home.path(), repo.path());
+    fs::create_dir_all(h.join(".agents")).unwrap();
+    fs::write(h.join(".agents/AGENTS.md"), "# home\n").unwrap();
+    fs::create_dir_all(h.join(".config/agents")).unwrap();
+    fs::write(
+        h.join(".config/agents/config.toml"),
+        "[scan]\nroots = [\"~/code\"]\n",
+    )
+    .unwrap();
+    let one = h.join("code/one");
+    fs::create_dir_all(&one).unwrap();
+    git(&one, &["init", "-q", "-b", "main"]);
+    git(
+        &one,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://example.invalid/o/one.git",
+        ],
+    );
+    fs::write(one.join("AGENTS.md"), "# one\n").unwrap();
+    git(&one, &["add", "-A"]);
+    git(&one, &["commit", "-qm", "init"]);
+    fs::write(one.join("draft.txt"), "x\n").unwrap();
+    let mut ui = view::Ui::open_sized(h, r, 80, 24);
+    ui.press("3", "1 uncommitted");
+
+    fs::write(one.join("second.txt"), "x\n").unwrap();
+    let f = ui.wait("the rescan", |f| f.contains("2 uncommitted"));
+    assert!(f.contains("o/one"), "{f}");
+    ui.quit();
+}
+
 /// `agents ui` on a pseudo-terminal, driven one key at a time as a person
 /// drives it. The screen redraws every 100 ms, so each wait reads the last
 /// whole frame.
