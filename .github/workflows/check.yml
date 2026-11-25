@@ -32,11 +32,6 @@ jobs:
           test -f home/context/data-locations.md
           test -f home/context/upstream.json
 
-      - name: Context budget
-        if: runner.os != 'Windows'
-        shell: bash
-        run: sh home/scripts/check-budget.sh
-
       - name: Relative link check
         if: runner.os != 'Windows'
         shell: bash
@@ -53,10 +48,16 @@ jobs:
           cargo clippy --all-targets -- -D warnings
           cargo test
 
-      - name: agents check on the template
-        if: github.repository == 'Madgeniusblink/dot-agents'
+      # agents check owns every budget, so a fork runs it too, without the
+      # template rules that a fork's own home may break by design.
+      - name: agents check
         working-directory: cli
         shell: bash
-        run: cargo run --quiet -- --home ../home check --template
+        run: |
+          if [ "$GITHUB_REPOSITORY" = Madgeniusblink/dot-agents ]; then
+            cargo run --quiet -- --home ../home check --template
+          else
+            cargo run --quiet -- --home ../home check
+          fi
 
 
