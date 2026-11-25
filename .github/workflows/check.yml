@@ -56,7 +56,7 @@ jobs:
       # template rules that a fork's own home may break by design. It runs
       # after a failed test step too, so a raised budget always reports.
       # On a pull request the checkout is the merge ref. Its first parent is
-      # the base this tree was built on; pull_request.base.sha can differ.
+      # the base this tree was built on. pull_request.base.sha can differ.
       - name: agents check
         if: ${{ !cancelled() }}
         working-directory: cli

@@ -6,7 +6,7 @@
 path:line rule: message. fix: <what to change>
 ```
 
-A clean run exits 0 and prints one line: the always-on bytes, the cap, its source, and any base ref. `--json` prints the same faults as one document ([json.md](json.md)). `--template` adds the two template rules at the end of the table. `--base <ref>` compares the home at that ref with the work tree and adds the two base rules. Unset budgets count at their default; a dated test counts in any `rules/*.md` file or `Retired:` trailer since the ref. CI runs `agents check --template` on this repository, and `agents check` on a fork. On a pull request, CI adds `--base` with the first parent of the PR merge commit, the base that CI checks out. `scripts/check.sh` runs `agents check`, and fails when the binary is not on `PATH`.
+A clean run exits 0 and prints one line: the always-on bytes, the cap, its source, and any base ref. `--json` prints the same faults as one document ([json.md](json.md)). `--template` adds the two template rules at the end of the table. `--base <ref>` compares the home at that ref with the work tree and adds the two base rules. Unset budgets count at their default; a dated test counts in any `rules/*.md` file or `Retired:` trailer since the ref. CI runs `agents check --template` on this repository, and `agents check` on a fork. On a pull request, CI adds `--base` with the first parent of the PR merge commit: the main that the merge commit was built on. `scripts/check.sh` runs `agents check`, and fails when the binary is not on `PATH`.
 
 | Rule | Message | Fix | Source |
 |---|---|---|---|
