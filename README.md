@@ -31,7 +31,7 @@ cd ~/.agents
 git fetch upstream && git merge --no-edit -X subtree=home upstream/main
 ```
 
-`agents sync --apply` runs that merge, adds `--allow-unrelated-histories` for a copy made with **Use this template**, and rewires. The binary embeds no content and reads the same tree. Every command prints its plan and writes nothing without `--apply`, with two exceptions. `agents owner-decision ask` and `close` write to the shared list that the config or an environment variable names. The daily update check writes a stamp under `~/.cache/agents`. `agents --version` names the commit it was built from, and once a day a command says on stderr how many commits main is ahead of that build; `AGENTS_UPDATE_CHECK=off` silences it. The first tagged release adds `brew install`; the scripts in `home/scripts/` do the same with no binary ([docs/setup.md](home/docs/setup.md)).
+`agents sync --apply` runs that merge, adds `--allow-unrelated-histories` for a copy made with **Use this template**, and rewires. The binary embeds no content and reads the same tree. Every command prints its plan and writes nothing without `--apply`, with two exceptions. `agents owner-decision ask` and `close` write to the shared list that the config or an environment variable names. The daily update check writes a stamp under `~/.cache/agents`. `agents --version` names the commit it was built from, and once a day a command says on stderr how many commits main is ahead of that build; `AGENTS_UPDATE_CHECK=off` silences it. The first tagged release adds `brew install`; the scripts in `home/scripts/` wire with no binary, but the check needs it ([docs/setup.md](home/docs/setup.md)).
 
 A conflict is the point: it shows the line that moved under a rule you rewrote. There is no installer, no copy, and no manifest, because `git status` and `git diff` already answer every question one would need to reinvent ([adopt.md](home/standards/adopt.md)).
 
@@ -64,7 +64,7 @@ Nothing goes in because it is true. A file earns its place by changing what the 
 
 Rules are sorted by when they go stale. Boundaries (what needs a human) never expire. Corrections (what the model misses) are written as outcomes and each carries the task that proves it; on a model upgrade, run the task without the line and delete it if the output holds. So the set shrinks by construction as models improve.
 
-CI enforces the budget: `AGENTS.md` at 50 lines or fewer, one line per rule, a test on every correction, `SKILL.md` at 120 lines or fewer ([check-budget.sh](home/scripts/check-budget.sh)).
+CI enforces the budget: `AGENTS.md` at 50 lines or fewer, one line per rule, a test on every correction, `SKILL.md` at 120 lines or fewer ([check.md](home/docs/check.md)).
 
 Most tools do not read `~/.agents` on their own. [docs/setup.md](home/docs/setup.md) shows how to point yours at it, once.
 

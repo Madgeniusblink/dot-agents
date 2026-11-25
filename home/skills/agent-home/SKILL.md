@@ -5,7 +5,7 @@ description: Set up, wire, verify, or update the shared agent home at ~/.agents.
 
 # agent-home
 
-The home is a git checkout at `~/.agents`. The `agents` binary does every step below. Without the binary, the scripts in `scripts/` do the same with no build.
+The home is a git checkout at `~/.agents`. The `agents` binary does every step below. Without the binary, the scripts in `scripts/` wire with no build. Only the check needs the binary.
 
 ## Did it load?
 

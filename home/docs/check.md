@@ -6,11 +6,11 @@
 path:line rule: message. fix: <what to change>
 ```
 
-A clean run exits 0 and prints one line: the always-on bytes, the cap, its source, and any base ref. `--json` prints the same faults as one document ([json.md](json.md)). `--template` adds the two template rules at the end of the table. `--base <ref>` compares the home at that ref with the work tree and adds the two base rules. Unset budgets count at their default; a dated test counts in any `rules/*.md` file or `Retired:` trailer since the ref. CI runs `agents check --template` on this repository.
+A clean run exits 0 and prints one line: the always-on bytes, the cap, its source, and any base ref. `--json` prints the same faults as one document ([json.md](json.md)). `--template` adds the two template rules at the end of the table. `--base <ref>` compares the home at that ref with the work tree and adds the two base rules. Unset budgets count at their default; a dated test counts in any `rules/*.md` file or `Retired:` trailer since the ref. CI runs `agents check --template` on this repository, and `agents check` on a fork. `scripts/check.sh` runs `agents check`, and fails when the binary is not on `PATH`.
 
 | Rule | Message | Fix | Source |
 |---|---|---|---|
-| `router.lines` | `<n> lines, max 50` | move detail to a linked file | [check-budget.sh](../scripts/check-budget.sh) |
+| `router.lines` | `<n> lines, max 50` | move detail to a linked file | [check.rs](https://github.com/Madgeniusblink/dot-agents/blob/main/cli/src/check.rs) |
 | `rule.one-line` | rule continues on an indented line, or paragraph spans more than one line | join the rule or paragraph into one line | [rules.md](../standards/rules.md) |
 | `correction.dated` | correction does not end in a dated test | end the line with `` `YYYY-MM · task that proves it` `` | [rules.md](../standards/rules.md) |
 | `skill.missing` | directory has no SKILL.md | add SKILL.md, or move the directory out of `skills/` | [skills/README.md](../skills/README.md) |
