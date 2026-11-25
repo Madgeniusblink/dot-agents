@@ -129,6 +129,34 @@ fn the_template_fits_the_budget_and_1_kib_more_does_not() {
     );
 }
 
+#[test]
+fn the_template_ships_three_skills_and_a_fourth_fails() {
+    let t = template_copy();
+    let skills = t.path().join("skills");
+    let shipped = fs::read_dir(&skills)
+        .unwrap()
+        .flatten()
+        .filter(|e| e.path().is_dir())
+        .count();
+    assert_eq!(shipped, 3, "the template budget is 3 skills");
+    assert!(check(t.path(), &["--template"]).status.success());
+
+    let extra = skills.join("extra");
+    fs::create_dir(&extra).unwrap();
+    fs::write(
+        extra.join("SKILL.md"),
+        "---\nname: extra\ndescription: A fourth skill.\n---\n# Extra\n",
+    )
+    .unwrap();
+    let out = check(t.path(), &["--template"]);
+    let text = stdout(&out);
+    assert_eq!(out.status.code(), Some(1), "{text}");
+    assert!(
+        text.contains(" budget.skills: the template ships more than 3 skills."),
+        "{text}"
+    );
+}
+
 fn git(dir: &Path, args: &[&str]) {
     let ok = Command::new("git")
         .arg("-C")
