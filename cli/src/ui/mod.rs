@@ -453,8 +453,8 @@ mod unix {
             };
             if refresh {
                 kept = Some(list.state());
-                let (flat, tree_sel) = browse.snapshot();
-                browse.restore(&home.dir, false, Some(home), flat, tree_sel);
+                let kept = browse.snapshot();
+                browse.restore(&home.dir, false, Some(home), kept);
             } else {
                 frame.top = 0;
                 browse = BrowseView::load(&home.dir, false, Some(home));
@@ -997,7 +997,8 @@ mod unix {
         ("?", "help"),
         ("j/k", "select"),
         ("m", "marks"),
-        ("c/o", "copy/open"),
+        // `path`, as on Files: `copy/open` pushed `R refresh` past 80 columns.
+        ("c/o", "path"),
         ("r/K", "remove/keep"),
         ("R", "refresh"),
         ("tab", "view"),
@@ -1168,9 +1169,7 @@ mod unix {
         if !counted.is_empty() {
             lines.push(harness_summary(&counted));
         }
-        if let Some(action) = status_actions(doc, &counted) {
-            lines.push(action);
-        }
+        lines.extend(status_actions(doc, &counted));
         lines.push(String::new());
 
         let always = &doc["always_on"];
@@ -1316,26 +1315,36 @@ mod unix {
         }
     }
 
-    /// One line: `N harnesses: ok / stale / not wired` from the status json array.
+    /// One line: `N harnesses: ok / stale / not wired`, then `not the home's`
+    /// when a file there is another's, in the order of `harness_state`.
     fn harness_summary(harnesses: &[&Value]) -> String {
         let n = harnesses.len();
         let mut ok = 0u64;
         let mut stale = 0u64;
         let mut not_wired = 0u64;
+        let mut foreign = 0u64;
         for h in harnesses {
             if h["exists"].as_bool() != Some(true) {
                 not_wired += 1;
+            } else if h["ours"].as_bool() == Some(false) {
+                foreign += 1;
             } else if h["stale"].as_bool() == Some(true) {
                 stale += 1;
             } else {
                 ok += 1;
             }
         }
-        format!("{n} harnesses: {ok} ok / {stale} stale / {not_wired} not wired")
+        let mut line = format!("{n} harnesses: {ok} ok / {stale} stale / {not_wired} not wired");
+        if foreign > 0 {
+            line.push_str(&format!(" / {foreign} not the home's"));
+        }
+        line
     }
 
-    /// Compact actions after the home block when wire, stale, or cap needs attention.
-    fn status_actions(doc: &Value, harnesses: &[&Value]) -> Option<String> {
+    /// Compact actions after the home block when wire, stale, or cap needs
+    /// attention. The wire command has its own line, so a cut at 80 columns
+    /// cannot drop it.
+    fn status_actions(doc: &Value, harnesses: &[&Value]) -> Vec<String> {
         let stale = harnesses
             .iter()
             .filter(|h| h["stale"].as_bool() == Some(true))
@@ -1355,7 +1364,7 @@ mod unix {
             .is_some_and(|c| !c["wired"].as_bool().unwrap_or(false));
         let needs_wire = harnesses.iter().any(|h| harness_needs_wire(h)) || cursor_unwired;
         if !needs_wire && !always_over && harness_over == 0 {
-            return None;
+            return Vec::new();
         }
         let mut parts = Vec::new();
         if stale > 0 {
@@ -1373,11 +1382,11 @@ mod unix {
         if cursor_unwired && stale == 0 && not_wired == 0 {
             parts.push("cursor hook not wired".to_string());
         }
-        let mut line = format!("actions: {}", parts.join(", "));
+        let mut lines = vec![format!("actions: {}.", parts.join(", "))];
         if needs_wire {
-            line.push_str(". Run: agents wire --apply");
+            lines.push("  Run: agents wire --apply".to_string());
         }
-        Some(line)
+        lines
     }
 
     fn harness_needs_wire(h: &Value) -> bool {
@@ -1631,10 +1640,14 @@ mod tests {
         };
         for width in [80, 120] {
             let kb = &screen_with(&f, &body, Some(SKILLS_KEYS), width, 24)[23];
-            assert!(kb.contains("R"), "Skills {width}x24: {kb}");
-            if width >= 120 {
-                assert!(kb.contains("refresh"), "Skills {width}x24: {kb}");
-            }
+            assert!(
+                kb.contains("R") && kb.contains("refresh"),
+                "Skills {width}x24: {kb}"
+            );
+            assert!(
+                kb.contains("c/o") && kb.contains("path"),
+                "Skills {width}x24: {kb}"
+            );
             assert!(crate::out::visible(kb) <= width, "{kb}");
         }
     }
@@ -1649,7 +1662,7 @@ mod tests {
         for width in [80, 120] {
             let kb = &screen_with(&f, &body, Some(SKILLS_KEYS), width, 24)[23];
             assert!(
-                kb.contains("c/o") && kb.contains("copy/open"),
+                kb.contains("c/o") && kb.contains("path"),
                 "{width}x24: {kb}"
             );
             assert!(kb.contains("m") && kb.contains("marks"), "{width}x24: {kb}");
@@ -1998,8 +2011,8 @@ mod tests {
             "machine: box, config: ~/.config/agents/config.toml (no file, so defaults)",
             "home: ~/.agents, main at abc1234, 2 uncommitted, behind upstream by 3 commits",
             "merge.ours.driver is not set",
-            "3 harnesses: 1 ok / 1 stale / 1 not wired",
-            "actions: 1 stale, 1 not wired, 1 over harness cap, always-on OVER cap. Run: agents wire --apply",
+            "3 harnesses: 0 ok / 1 stale / 1 not wired / 1 not the home's",
+            "actions: 1 stale, 1 not wired, 1 over harness cap, always-on OVER cap.\n  Run: agents wire --apply",
             "always-on: 300 of 250 bytes (default cap), OVER the cap",
             "    100 bytes  AGENTS.md",
             "on demand: skills/ 4",
@@ -2023,6 +2036,13 @@ mod tests {
             text.matches("Run: agents wire --apply").count(),
             1,
             "{text}"
+        );
+        let shown = screen(&Frame::default(), &status_lines(&doc), 80, 24);
+        assert!(
+            shown
+                .iter()
+                .any(|r| words(r) == "  Run: agents wire --apply"),
+            "80x24: {shown:#?}"
         );
         let ok = json!({"git": null, "config": {}, "always_on": {}, "harnesses": [
             {"label": "codex", "path": "p", "exists": true, "imports": {}, "stale": false, "ours": true}
@@ -2074,7 +2094,7 @@ mod tests {
         });
         let text = words(&status_lines(&doc).join("\n"));
         assert!(
-            text.contains("actions: cursor hook not wired. Run: agents wire --apply"),
+            text.contains("actions: cursor hook not wired.\n  Run: agents wire --apply"),
             "{text}"
         );
         assert_eq!(
@@ -2131,7 +2151,7 @@ mod tests {
         let text = words(&status_lines(&doc).join("\n"));
         for want in [
             "3 harnesses: 0 ok / 1 stale / 2 not wired",
-            "actions: 1 stale, 2 not wired. Run: agents wire --apply",
+            "actions: 1 stale, 2 not wired.\n  Run: agents wire --apply",
             "claude code, the home's drop-in: not wired",
             "grok, the home's generated file: not wired",
         ] {
@@ -2222,7 +2242,7 @@ mod tests {
             (SKILLS_KEYS, "m  marks", Key::Mark),
             (SKILLS_KEYS, "marks", Key::Mark),
             (SKILLS_KEYS, "c/o", Key::Copy),
-            (SKILLS_KEYS, "o  copy/open", Key::Open),
+            (SKILLS_KEYS, "o  path", Key::Open),
             (SKILLS_KEYS, "r/K  remove/keep", Key::Remove),
             (SKILLS_KEYS, "K  remove/keep", Key::Keep),
             (SKILLS_KEYS, "j/k", Key::Down),

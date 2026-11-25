@@ -288,7 +288,7 @@ impl View {
                 out::fit(&format!("{mark} {}", r.trim_start()), width)
             });
         lines.extend(cut(marked.collect(), rows.len() - first, width));
-        lines.push(String::new());
+        lines.push(layout::rule(width));
         let n = kept.len();
         let unit = if n == 1 { "checkout" } else { "checkouts" };
         lines.push(out::fit(&format!("{}, {n} {unit}", group.remote), width));
@@ -406,14 +406,26 @@ mod tests {
         View::new(&report)
     }
 
-    /// The row lines: after the filter line, up to the blank.
-    fn rows(lines: &[String]) -> Vec<&String> {
-        lines[1..].iter().take_while(|l| !l.is_empty()).collect()
+    fn is_rule(l: &str) -> bool {
+        l.starts_with('─')
     }
 
-    /// The detail lines: after the blank.
+    /// The row lines: after the filter line, up to the rule.
+    fn rows(lines: &[String]) -> Vec<&String> {
+        lines[1..].iter().take_while(|l| !is_rule(l)).collect()
+    }
+
+    /// The detail lines: after the rule.
     fn detail(lines: &[String]) -> Vec<&String> {
-        lines.iter().skip_while(|l| !l.is_empty()).skip(1).collect()
+        lines.iter().skip_while(|l| !is_rule(l)).skip(1).collect()
+    }
+
+    #[test]
+    fn t156_the_list_and_the_detail_have_the_rule_of_the_other_views() {
+        let (_tmp, root) = fixture();
+        let lines = view(&root).render(80, 22);
+        assert_eq!(lines[3], layout::rule(80), "{lines:#?}");
+        assert!(!lines.iter().any(String::is_empty), "{lines:#?}");
     }
 
     #[test]

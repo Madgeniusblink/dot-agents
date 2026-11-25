@@ -172,28 +172,32 @@ impl BrowseView {
         }
     }
 
-    /// After a refresh, put the tree and any open flat list back.
-    pub fn restore(
-        &mut self,
-        home_dir: &Path,
-        all: bool,
-        home: Option<&Home>,
-        flat: Option<(PathBuf, PathBuf, usize, usize)>,
-        tree_selected: usize,
-    ) {
+    /// After a refresh, put the tree, any open flat list, and any scoped
+    /// tree over it back, each with its selection.
+    pub fn restore(&mut self, home_dir: &Path, all: bool, home: Option<&Home>, kept: Kept) {
         self.tree = TreeView::load(home_dir, TREE_DEPTH, all, home);
-        self.flat = flat.map(|(anchor, dir, file_sel, tree_sel)| {
-            let mut files = FilesView::load(&dir, all, home);
-            files.selected = file_sel.min(files.entries.len().saturating_sub(1));
+        self.flat = kept.flat.map(|f| {
+            let mut files = FilesView::load(&f.dir, all, home);
+            files.selected = f.selected.min(files.entries.len().saturating_sub(1));
+            let scoped = f.scoped.map(|(root, selected)| {
+                let mut tree = TreeView::load(&root, TREE_DEPTH, all, home);
+                tree.selected = selected.min(tree.rows.len().saturating_sub(1));
+                ScopedTree {
+                    tree,
+                    flat_selected: files.selected,
+                }
+            });
             DrillFlat {
                 files,
-                anchor,
-                tree_selected: tree_sel,
-                scoped: None,
+                anchor: f.anchor,
+                tree_selected: f.tree_selected,
+                scoped,
             }
         });
         if self.flat.is_none() {
-            self.tree.selected = tree_selected.min(self.tree.rows.len().saturating_sub(1));
+            self.tree.selected = kept
+                .tree_selected
+                .min(self.tree.rows.len().saturating_sub(1));
         }
     }
 
@@ -206,17 +210,41 @@ impl BrowseView {
         }
     }
 
-    pub fn snapshot(&self) -> (Option<(PathBuf, PathBuf, usize, usize)>, usize) {
-        let flat = self.flat.as_ref().map(|d| {
-            (
-                d.anchor.clone(),
-                d.files.dir.clone(),
-                d.files.selected,
-                d.tree_selected,
-            )
-        });
-        (flat, self.tree.selected)
+    /// What a refresh keeps, for `restore`.
+    pub fn snapshot(&self) -> Kept {
+        Kept {
+            flat: self.flat.as_ref().map(|d| KeptFlat {
+                anchor: d.anchor.clone(),
+                dir: d.files.dir.clone(),
+                // Escape from a scoped tree goes back to this row.
+                selected: d
+                    .scoped
+                    .as_ref()
+                    .map_or(d.files.selected, |s| s.flat_selected),
+                tree_selected: d.tree_selected,
+                scoped: d
+                    .scoped
+                    .as_ref()
+                    .map(|s| (s.tree.root.clone(), s.tree.selected)),
+            }),
+            tree_selected: self.tree.selected,
+        }
     }
+}
+
+/// The places and selections of a `BrowseView`, across a refresh.
+pub struct Kept {
+    flat: Option<KeptFlat>,
+    tree_selected: usize,
+}
+
+struct KeptFlat {
+    anchor: PathBuf,
+    dir: PathBuf,
+    selected: usize,
+    tree_selected: usize,
+    /// The root and the selected row of a scoped tree over the flat list.
+    scoped: Option<(PathBuf, usize)>,
 }
 
 /// One directory, with one entry selected.
@@ -621,6 +649,31 @@ mod tests {
             assert!(lines.iter().all(|l| visible(l) <= width), "{lines:#?}");
             b.dismiss_scoped_tree();
         }
+    }
+
+    #[test]
+    fn t156_a_refresh_keeps_an_open_scoped_tree_and_its_rows() {
+        let t = fixture();
+        let home = Home {
+            dir: t.path().to_path_buf(),
+        };
+        let mut b = BrowseView::load(t.path(), false, Some(&home));
+        b.tree.selected = b
+            .tree
+            .rows
+            .iter()
+            .position(|r| r.node.name == "skills")
+            .unwrap();
+        b.enter(Some(&home));
+        b.show_scoped_tree(Some(&home));
+        b.down();
+        let (root, row) = (b.watch_paths(), b.selected().map(|n| n.path.clone()));
+        b.restore(t.path(), false, Some(&home), b.snapshot());
+        assert!(b.in_scoped_tree(), "{:#?}", b.render(80, 24));
+        assert_eq!(b.watch_paths(), root);
+        assert_eq!(b.selected().map(|n| n.path.clone()), row);
+        b.dismiss_scoped_tree();
+        assert_eq!(b.selected().unwrap().name, "demo");
     }
 
     #[test]
