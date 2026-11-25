@@ -4,6 +4,7 @@ Template semver tracks [upstream.json](home/context/upstream.json) `template_ver
 
 ## Unreleased
 
+- On a pull request, the `acceptance` workflow passes to `--base` the first parent of the PR merge commit, the main that CI checks the PR against. `pull_request.base.sha` can name a different main than the merge commit was built on. The `agents check` step also runs after a failed test step, so `budget.raised` always reports (#169).
 - `wire.sh` names `check.sh` only when the `agents` binary is on `PATH`. Without it, `wire.sh` names `context.sh` and the install command, because `check.sh` fails with no binary. Decision 0009 and `setup.md` now say that `check.sh` needs the binary (#168).
 - The `acceptance` workflow runs `agents check --base <PR base commit>` on each pull request, so `budget.raised` and `proof.dropped` now fail CI. The checkout fetches the full history for that compare. A push to `main` runs the check with no `--base` (#148).
 - A CLI test copies the template, counts its 3 skills, and adds a fourth. `agents check --template` must then fail with `budget.skills`. The test also fails if the budget goes above 3 (#141).

@@ -53,19 +53,23 @@ jobs:
           cargo test
 
       # agents check owns every budget, so a fork runs it too, without the
-      # template rules that a fork's own home may break by design.
+      # template rules that a fork's own home may break by design. It runs
+      # after a failed test step too, so a raised budget always reports.
+      # On a pull request the checkout is the merge ref. Its first parent is
+      # the base this tree was built on. pull_request.base.sha can differ.
       - name: agents check
+        if: ${{ !cancelled() }}
         working-directory: cli
         shell: bash
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           args=
           if [ "$GITHUB_REPOSITORY" = Madgeniusblink/dot-agents ]; then
             args=--template
           fi
-          if [ -n "$BASE_SHA" ]; then
-            args="$args --base $BASE_SHA"
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            git rev-parse --verify -q HEAD^2 >/dev/null || {
+              echo "HEAD is not the PR merge commit"; exit 1; }
+            args="$args --base $(git rev-parse HEAD^1)"
           fi
           cargo run --quiet -- --home ../home check $args
 
