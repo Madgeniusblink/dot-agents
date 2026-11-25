@@ -44,7 +44,6 @@ jobs:
           python3 home/scripts/check-links.py .
 
       - name: CLI (fmt, clippy, tests, parity with the scripts)
-        continue-on-error: true
         if: github.repository == 'Madgeniusblink/dot-agents'
         working-directory: cli
         shell: bash
