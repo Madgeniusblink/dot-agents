@@ -77,8 +77,8 @@ check lists the directories it greps and `cli/` is not among them, like
 
 Since #164, `check.sh` only runs `agents check`, and it fails when the binary
 is not on `PATH`. `agents check` is the one owner of every rule and budget, so
-no script measures them. Items 3 and 7 now hold for `wire.sh` and `context.sh`
-only.
+no script measures them. `check.sh` stays as a wrapper, not a second
+implementation, so the parity tests of item 7 cover `wire.sh` and `context.sh`.
 
 Two implementations exist for the length of item 7, and a change to wiring
 must land in both or the tests fail. That cost is bounded by the release that

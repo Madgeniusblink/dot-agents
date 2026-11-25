@@ -97,8 +97,9 @@ sh scripts/context.sh         # what loads now; reads only
 
 The scripts do the same as `wire`, `unwire`, and `status`, need no binary, and
 stay until the CLI has shipped on every channel. `scripts/check.sh` is not one
-of them: it runs `agents check`, and fails when the binary is not on `PATH`. The CLI's tests run each
-script and its command on the same temporary home and fail on any difference.
+of them: it runs `agents check`, and fails when the binary is not on `PATH`.
+The CLI's tests run each script and its command on the same temporary home
+and fail on any difference.
 
 Take the wiring out before deleting a home. A deleted home whose wiring stayed
 behind leaves every tool pointing at a path that is gone.
