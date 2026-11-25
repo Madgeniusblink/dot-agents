@@ -9,9 +9,9 @@ Proposed
 `dot-agents-cli` was archived on 2026-11-02. It embedded the template at build
 time, so it pinned users seven releases back, and it carried an install policy
 the template had already dropped. Four shell scripts replaced it: `context.sh`,
-`wire.sh`, `check.sh`, `check-neutrality.sh`. They need no binary, but they are
-not a product anyone else can install, and they cannot be published through
-Homebrew, crates.io, or PyPI.
+`wire.sh`, `check.sh`, `check-neutrality.sh`. When this record was written
+they needed no binary, but they were not a product anyone else can install,
+and they could not be published through Homebrew, crates.io, or PyPI.
 
 The goal now is one install command that a developer on any machine runs, after
 which every agent tool on that machine reads `~/.agents/` and nothing else.
@@ -74,6 +74,11 @@ file, so it gets the pointer line to paste.
 One install command, and one place the wiring logic lives. The neutrality
 check lists the directories it greps and `cli/` is not among them, like
 `scripts/`, so the crate may name the tools it wires.
+
+Since #164, `check.sh` only runs `agents check`, and it fails when the binary
+is not on `PATH`. `agents check` is the one owner of every rule and budget, so
+no script measures them. Items 3 and 7 now hold for `wire.sh` and `context.sh`
+only.
 
 Two implementations exist for the length of item 7, and a change to wiring
 must land in both or the tests fail. That cost is bounded by the release that

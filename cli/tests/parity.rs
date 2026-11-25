@@ -387,3 +387,43 @@ fn check_fails_on_a_skill_name_that_is_not_its_directory() {
          directory is data_query. fix: edit the frontmatter to meet the Agent Skills standard"
     );
 }
+
+/// `check.sh` runs `agents check`, so `wire.sh` names it only when the binary
+/// is on `PATH`. Without it, the hint names `context.sh` and the install line.
+#[test]
+#[cfg(unix)]
+fn wire_names_check_only_when_the_binary_is_on_path() {
+    use std::os::unix::fs::PermissionsExt;
+    let run = |path: &str| {
+        let t = fixture();
+        let out = Command::new("/bin/sh")
+            .arg(template_home().join("scripts").join("wire.sh"))
+            .env("HOME", t.path())
+            .env("PATH", path)
+            .env_remove("CODEX_HOME")
+            .env_remove("GROK_HOME")
+            .output()
+            .expect("sh");
+        assert!(out.status.success());
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    for dir in ["/usr/bin", "/bin"] {
+        assert!(!Path::new(dir).join("agents").exists(), "{dir}/agents");
+    }
+
+    let without = run("/usr/bin:/bin");
+    assert!(!without.contains("check.sh\n"), "{without}");
+    assert!(without.contains("scripts/context.sh\n"), "{without}");
+    assert!(
+        without.contains("check.sh needs the agents binary: cargo install"),
+        "{without}"
+    );
+
+    let bin = tempfile::tempdir().unwrap();
+    let fake = bin.path().join("agents");
+    fs::write(&fake, "#!/bin/sh\n").unwrap();
+    fs::set_permissions(&fake, fs::Permissions::from_mode(0o755)).unwrap();
+    let with = run(&format!("{}:/usr/bin:/bin", bin.path().display()));
+    assert!(with.contains("scripts/check.sh\n"), "{with}");
+    assert!(!with.contains("needs the agents binary"), "{with}");
+}
